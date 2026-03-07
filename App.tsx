@@ -18,6 +18,8 @@ import {
 
 const { LimitterModule, TimerEventModule } = NativeModules;
 
+import { startCategoryService } from './src/services/categoryService';
+
 type AppInfo = {
   name: string;
   package: string;
@@ -45,6 +47,7 @@ function App(): React.JSX.Element {
   useEffect(() => {
     refreshPermissions();
     syncActiveTimers();
+    startCategoryService();
     const sub = AppState.addEventListener('change', next => {
       if (next === 'active') {
         refreshPermissions();

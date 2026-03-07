@@ -1,3 +1,5 @@
 <resources>
     <string name="app_name">AppGuard2</string>
+    <string name="accessibility_service_description">Detects and blocks websites.</string>
+
 </resources>
