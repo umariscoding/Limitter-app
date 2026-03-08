@@ -1,3 +1,4 @@
 <resources>
     <string name="app_name">AppGuard2</string>
+    <string name="accessibility_service_description">Monitors app usage and URLs for category tracking.</string>
 </resources>

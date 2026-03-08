@@ -9,7 +9,8 @@ class LimitterPackage : ReactPackage {
     override fun createNativeModules(reactContext: ReactApplicationContext): List<NativeModule> {
         return listOf(
             LimitterModule(reactContext),
-            TimerEventModule(reactContext)
+            TimerEventModule(reactContext),
+            CategoryTrackerModule(reactContext)
         )
     }
 
