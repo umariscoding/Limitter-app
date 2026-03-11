@@ -33,7 +33,8 @@ data class AppTimer(
     val durationSeconds: Int,
     var endTimeMillis: Long = 0,
     var isStarted: Boolean = false,
-    var isBlocked: Boolean = false
+    var isBlocked: Boolean = false,
+    var timerType: String = "duration" // "duration" or "clock"
 )
 
 class LimitterService : Service() {
@@ -114,6 +115,8 @@ class LimitterService : Service() {
                     intent?.getSerializableExtra("payload") as? HashMap<String, String>
                 }
                 
+                // ========== DURATION TIMER (ORIGINAL — UNTOUCHED) ==========
+                // Timer is WAITING — countdown starts when user opens this app
                 if (apps != null) {
                     for (app in apps) {
                         val pkg = app["package"] ?: continue
@@ -123,7 +126,7 @@ class LimitterService : Service() {
                         removeBlockingOverlay(pkg)
                         
                         // Timer is WAITING — countdown starts when user opens this app
-                        appTimers[pkg] = AppTimer(pkg, name, duration, 0, false, false)
+                        appTimers[pkg] = AppTimer(pkg, name, duration, 0, false, false, "duration")
                         Log.d(TAG, "✅ Timer Waiting: $name ($duration s) — starts on app open")
                     }
                 } else if (payload != null) {
@@ -134,10 +137,46 @@ class LimitterService : Service() {
                     removeBlockingOverlay(pkg)
                     
                     // Timer is WAITING — countdown starts when user opens this app
-                    appTimers[pkg] = AppTimer(pkg, name, duration, 0, false, false)
+                    appTimers[pkg] = AppTimer(pkg, name, duration, 0, false, false, "duration")
                     Log.d(TAG, "✅ Timer Waiting: $name ($duration s) — starts on app open")
                 }
                 
+                isRunning = true
+                saveState()
+                scheduleMonitoringAlarm()
+                startBackgroundTasks()
+            }
+
+            // ========== CLOCK TIMER (NEW — COMPLETELY SEPARATE) ==========
+            // This is an absolute-time timer. The block fires at a specific clock time.
+            "START_CLOCK_TIMER" -> {
+                @Suppress("UNCHECKED_CAST")
+                val clockApps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent?.getSerializableExtra("apps", ArrayList::class.java) as? ArrayList<HashMap<String, String>>
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent?.getSerializableExtra("apps") as? ArrayList<HashMap<String, String>>
+                }
+
+                if (clockApps != null) {
+                    for (app in clockApps) {
+                        val pkg = app["package"] ?: continue
+                        val name = app["appName"] ?: pkg
+                        val hour = (app["hour"] ?: "0").toIntOrNull() ?: 0
+                        val minute = (app["minute"] ?: "0").toIntOrNull() ?: 0
+
+                        removeBlockingOverlay(pkg)
+
+                        // Calculate the absolute block time
+                        val endTime = calculateClockEndTime(hour, minute)
+
+                        // Clock timer is STARTED immediately — it counts against the clock
+                        appTimers[pkg] = AppTimer(pkg, name, 0, endTime, true, false, "clock")
+                        scheduleTimerAlarm(pkg, name, endTime)
+                        Log.d(TAG, "🕐 Clock Timer Started: $name — blocks at $endTime (hour=$hour, min=$minute)")
+                    }
+                }
+
                 isRunning = true
                 saveState()
                 scheduleMonitoringAlarm()
@@ -590,6 +629,7 @@ class LimitterService : Service() {
                     putString("name_$pkg", timer.appName)
                     putBoolean("started_$pkg", timer.isStarted)
                     putBoolean("blocked_$pkg", timer.isBlocked)
+                    putString("type_$pkg", timer.timerType)
                 }
                 commit()
             }
@@ -610,9 +650,10 @@ class LimitterService : Service() {
                 val name = prefs.getString("name_$pkg", pkg) ?: pkg
                 val isStarted = prefs.getBoolean("started_$pkg", false)
                 val isBlocked = prefs.getBoolean("blocked_$pkg", false)
+                val type = prefs.getString("type_$pkg", "duration") ?: "duration"
                 
                 if (duration > 0 || endTime > 0) {
-                    appTimers[pkg] = AppTimer(pkg, name, if (duration > 0) duration else 60, endTime, isStarted, isBlocked)
+                    appTimers[pkg] = AppTimer(pkg, name, if (duration > 0) duration else 60, endTime, isStarted, isBlocked, type)
                     if (isStarted && !isBlocked && endTime > System.currentTimeMillis()) {
                         scheduleTimerAlarm(pkg, name, endTime)
                     }
@@ -719,5 +760,20 @@ class LimitterService : Service() {
         }
         
         super.onTaskRemoved(rootIntent)
+    }
+
+    private fun calculateClockEndTime(hour: Int, minute: Int): Long {
+        val calendar = java.util.Calendar.getInstance()
+        val now = System.currentTimeMillis()
+        calendar.timeInMillis = now
+        calendar.set(java.util.Calendar.HOUR_OF_DAY, hour)
+        calendar.set(java.util.Calendar.MINUTE, minute)
+        calendar.set(java.util.Calendar.SECOND, 0)
+        calendar.set(java.util.Calendar.MILLISECOND, 0)
+
+        if (calendar.timeInMillis <= now) {
+            calendar.add(java.util.Calendar.DAY_OF_YEAR, 1)
+        }
+        return calendar.timeInMillis
     }
 }

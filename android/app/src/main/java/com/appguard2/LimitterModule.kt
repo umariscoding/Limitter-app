@@ -223,7 +223,7 @@ class LimitterModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
 
             when (command) {
                 "START_TIMERS" -> {
-                    // Handle multiple selected apps
+                    // Handle multiple selected apps (DURATION TIMER ONLY)
                     @Suppress("UNCHECKED_CAST")
                     val apps = payload?.getArray("apps")?.let { array ->
                         val list = ArrayList<HashMap<String, String>>()
@@ -363,6 +363,71 @@ class LimitterModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
     private fun showToast(message: String) {
         mainHandler.post {
             Toast.makeText(reactApplicationContext, message, Toast.LENGTH_SHORT).show()
+        }
+    }
+
+    // ========== CLOCK TIMER (COMPLETELY SEPARATE FROM DURATION TIMER) ==========
+    @ReactMethod
+    fun startClockTimer(payload: ReadableMap, promise: Promise) {
+        val context = reactApplicationContext
+        try {
+            // Check permissions first
+            val checkContext = reactApplicationContext.currentActivity ?: context
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (!Settings.canDrawOverlays(checkContext)) {
+                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                    promise.resolve("PERMISSION_OVERLAY_REQUIRED")
+                    return
+                }
+                if (!hasUsageStatsPermission()) {
+                    val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                    promise.resolve("PERMISSION_USAGE_REQUIRED")
+                    return
+                }
+            }
+
+            val appsArray = payload.getArray("apps")
+            if (appsArray == null) {
+                promise.reject("CLOCK_ERROR", "No apps provided")
+                return
+            }
+
+            val apps = ArrayList<HashMap<String, String>>()
+            for (i in 0 until appsArray.size()) {
+                val app = appsArray.getMap(i) ?: continue
+                val pkg = app.getString("package") ?: continue
+                val name = app.getString("appName") ?: pkg
+                val hour = getIntLikeValue(app, "hour")
+                val minute = getIntLikeValue(app, "minute")
+
+                apps.add(hashMapOf(
+                    "package" to pkg,
+                    "appName" to name,
+                    "hour" to hour.toString(),
+                    "minute" to minute.toString()
+                ))
+            }
+
+            val intent = Intent(context, LimitterService::class.java).apply {
+                putExtra("command", "START_CLOCK_TIMER")
+                putExtra("apps", apps)
+            }
+
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                context.startForegroundService(intent)
+            } else {
+                context.startService(intent)
+            }
+
+            Log.d("LimitterModule", "Started clock timers for ${apps.size} apps")
+            promise.resolve("CLOCK_TIMERS_STARTED")
+        } catch (e: Exception) {
+            Log.e("LimitterModule", "Clock timer failed: ${e.message}")
+            promise.reject("CLOCK_ERROR", e.message)
         }
     }
 }
