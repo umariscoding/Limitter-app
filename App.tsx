@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+
 import {
   SafeAreaView,
   StatusBar,
@@ -19,6 +20,10 @@ import {
 const { LimitterModule, TimerEventModule } = NativeModules;
 
 import { startCategoryService } from './src/services/categoryService';
+import TestScreen from './test/TestScreen';
+
+// Set this to true to see the test screen instead of the main app
+const SHOW_TEST_SCREEN = true;
 
 type AppInfo = {
   name: string;
@@ -32,6 +37,10 @@ interface AppLimit extends AppInfo {
 }
 
 function App(): React.JSX.Element {
+  if (SHOW_TEST_SCREEN) {
+    return <TestScreen />;
+  }
+
   const [activeLimits, setActiveLimits] = useState<AppLimit[]>([]);
   const [showTroubleshoot, setShowTroubleshoot] = useState(false);
   const [selectedApps, setSelectedApps] = useState<AppInfo[]>([]); // Multi-select support
