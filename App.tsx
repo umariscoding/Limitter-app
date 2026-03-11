@@ -44,6 +44,11 @@ function App(): React.JSX.Element {
   const [secondsInput, setSecondsInput] = useState('30');
   const [timerReady, setTimerReady] = useState(false);
 
+  // ========== CLOCK TIMER STATE (COMPLETELY SEPARATE) ==========
+  const [clockHour, setClockHour] = useState('12');
+  const [clockPeriod, setClockPeriod] = useState<'AM' | 'PM'>('PM');
+  const [clockTimerReady, setClockTimerReady] = useState(false);
+
   useEffect(() => {
     refreshPermissions();
     syncActiveTimers();
@@ -169,6 +174,54 @@ function App(): React.JSX.Element {
     setTimerReady(true);
     if (LimitterModule?.showNotification) {
       await LimitterModule.showNotification("Your timer is set. Now select apps to limit.");
+    }
+  };
+
+  // ========== CLOCK TIMER HANDLER (COMPLETELY SEPARATE) ==========
+  const handleSetClockTimer = () => {
+    const h = parseInt(clockHour) || 0;
+    if (h < 1 || h > 12) {
+      Alert.alert('Invalid Hour', 'Please select an hour between 1 and 12.');
+      return;
+    }
+    setClockTimerReady(true);
+  };
+
+  const startClockTimers = async () => {
+    if (!clockTimerReady) {
+      Alert.alert('Step Required', 'Please set the clock timer first.');
+      return;
+    }
+    if (selectedApps.length === 0) {
+      Alert.alert('No Apps Selected', 'Please select at least one app.');
+      return;
+    }
+
+    // Convert 12-hour to 24-hour format
+    let hour24 = parseInt(clockHour) || 12;
+    if (clockPeriod === 'AM') {
+      if (hour24 === 12) hour24 = 0; // 12 AM = 0
+    } else {
+      if (hour24 !== 12) hour24 += 12; // 1 PM = 13, 12 PM stays 12
+    }
+
+    const apps = selectedApps.map(app => ({
+      package: app.package,
+      appName: app.name,
+      hour: hour24,
+      minute: 0,
+    }));
+
+    try {
+      const result = await LimitterModule.startClockTimer({ apps });
+      console.log('Clock timer result:', result);
+      Alert.alert('Success', `🕐 Clock timer set to ${clockHour}:00 ${clockPeriod} for ${selectedApps.length} app(s)`);
+      setClockTimerReady(false);
+      setSelectedApps([]);
+      setSearchQuery('');
+    } catch (e: any) {
+      console.error('Clock timer error:', e);
+      Alert.alert('Error', 'Failed to start clock timer: ' + (e.message || e));
     }
   };
 
@@ -369,6 +422,66 @@ function App(): React.JSX.Element {
           </TouchableOpacity>
         </View>
 
+        {/* ========== CLOCK TIMER CARD (COMPLETELY SEPARATE) ========== */}
+        <View style={styles.card}>
+          <Text style={[styles.sectionTitle, { color: '#F59E0B' }]}>🕐 Clock Timer</Text>
+          <Text style={{ color: '#94A3B8', fontSize: 12, marginBottom: 15 }}>
+            Block apps at a specific time of day
+          </Text>
+          <View style={styles.inputBox}>
+            <Text style={styles.label}>SELECT HOUR</Text>
+            <View style={styles.dropdownRow}>
+              {['1', '2', '3', '4', '5', '6', '7', '8', '9', '10', '11', '12'].map(h => (
+                <TouchableOpacity
+                  key={h}
+                  style={[
+                    styles.hourChip,
+                    clockHour === h && styles.hourChipSelected
+                  ]}
+                  onPress={() => setClockHour(h)}
+                >
+                  <Text style={[
+                    styles.hourChipText,
+                    clockHour === h && { color: '#FFF' }
+                  ]}>{h}</Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          </View>
+          <View style={[styles.timerRow, { marginTop: 15, marginBottom: 20 }]}>
+            <TouchableOpacity
+              style={[
+                styles.ampmBtn,
+                clockPeriod === 'AM' && styles.ampmBtnSelected
+              ]}
+              onPress={() => setClockPeriod('AM')}
+            >
+              <Text style={[
+                styles.ampmText,
+                clockPeriod === 'AM' && { color: '#FFF' }
+              ]}>AM</Text>
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[
+                styles.ampmBtn,
+                clockPeriod === 'PM' && styles.ampmBtnSelected
+              ]}
+              onPress={() => setClockPeriod('PM')}
+            >
+              <Text style={[
+                styles.ampmText,
+                clockPeriod === 'PM' && { color: '#FFF' }
+              ]}>PM</Text>
+            </TouchableOpacity>
+          </View>
+          <TouchableOpacity
+            style={[styles.btn, { backgroundColor: '#D97706' }, clockTimerReady && { backgroundColor: '#10B981' }]}
+            onPress={handleSetClockTimer}
+          >
+            <Text style={styles.btnText}>{clockTimerReady ? `✓ CLOCK SET (${clockHour}:00 ${clockPeriod})` : 'SAVE CLOCK TIMER'}</Text>
+          </TouchableOpacity>
+        </View>
+
         {activeLimits.map(l => {
           const formatTime = (secs: number) => {
             const h = Math.floor(secs / 3600);
@@ -428,12 +541,23 @@ function App(): React.JSX.Element {
           )}
 
           {selectedApps.length > 0 && (
-            <TouchableOpacity
-              style={[styles.btn, { backgroundColor: '#8B5CF6', marginTop: 20 }]}
-              onPress={startAllTimers}
-            >
-              <Text style={styles.btnText}>▶ START TIMERS ({selectedApps.length})</Text>
-            </TouchableOpacity>
+            <View>
+              <TouchableOpacity
+                style={[styles.btn, { backgroundColor: '#8B5CF6', marginTop: 20 }]}
+                onPress={startAllTimers}
+              >
+                <Text style={styles.btnText}>▶ START DURATION TIMERS ({selectedApps.length})</Text>
+              </TouchableOpacity>
+
+              {clockTimerReady && (
+                <TouchableOpacity
+                  style={[styles.btn, { backgroundColor: '#D97706', marginTop: 10 }]}
+                  onPress={startClockTimers}
+                >
+                  <Text style={styles.btnText}>🕐 START CLOCK TIMERS ({selectedApps.length})</Text>
+                </TouchableOpacity>
+              )}
+            </View>
           )}
         </View>
       </ScrollView>
@@ -467,7 +591,15 @@ const styles = StyleSheet.create({
   appName: { color: '#F8FAFC', fontWeight: '700' },
   pkgName: { color: '#64748B', fontSize: 10 },
   tick: { width: 30, height: 30, borderRadius: 15, borderWidth: 2, borderColor: '#334155', alignItems: 'center', justifyContent: 'center' },
-  tickTxt: { color: 'white', fontWeight: '900' }
+  tickTxt: { color: 'white', fontWeight: '900' },
+  // Clock Timer styles
+  dropdownRow: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginTop: 8 },
+  hourChip: { width: 42, height: 38, borderRadius: 10, backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', alignItems: 'center', justifyContent: 'center' },
+  hourChipSelected: { backgroundColor: '#D97706', borderColor: '#F59E0B' },
+  hourChipText: { color: '#94A3B8', fontWeight: '800', fontSize: 14 },
+  ampmBtn: { flex: 1, padding: 16, borderRadius: 12, backgroundColor: '#1E293B', borderWidth: 1, borderColor: '#334155', alignItems: 'center' },
+  ampmBtnSelected: { backgroundColor: '#D97706', borderColor: '#F59E0B' },
+  ampmText: { color: '#94A3B8', fontWeight: '900', fontSize: 16 },
 });
 
 export default App;
