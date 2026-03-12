@@ -62,16 +62,7 @@ export const BaseButton: React.FC<ButtonProps> = ({
       disabled={disabled || isLoading}
       onPress={onPress}
       activeOpacity={0.7}
-    >
-      {isLoading && <ActivityIndicator color={textStyle[1]?.color || '#fff'} style={{ marginRight: 8 }} />}
-      {!isLoading && leftIcon && leftIcon}
-      {typeof children === 'string' ? (
-        <Text style={textStyle}>{children}</Text>
-      ) : (
-        children
-      )}
-      {!isLoading && rightIcon && rightIcon}
-    </TouchableOpacity>
+    >{isLoading ? <ActivityIndicator color={textStyle[1]?.color || '#fff'} style={{ marginRight: 8 }} /> : null}{(!isLoading && leftIcon) ? leftIcon : null}{typeof children === 'string' || Array.isArray(children) ? (<Text style={textStyle}>{children}</Text>) : children}{(!isLoading && rightIcon) ? rightIcon : null}</TouchableOpacity>
   );
 };
 
@@ -80,24 +71,25 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 8,
+    borderRadius: 999, // Pill shape from Figma
   },
   textBase: {
-    fontWeight: '600',
+    fontWeight: '700',
+    letterSpacing: -0.5,
   },
-  primaryBg: { backgroundColor: '#2563EB' },
+  primaryBg: { backgroundColor: '#10B981' }, // Teal from Figma
   primaryText: { color: '#FFFFFF' },
   secondaryBg: { backgroundColor: '#F3F4F6' },
-  secondaryText: { color: '#1F2937' },
-  outlineBg: { backgroundColor: 'transparent', borderWidth: 1, borderColor: '#D1D5DB' },
-  outlineText: { color: '#374151' },
-  dangerBg: { backgroundColor: '#DC2626' },
+  secondaryText: { color: '#0F172A' },
+  outlineBg: { backgroundColor: 'transparent', borderWidth: 2, borderColor: '#10B981' },
+  outlineText: { color: '#10B981' },
+  dangerBg: { backgroundColor: '#EF4444' },
   dangerText: { color: '#FFFFFF' },
   ghostBg: { backgroundColor: 'transparent' },
-  ghostText: { color: '#4B5563' },
-  sizeSm: { paddingVertical: 6, paddingHorizontal: 12 },
-  sizeMd: { paddingVertical: 10, paddingHorizontal: 16 },
-  sizeLg: { paddingVertical: 14, paddingHorizontal: 20 },
+  ghostText: { color: '#64748B' },
+  sizeSm: { height: 40, paddingHorizontal: 16 },
+  sizeMd: { height: 56, paddingHorizontal: 24 },
+  sizeLg: { height: 64, paddingHorizontal: 32 },
   fullWidth: { width: '100%' },
   disabled: { opacity: 0.5 },
 });

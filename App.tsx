@@ -23,7 +23,16 @@ import { startCategoryService } from './src/services/categoryService';
 import TestScreen from './test/TestScreen';
 
 // Set this to true to see the test screen instead of the main app
-const SHOW_TEST_SCREEN = true;
+const SHOW_TEST_SCREEN = false;
+
+import {
+  BaseButton,
+  TextInput as CustomInput,
+  BaseModal,
+  RadioGroup,
+  Alert as CustomAlert,
+  Icon as CustomIcon
+} from './components';
 
 type AppInfo = {
   name: string;
@@ -41,6 +50,8 @@ function App(): React.JSX.Element {
     return <TestScreen />;
   }
 
+  // ===== ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS =====
+  const [showMainApp, setShowMainApp] = useState(false);
   const [activeLimits, setActiveLimits] = useState<AppLimit[]>([]);
   const [showTroubleshoot, setShowTroubleshoot] = useState(false);
   const [selectedApps, setSelectedApps] = useState<AppInfo[]>([]); // Multi-select support
@@ -70,6 +81,7 @@ function App(): React.JSX.Element {
     });
     return () => sub.remove();
   }, []);
+
 
   const syncActiveTimers = async () => {
     if (LimitterModule?.getActiveTimers) {
@@ -332,9 +344,81 @@ function App(): React.JSX.Element {
     return allApps.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()));
   }, [allApps, searchQuery]);
 
+  // ===== COMPONENT TEST PAGE (Figma Mockup) =====
+  if (!showMainApp) {
+    return (
+      <SafeAreaView style={{ flex: 1, backgroundColor: '#FFFFFF' }}>
+        <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+        <ScrollView contentContainerStyle={{ padding: 24, paddingBottom: 100 }}>
+          {/* ✅ ROOT STATUS HEADER */}
+          <View style={{ backgroundColor: '#ECFDF5', padding: 12, borderRadius: 12, marginBottom: 40, borderWidth: 1, borderColor: '#10B981' }}><Text style={{ color: '#065F46', fontSize: 13, fontWeight: '800', textAlign: 'center', letterSpacing: 1 }}>SHIELD ACTIVE • ROOT FILE RESOLVED ✅</Text></View>
+          <View style={{ alignItems: 'center', marginBottom: 48 }}><View style={{ width: 80, height: 80, borderRadius: 40, backgroundColor: '#10B981', alignItems: 'center', justifyContent: 'center', marginBottom: 24, shadowColor: '#10B981', shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.3, shadowRadius: 12, elevation: 8 }}><Text style={{ fontSize: 40 }}>🛡️</Text></View><Text style={{ fontSize: 24, fontWeight: '900', color: '#0F172A', textAlign: 'center', marginBottom: 12 }}>Login / Signup</Text><Text style={{ fontSize: 16, color: '#64748B', textAlign: 'center', lineHeight: 24, paddingHorizontal: 20 }}>Welcome back. Monitor and protect your family's digital journey.</Text></View>
+
+          <View style={{ marginBottom: 32 }}><CustomInput label="Username" placeholder="Enter your username" autoCapitalize="none" /><CustomInput label="Password" placeholder="Enter your password" secureTextEntry={true} /><TouchableOpacity style={{ alignSelf: 'flex-end', marginTop: -8 }}><Text style={{ color: '#10B981', fontWeight: '700', fontSize: 14 }}>Forgot password?</Text></TouchableOpacity></View>
+
+          <BaseButton variant="primary" fullWidth onPress={() => { }} style={{ marginBottom: 24 }}>Sign In</BaseButton>
+
+          <View style={{ flexDirection: 'row', alignItems: 'center', marginBottom: 24 }}>
+            <View style={{ flex: 1, height: 1, backgroundColor: '#E2E8F0' }} />
+            <Text style={{ marginHorizontal: 16, color: '#94A3B8', fontSize: 12, fontWeight: '700' }}>OR CONTINUE WITH</Text>
+            <View style={{ flex: 1, height: 1, backgroundColor: '#E2E8F0' }} />
+          </View>
+
+          <View style={{ flexDirection: 'row', gap: 12, marginBottom: 40 }}>
+            <TouchableOpacity style={{ flex: 1, height: 56, borderRadius: 999, borderWidth: 1.5, borderColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}><Text style={{ fontSize: 18 }}>G</Text><Text style={{ fontWeight: '700', color: '#0F172A' }}>Google</Text></TouchableOpacity>
+            <TouchableOpacity style={{ flex: 1, height: 56, borderRadius: 999, borderWidth: 1.5, borderColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center', flexDirection: 'row', gap: 8 }}><Text style={{ fontSize: 18 }}></Text><Text style={{ fontWeight: '700', color: '#0F172A' }}>Apple</Text></TouchableOpacity>
+          </View>
+
+          <Text style={{ textAlign: 'center', color: '#64748B' }}>Don't have an account? <Text style={{ color: '#10B981', fontWeight: '800' }}>Create one</Text></Text>
+
+          <View style={{ height: 60 }} />
+          <View style={{ height: 1, backgroundColor: '#F1F5F9', marginBottom: 40 }} />
+
+          {/* COMPONENT AUDIT SECTION */}
+          <Text style={{ fontSize: 18, fontWeight: '900', color: '#0F172A', marginBottom: 24 }}>🎨 Component Showcase</Text>
+
+          <View style={{ backgroundColor: '#F8FAFC', padding: 20, borderRadius: 24, marginBottom: 20 }}>
+            <Text style={{ color: '#64748B', fontSize: 12, fontWeight: '800', marginBottom: 16, textTransform: 'uppercase' }}>Variations</Text>
+            <View style={{ gap: 12 }}>
+              <BaseButton variant="outline">Outline Button</BaseButton>
+              <BaseButton variant="danger">Danger Action</BaseButton>
+              <BaseButton variant="ghost">Secondary Ghost</BaseButton>
+            </View>
+          </View>
+
+          <View style={{ backgroundColor: '#F8FAFC', padding: 20, borderRadius: 24, marginBottom: 20 }}>
+            <Text style={{ color: '#64748B', fontSize: 12, fontWeight: '800', marginBottom: 16, textTransform: 'uppercase' }}>Selection</Text>
+            <RadioGroup
+              options={[
+                { label: 'Standard Protection', value: 'a', description: 'Real-time app blocking' },
+                { label: 'Elite Guardian', value: 'b', description: 'Advanced category analytics' },
+              ]}
+              value="a"
+              onChange={() => { }}
+            />
+          </View>
+
+          <View style={{ backgroundColor: '#F8FAFC', padding: 20, borderRadius: 24, marginBottom: 40 }}>
+            <Text style={{ color: '#64748B', fontSize: 12, fontWeight: '800', marginBottom: 16, textTransform: 'uppercase' }}>Alert System</Text>
+            <CustomAlert variant="warning" title="Privacy Notice">Accessibility service is used for URL detection only.</CustomAlert>
+          </View>
+
+          <TouchableOpacity
+            style={{ backgroundColor: '#0F172A', padding: 20, borderRadius: 999, alignItems: 'center', marginTop: 10 }}
+            onPress={() => setShowMainApp(true)}
+          >
+            <Text style={{ color: 'white', fontSize: 16, fontWeight: '900' }}>🚀 PROCEED TO MAIN DASHBOARD</Text>
+          </TouchableOpacity>
+        </ScrollView>
+      </SafeAreaView>
+    );
+  }
+  // ===== END COMPONENT TEST PAGE =====
+
   if (step === 0) {
     return (
       <View style={[styles.container, { justifyContent: 'center', padding: 30 }]}>
+        <Text style={[styles.title, { color: '#EF4444' }]}>!!! ROOT APP ACTIVE !!!</Text>
         <Text style={styles.title}>Permissions Needed</Text>
         <Text style={styles.subtitle}>Overlay and Usage Access required.</Text>
         <TouchableOpacity style={styles.btn} onPress={() => LimitterModule?.checkAndRequestPermissions()}>
@@ -353,7 +437,8 @@ function App(): React.JSX.Element {
       <View style={styles.header}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
           <View>
-            <Text style={styles.title}>APPGUARD</Text>
+            <Text style={{ color: '#EF4444', fontWeight: 'bold' }}>!!! ROOT FILE RUNNING !!!</Text>
+            <Text style={styles.title}>NEW UIIIII</Text>
             <Text style={styles.versionTag}>v2.0 Native Guard</Text>
           </View>
           <TouchableOpacity
@@ -373,6 +458,7 @@ function App(): React.JSX.Element {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
+
         {(permissions.batteryOptimized || !permissions.exactAlarm || showTroubleshoot) && (
           <View style={[styles.card, { backgroundColor: '#7C2D12', borderColor: '#F59E0B', borderWidth: 1 }]}>
             <Text style={[styles.sectionTitle, { color: '#FACC15' }]}>⚠️ Background Performance</Text>
@@ -568,6 +654,7 @@ function App(): React.JSX.Element {
               )}
             </View>
           )}
+
         </View>
       </ScrollView>
     </SafeAreaView>

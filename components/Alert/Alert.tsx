@@ -22,14 +22,7 @@ export const Alert: React.FC<AlertProps> = ({ variant = 'default', title, childr
   return (
     <View style={[styles.container, { backgroundColor: currentVariant.bg, borderColor: currentVariant.border }, style]}>
       <Text style={styles.icon}>{currentVariant.icon}</Text>
-      <View style={styles.content}>
-        {title && <Text style={[styles.title, { color: currentVariant.text }]}>{title}</Text>}
-        {typeof children === 'string' ? (
-          <Text style={[styles.message, { color: currentVariant.text }]}>{children}</Text>
-        ) : (
-          children
-        )}
-      </View>
+      <View style={styles.content}>{title ? <Text style={[styles.title, { color: currentVariant.text }]}>{title}</Text> : null}{typeof children === 'string' || Array.isArray(children) ? (<Text style={[styles.message, { color: currentVariant.text }]}>{children}</Text>) : children}</View>
     </View>
   );
 };

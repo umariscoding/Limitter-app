@@ -36,21 +36,7 @@ export const BaseModal: React.FC<BaseModalProps> = ({
               {/* Header */}
               {(title || subtitle || headerLabel || showCloseButton) && (
                 <View style={styles.header}>
-                  <View style={styles.headerTop}>
-                    <View style={styles.titleContainer}>
-                      {headerLabel && <Text style={styles.headerLabel}>{headerLabel}</Text>}
-                      {title && typeof title === 'string' ? (
-                        <Text style={styles.title}>{title}</Text>
-                      ) : (
-                        title
-                      )}
-                    </View>
-                    {showCloseButton && (
-                      <TouchableOpacity onPress={onClose} style={styles.closeBtn}>
-                        <Text style={styles.closeBtnText}>✕</Text>
-                      </TouchableOpacity>
-                    )}
-                  </View>
+                  <View style={styles.headerTop}><View style={styles.titleContainer}>{headerLabel && <Text style={styles.headerLabel}>{headerLabel}</Text>}{title && (typeof title === 'string' || Array.isArray(title)) ? (<Text style={styles.title}>{title}</Text>) : (title)}</View>{showCloseButton && (<TouchableOpacity onPress={onClose} style={styles.closeBtn}><Text style={styles.closeBtnText}>✕</Text></TouchableOpacity>)}</View>
                   {subtitle && <Text style={styles.subtitle}>{subtitle}</Text>}
                 </View>
               )}

@@ -44,8 +44,7 @@ export const RadioGroup: React.FC<RadioGroupProps> = ({
                 {isChecked && <View style={styles.radioInnerCircle} />}
               </View>
               <View style={styles.textContainer}>
-                <Text style={[styles.label, isChecked && styles.labelChecked]}>{option.label}</Text>
-                {option.description && <Text style={styles.description}>{option.description}</Text>}
+                <Text style={[styles.label, isChecked && styles.labelChecked]}>{option.label}</Text>{option.description && <Text style={styles.description}>{option.description}</Text>}
               </View>
             </TouchableOpacity>
           );
@@ -86,11 +85,11 @@ const styles = StyleSheet.create({
     backgroundColor: '#ffffff',
   },
   radioChecked: {
-    borderColor: '#2563eb',
-    backgroundColor: '#2563eb',
+    borderColor: '#10B981',
+    backgroundColor: '#10B981',
   },
   radioError: {
-    borderColor: '#ef4444',
+    borderColor: '#EF4444',
   },
   radioInnerCircle: {
     width: 8,
@@ -104,15 +103,15 @@ const styles = StyleSheet.create({
   },
   label: {
     fontSize: 15,
-    fontWeight: '500',
-    color: '#374151',
+    fontWeight: '600',
+    color: '#0F172A',
   },
   labelChecked: {
-    color: '#111827',
+    color: '#0F172A',
   },
   description: {
     fontSize: 14,
-    color: '#6b7280',
+    color: '#64748B',
     marginTop: 2,
   },
   errorText: {
