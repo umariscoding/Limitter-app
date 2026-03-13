@@ -1,8 +1,4 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { LogBox } from 'react-native';
-
-LogBox.ignoreAllLogs(); // Ignore all log notifications
-
 import {
   SafeAreaView,
   StatusBar,
@@ -23,17 +19,6 @@ import {
 const { LimitterModule, TimerEventModule } = NativeModules;
 
 import { startCategoryService } from './src/services/categoryService';
-import { NavigationContainer } from '@react-navigation/native';
-import AuthNavigator from './src/navigation/AuthNavigator';
-
-import {
-  BaseButton,
-  TextInput as CustomInput,
-  BaseModal,
-  RadioGroup,
-  Alert as CustomAlert,
-  Icon as CustomIcon
-} from './components';
 
 type AppInfo = {
   name: string;
@@ -47,8 +32,6 @@ interface AppLimit extends AppInfo {
 }
 
 function App(): React.JSX.Element {
-  // ===== ALL HOOKS MUST BE DECLARED BEFORE ANY CONDITIONAL RETURNS =====
-  const [showMainApp, setShowMainApp] = useState(false);
   const [activeLimits, setActiveLimits] = useState<AppLimit[]>([]);
   const [showTroubleshoot, setShowTroubleshoot] = useState(false);
   const [selectedApps, setSelectedApps] = useState<AppInfo[]>([]); // Multi-select support
@@ -78,7 +61,6 @@ function App(): React.JSX.Element {
     });
     return () => sub.remove();
   }, []);
-
 
   const syncActiveTimers = async () => {
     if (LimitterModule?.getActiveTimers) {
@@ -341,18 +323,6 @@ function App(): React.JSX.Element {
     return allApps.filter(a => a.name.toLowerCase().includes(searchQuery.toLowerCase()));
   }, [allApps, searchQuery]);
 
-  // ===== COMPONENT TEST PAGE (Figma Mockup) =====
-  // Render Auth flow if not logged in
-  if (!showMainApp) {
-    return (
-      <NavigationContainer>
-        <AuthNavigator onLoginSuccess={() => setShowMainApp(true)} />
-      </NavigationContainer>
-    );
-  }
-
-  // ===== END COMPONENT TEST PAGE =====
-
   if (step === 0) {
     return (
       <View style={[styles.container, { justifyContent: 'center', padding: 30 }]}>
@@ -374,8 +344,8 @@ function App(): React.JSX.Element {
       <View style={styles.header}>
         <View style={{ flexDirection: 'row', justifyContent: 'space-between', width: '100%', alignItems: 'center' }}>
           <View>
-            <Text style={styles.title}>AppGuard</Text>
-            <Text style={styles.versionTag}>v2.0 Native Shield</Text>
+            <Text style={styles.title}>APPGUARD</Text>
+            <Text style={styles.versionTag}>v2.0 Native Guard</Text>
           </View>
           <TouchableOpacity
             style={{ backgroundColor: '#E11D48', padding: 8, borderRadius: 10 }}
@@ -394,7 +364,6 @@ function App(): React.JSX.Element {
       </View>
 
       <ScrollView contentContainerStyle={{ paddingBottom: 100 }}>
-
         {(permissions.batteryOptimized || !permissions.exactAlarm || showTroubleshoot) && (
           <View style={[styles.card, { backgroundColor: '#7C2D12', borderColor: '#F59E0B', borderWidth: 1 }]}>
             <Text style={[styles.sectionTitle, { color: '#FACC15' }]}>⚠️ Background Performance</Text>
@@ -590,7 +559,6 @@ function App(): React.JSX.Element {
               )}
             </View>
           )}
-
         </View>
       </ScrollView>
     </SafeAreaView>
