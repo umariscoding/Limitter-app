@@ -1,4 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { LogBox } from 'react-native';
+
+LogBox.ignoreAllLogs(); // Ignore all log notifications
 import {
   SafeAreaView,
   StatusBar,
