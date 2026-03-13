@@ -15,7 +15,7 @@ export const TextInput = forwardRef<RNTextInput, TextInputProps>(
     const isActuallySecure = secureTextEntry && !isPasswordVisible;
 
     return (
-      <View style={styles.container}>{label && <Text style={styles.label}>{label}</Text>}<View style={styles.inputWrapper}><RNTextInput
+      <View style={styles.container}>{label ? <Text style={styles.label}>{label}</Text> : null}<View style={styles.inputWrapper}><RNTextInput
             ref={ref}
             style={[
               styles.input,
@@ -26,11 +26,11 @@ export const TextInput = forwardRef<RNTextInput, TextInputProps>(
             secureTextEntry={!!isActuallySecure}
             placeholderTextColor="#94A3B8"
             {...props}
-          />{secureTextEntry && (<TouchableOpacity
+          />{secureTextEntry ? (<TouchableOpacity
               style={styles.eyeButton}
               onPress={() => setIsPasswordVisible(!isPasswordVisible)}
               activeOpacity={0.6}
-            ><Text style={styles.eyeText}>{isPasswordVisible ? 'Hide' : 'Show'}</Text></TouchableOpacity>)}</View>{error && <Text style={styles.errorText}>{error}</Text>}</View>
+            ><Text style={styles.eyeText}>{isPasswordVisible ? 'Hide' : 'Show'}</Text></TouchableOpacity>) : null}</View>{error ? <Text style={styles.errorText}>{error}</Text> : null}</View>
     );
   }
 );

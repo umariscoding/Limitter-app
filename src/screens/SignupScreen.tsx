@@ -103,7 +103,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
 
           {/* 5. Navigation: Already have an account? Login */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account? </Text>
+            <Text style={styles.footerText}>Already have an account?{" "}</Text>
             <TouchableOpacity onPress={onNavigateToLogin} activeOpacity={0.6}>
               <Text style={styles.loginText}>Login</Text>
             </TouchableOpacity>

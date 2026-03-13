@@ -65,4 +65,14 @@ class TimerEventModule(private val reactContext: ReactApplicationContext) :
     override fun onCatalystInstanceDestroy() {
         stopListening()
     }
+
+    @ReactMethod
+    fun addListener(eventName: String) {
+        // Keep: Required for RN built in Event Emitter Calls.
+    }
+
+    @ReactMethod
+    fun removeListeners(count: Int) {
+        // Keep: Required for RN built in Event Emitter Calls.
+    }
 }

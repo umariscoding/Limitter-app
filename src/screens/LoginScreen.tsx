@@ -89,13 +89,14 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
           {/* 4. Navigation: Bottom Link */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Don't have an account? </Text>
+            <Text style={styles.footerText}>Don't have an account?{" "}</Text>
             <TouchableOpacity onPress={onNavigateToSignUp} activeOpacity={0.6}>
               <Text style={styles.signUpText}>Create one</Text>
             </TouchableOpacity>
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
     </SafeAreaView>
   );
 };
