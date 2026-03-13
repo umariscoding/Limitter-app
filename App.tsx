@@ -19,6 +19,8 @@ import {
 const { LimitterModule, TimerEventModule } = NativeModules;
 
 import { startCategoryService } from './src/services/categoryService';
+import { NavigationContainer } from '@react-navigation/native';
+import AuthNavigator from './src/navigation/AuthNavigator';
 
 type AppInfo = {
   name: string;
@@ -32,6 +34,7 @@ interface AppLimit extends AppInfo {
 }
 
 function App(): React.JSX.Element {
+  const [showMainApp, setShowMainApp] = useState(false);
   const [activeLimits, setActiveLimits] = useState<AppLimit[]>([]);
   const [showTroubleshoot, setShowTroubleshoot] = useState(false);
   const [selectedApps, setSelectedApps] = useState<AppInfo[]>([]); // Multi-select support
@@ -335,6 +338,15 @@ function App(): React.JSX.Element {
           <Text style={styles.btnText}>I'VE GRANTED THEM - REFRESH</Text>
         </TouchableOpacity>
       </View>
+    );
+  }
+
+  // Render Auth flow if not logged in
+  if (!showMainApp) {
+    return (
+      <NavigationContainer>
+        <AuthNavigator onLoginSuccess={() => setShowMainApp(true)} />
+      </NavigationContainer>
     );
   }
 
