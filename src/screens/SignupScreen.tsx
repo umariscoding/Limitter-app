@@ -8,8 +8,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Keyboard,
 } from 'react-native';
-import { BaseButton, TextInput, Icon } from '../../components';
+import { BaseButton, TextInput, Icon, Toast } from '../../components';
+import { useNavigation } from '@react-navigation/native';
 
 interface SignupScreenProps {
   onSignup?: (email: string, pass: string) => void;
@@ -20,10 +22,12 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
   onSignup,
   onNavigateToLogin,
 }) => {
+  const navigation = useNavigation<any>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState(false);
 
   const handleSignup = () => {
     // Reset error
@@ -40,13 +44,31 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
       return;
     }
 
+    // Dismiss keyboard
+    Keyboard.dismiss();
+
+    // Show Success Toast
+    setShowToast(true);
+
+    // Provide some feedback to the app logic if needed
     if (onSignup) {
       onSignup(email, password);
     }
+
+    // Auto navigate to login after 1.5s
+    setTimeout(() => {
+      navigation.navigate('Login');
+    }, 1500);
   };
 
   return (
     <SafeAreaView style={styles.container}>
+      <Toast 
+        visible={showToast} 
+        message="Account Created Successfully!" 
+        onHide={() => setShowToast(false)} 
+        type="success"
+      />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
@@ -101,10 +123,10 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
             </BaseButton>
           </View>
 
-          {/* 5. Navigation: Already have an account? Login */}
+          {/* 4. Navigation: Already have an account? Login */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>Already have an account?{" "}</Text>
-            <TouchableOpacity onPress={onNavigateToLogin} activeOpacity={0.6}>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')} activeOpacity={0.6}>
               <Text style={styles.loginText}>Login</Text>
             </TouchableOpacity>
           </View>

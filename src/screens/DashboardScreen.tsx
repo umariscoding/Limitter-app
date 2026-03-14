@@ -1,18 +1,47 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { 
+  View, 
+  Text, 
+  StyleSheet, 
+  TouchableOpacity, 
+  ScrollView, 
+  SafeAreaView,
+  Platform,
+  StatusBar 
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { userProfile, categories, devices, deviceLimit } from '../data/appData';
+import { Toast } from '../../components';
 
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
+  const [showToast, setShowToast] = useState(false);
+
+  useEffect(() => {
+    // Show welcome toast when user lands on dashboard
+    setShowToast(true);
+  }, []);
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <Toast 
+        visible={showToast} 
+        message="Login Successful! Welcome to Limitter." 
+        onHide={() => setShowToast(false)} 
+        type="success"
+      />
       <View style={styles.headerContainer}>
-        <Text style={styles.logoText}>Limitter</Text>
+        <Text style={styles.logoText}>{userProfile.appName}</Text>
         <View style={styles.headerRight}>
-          <View style={styles.proBadge}>
-            <Text style={styles.proBadgeText}>Pro Plan</Text>
-          </View>
+          <TouchableOpacity 
+            activeOpacity={0.7}
+            onPress={() => navigation.navigate('SubscriptionPlansScreen')}
+          >
+            <View style={styles.proBadge}>
+              <Text style={styles.proBadgeText}>{userProfile.plan} Plan</Text>
+            </View>
+          </TouchableOpacity>
           <TouchableOpacity 
             style={styles.addButton}
             onPress={() => navigation.navigate('AddContentScreen')}
@@ -27,57 +56,37 @@ export default function DashboardScreen() {
           style={styles.overrideTracker}
           onPress={() => navigation.navigate('OverrideLogsScreen')}
         >
-          <Text style={styles.overrideText}>Overrides Used: <Text style={styles.overrideBold}>3 / 15</Text></Text>
+          <Text style={styles.overrideText}>
+            Overrides Used: <Text style={styles.overrideBold}>{userProfile.overridesUsed} / {userProfile.overridesTotal}</Text>
+          </Text>
         </TouchableOpacity>
 
         <View style={styles.timeCard}>
           <Text style={styles.timeLabel}>Total Usage Today (All Devices)</Text>
-          <Text style={styles.timeValue}>4h 20m</Text>
+          <Text style={styles.timeValue}>{userProfile.totalUsageToday}</Text>
         </View>
 
         <View style={styles.categoriesSection}>
           <Text style={styles.sectionTitle}>Categories</Text>
           
           <View style={styles.categoryCard}>
-            <View style={styles.categoryRow}>
-              <View style={[styles.categoryIcon, { backgroundColor: '#E0F2FE' }]}>
-                <Text style={styles.iconEmoji}>📱</Text>
+            {categories.map((category, index) => (
+              <View 
+                key={category.id} 
+                style={[
+                  styles.categoryRow, 
+                  index === categories.length - 1 && styles.lastRow
+                ]}
+              >
+                <View style={[styles.categoryIcon, { backgroundColor: category.color + '20' }]}>
+                  <Text style={styles.iconEmoji}>{category.icon}</Text>
+                </View>
+                <View style={styles.categoryInfo}>
+                  <Text style={styles.categoryName}>{category.name}</Text>
+                </View>
+                <Text style={styles.categoryTime}>{category.time}</Text>
               </View>
-              <View style={styles.categoryInfo}>
-                <Text style={styles.categoryName}>Social Media</Text>
-              </View>
-              <Text style={styles.categoryTime}>1h 45m</Text>
-            </View>
-
-            <View style={styles.categoryRow}>
-              <View style={[styles.categoryIcon, { backgroundColor: '#FCE7F3' }]}>
-                <Text style={styles.iconEmoji}>🎮</Text>
-              </View>
-              <View style={styles.categoryInfo}>
-                <Text style={styles.categoryName}>Gaming</Text>
-              </View>
-              <Text style={styles.categoryTime}>55m</Text>
-            </View>
-
-            <View style={styles.categoryRow}>
-              <View style={[styles.categoryIcon, { backgroundColor: '#DCFCE7' }]}>
-                <Text style={styles.iconEmoji}>📈</Text>
-              </View>
-              <View style={styles.categoryInfo}>
-                <Text style={styles.categoryName}>Productivity</Text>
-              </View>
-              <Text style={styles.categoryTime}>40m</Text>
-            </View>
-
-            <View style={[styles.categoryRow, styles.lastRow]}>
-              <View style={[styles.categoryIcon, { backgroundColor: '#FEF3C7' }]}>
-                <Text style={styles.iconEmoji}>🎬</Text>
-              </View>
-              <View style={styles.categoryInfo}>
-                <Text style={styles.categoryName}>Entertainment</Text>
-              </View>
-              <Text style={styles.categoryTime}>1h 00m</Text>
-            </View>
+            ))}
           </View>
 
           <TouchableOpacity 
@@ -92,7 +101,7 @@ export default function DashboardScreen() {
           <View style={styles.sectionHeaderRow}>
             <View style={styles.sectionHeaderLeft}>
               <Text style={styles.sectionTitle}>Your Devices</Text>
-              <Text style={styles.sectionSubtitle}>Time limits are shared across all devices (account-wide)</Text>
+              <Text style={styles.sectionSubtitle}>{deviceLimit.sharedLimitNote}</Text>
             </View>
             <TouchableOpacity onPress={() => navigation.navigate('ControlPlansScreen')}>
               <Text style={styles.manageAllText}>Manage All</Text>
@@ -100,62 +109,41 @@ export default function DashboardScreen() {
           </View>
 
           <View style={styles.infoBanner}>
-            <Text style={styles.infoBannerText}>Pro Plan: 2 Active Devices Max. Lock one to activate another.</Text>
+            <Text style={styles.infoBannerText}>{deviceLimit.infoText}</Text>
           </View>
 
-          <View style={styles.deviceCard}>
-            <View style={styles.deviceHeader}>
-              <Text style={styles.deviceIcon}>📱</Text>
-              <Text style={styles.deviceName}>iPhone 14 Pro</Text>
-              <View style={[styles.statusBadge, styles.statusActive]}>
-                <Text style={styles.statusTextActive}>Active</Text>
+          {devices.map((device) => (
+            <View key={device.id} style={styles.deviceCard}>
+              <View style={styles.deviceHeader}>
+                <Text style={styles.deviceIcon}>{device.icon}</Text>
+                <Text style={styles.deviceName}>{device.name}</Text>
+                <View style={[
+                  styles.statusBadge, 
+                  device.status === 'Active' ? styles.statusActive : styles.statusLocked
+                ]}>
+                  <Text style={device.status === 'Active' ? styles.statusTextActive : styles.statusTextLocked}>
+                    {device.status}
+                  </Text>
+                </View>
+              </View>
+              <View style={styles.deviceActions}>
+                <TouchableOpacity 
+                  style={[styles.actionBtn, device.status === 'Locked' && styles.actionBtnDisabled]} 
+                  disabled={device.status === 'Locked'}
+                  onPress={() => console.log('Lock ' + device.name)}
+                >
+                  <Text style={[styles.actionBtnText, device.status === 'Locked' && styles.actionBtnTextDisabled]}>Lock Now</Text>
+                </TouchableOpacity>
+                <TouchableOpacity 
+                  style={[styles.actionBtn, device.status === 'Active' && styles.actionBtnDisabled]} 
+                  disabled={device.status === 'Active'}
+                  onPress={() => console.log('Unlock ' + device.name)}
+                >
+                  <Text style={[styles.actionBtnText, device.status === 'Active' && styles.actionBtnTextDisabled]}>Unlock</Text>
+                </TouchableOpacity>
               </View>
             </View>
-            <View style={styles.deviceActions}>
-              <TouchableOpacity style={styles.actionBtn} onPress={() => console.log('Lock iPhone 14 Pro')}>
-                <Text style={styles.actionBtnText}>Lock Now</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnDisabled]} disabled={true}>
-                <Text style={[styles.actionBtnText, styles.actionBtnTextDisabled]}>Unlock</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.deviceCard}>
-            <View style={styles.deviceHeader}>
-              <Text style={styles.deviceIcon}>💻</Text>
-              <Text style={styles.deviceName}>MacBook Air</Text>
-              <View style={[styles.statusBadge, styles.statusLocked]}>
-                <Text style={styles.statusTextLocked}>Locked</Text>
-              </View>
-            </View>
-            <View style={styles.deviceActions}>
-              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnDisabled]} disabled={true}>
-                <Text style={[styles.actionBtnText, styles.actionBtnTextDisabled]}>Lock Now</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={styles.actionBtn} onPress={() => console.log('Unlock MacBook Air')}>
-                <Text style={styles.actionBtnText}>Unlock</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
-
-          <View style={styles.deviceCard}>
-            <View style={styles.deviceHeader}>
-              <Text style={styles.deviceIcon}>📱</Text>
-              <Text style={styles.deviceName}>iPad Mini</Text>
-              <View style={[styles.statusBadge, styles.statusActive]}>
-                <Text style={styles.statusTextActive}>Active</Text>
-              </View>
-            </View>
-            <View style={styles.deviceActions}>
-              <TouchableOpacity style={styles.actionBtn} onPress={() => console.log('Lock iPad Mini')}>
-                <Text style={styles.actionBtnText}>Lock Now</Text>
-              </TouchableOpacity>
-              <TouchableOpacity style={[styles.actionBtn, styles.actionBtnDisabled]} disabled={true}>
-                <Text style={[styles.actionBtnText, styles.actionBtnTextDisabled]}>Unlock</Text>
-              </TouchableOpacity>
-            </View>
-          </View>
+          ))}
         </View>
       </ScrollView>
 
@@ -193,8 +181,11 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingTop: 10,
-    paddingBottom: 5,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 10,
+    paddingBottom: 15,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
   logoText: {
     fontSize: 24,

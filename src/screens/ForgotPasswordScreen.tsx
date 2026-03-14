@@ -8,9 +8,9 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
-  Alert as RNAlert,
 } from 'react-native';
-import { BaseButton, TextInput, Icon } from '../../components';
+import { BaseButton, TextInput, Icon, Toast } from '../../components';
+import { useNavigation } from '@react-navigation/native';
 
 interface ForgotPasswordScreenProps {
   onSendEmail?: (email: string) => void;
@@ -21,16 +21,23 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
   onSendEmail,
   onNavigateBack,
 }) => {
+  const navigation = useNavigation<any>();
   const [email, setEmail] = useState('');
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error'>('success');
 
   const handleSendEmail = () => {
     if (!email) {
-      RNAlert.alert('Error', 'Please enter your email address');
+      setToastMessage('Please enter your email address');
+      setToastType('error');
+      setShowToast(true);
       return;
     }
 
-    // 2. Functionality: Trigger placeholder and show alert
-    RNAlert.alert('Success', 'Verification email sent');
+    setToastType('success');
+    setToastMessage('Verification email sent!');
+    setShowToast(true);
     
     if (onSendEmail) {
       onSendEmail(email);
@@ -39,6 +46,12 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
 
   return (
     <SafeAreaView style={styles.container}>
+      <Toast 
+        visible={showToast} 
+        message={toastMessage} 
+        onHide={() => setShowToast(false)} 
+        type={toastType}
+      />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
@@ -82,7 +95,7 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
 
           {/* Navigation Back */}
           <View style={styles.footer}>
-            <TouchableOpacity onPress={onNavigateBack} activeOpacity={0.6}>
+            <TouchableOpacity onPress={() => navigation.navigate('Login')} activeOpacity={0.6}>
               <Text style={styles.backText}>Back to Login</Text>
             </TouchableOpacity>
           </View>

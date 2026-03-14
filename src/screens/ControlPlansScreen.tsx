@@ -7,22 +7,33 @@ import {
   ScrollView, 
   SafeAreaView, 
   Alert, 
-  Switch 
+  Switch,
+  Keyboard,
+  Platform,
+  StatusBar
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 
 // Standard React Native app, likely no NativeWind setup shown in package.json
 // Using StyleSheet for maximum compatibility
 
-type PlanTier = 'Free' | 'Pro' | 'Business';
-type DeviceType = 'Phone' | 'Tablet' | 'Desktop/Laptop' | 'Desktop';
+import { 
+  planDetails, 
+  devices as appDevices, 
+  usageControls, 
+  featureToggles 
+} from '../data/appData';
+
+type PlanTier = 'Free' | 'Pro' | 'Elite';
+type DeviceType = 'phone' | 'tablet' | 'laptop' | 'desktop';
 
 interface Device {
   id: string;
   name: string;
   type: DeviceType;
   model: string;
-  status: 'Online' | 'Offline';
+  status: string;
+  icon: string;
 }
 
 export default function ControlPlansScreen() {
@@ -30,7 +41,7 @@ export default function ControlPlansScreen() {
   const route = useRoute<any>();
 
   // Mock Data
-  const [currentPlan, setCurrentPlan] = useState<PlanTier>('Pro');
+  const [currentPlan, setCurrentPlan] = useState<PlanTier>(planDetails.currentPlan as PlanTier);
 
   // Handle Plan Sync from SubscriptionPlansScreen
   useEffect(() => {
@@ -38,24 +49,20 @@ export default function ControlPlansScreen() {
       setCurrentPlan(route.params.activePlan);
     }
   }, [route.params?.activePlan]);
-  const devicesUsed = 4;
-  const devicesTotal = 5;
+  
+  const devicesUsed = planDetails.deviceSlotsUsed;
+  const devicesTotal = planDetails.deviceSlotsTotal;
 
-  const [managedDevices] = useState<Device[]>([
-    { id: '1', name: 'iPhone 14 Pro', type: 'Phone', model: 'Apple iPhone 14 Pro', status: 'Online' },
-    { id: '2', name: 'iPad Mini', type: 'Tablet', model: 'Apple iPad Mini 6th Gen', status: 'Online' },
-    { id: '3', name: 'MacBook Air', type: 'Desktop/Laptop', model: 'Apple MacBook Air M2', status: 'Offline' },
-    { id: '4', name: 'Windows PC', type: 'Desktop', model: 'Custom Desktop PC', status: 'Offline' },
-  ]);
+  const [managedDevices] = useState<Device[]>(appDevices as Device[]);
 
   // Usage Controls State
-  const [safeBrowsing, setSafeBrowsing] = useState(true);
-  const [smartOverride, setSmartOverride] = useState(true);
+  const [safeBrowsing, setSafeBrowsing] = useState(featureToggles.find(f => f.key === 'safeBrowsing')?.defaultValue ?? true);
+  const [smartOverride, setSmartOverride] = useState(featureToggles.find(f => f.key === 'smartOverride')?.defaultValue ?? true);
 
   // Derived Values
   const progressPercentage = (devicesUsed / devicesTotal) * 100;
   const slotsRemaining = devicesTotal - devicesUsed;
-  const isTopPlan = currentPlan === 'Business';
+  const isTopPlan = currentPlan === 'Elite';
 
   const handleSignOut = () => {
     Alert.alert("Sign Out", "Are you sure you want to sign out?", [
@@ -71,15 +78,6 @@ export default function ControlPlansScreen() {
     ]);
   };
 
-  const getDeviceIcon = (type: DeviceType) => {
-    switch(type) {
-      case 'Phone': return '📱';
-      case 'Tablet': return '📟';
-      case 'Desktop/Laptop': return '💻';
-      case 'Desktop': return '🖥️';
-      default: return '⚙️';
-    }
-  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -99,11 +97,11 @@ export default function ControlPlansScreen() {
           <View style={styles.planCardHeader}>
             <Text style={styles.planTitle}>{currentPlan} Member</Text>
             <View style={styles.activeBadge}>
-              <Text style={styles.activeBadgeText}>Active</Text>
+              <Text style={styles.activeBadgeText}>{planDetails.status}</Text>
             </View>
           </View>
           <Text style={styles.planBenefits}>
-            {devicesTotal} Devices • Unlimited Overrides • Smart Override Enabled
+            {planDetails.benefits}
           </Text>
         </View>
 
@@ -122,11 +120,14 @@ export default function ControlPlansScreen() {
         {/* 4. Action Buttons */}
         <TouchableOpacity 
           style={[styles.primaryBtn, isTopPlan && styles.disabledBtn]}
-          onPress={() => navigation.navigate('SubscriptionPlansScreen')}
+          onPress={() => {
+            Keyboard.dismiss();
+            navigation.navigate('SubscriptionPlansScreen');
+          }}
           disabled={isTopPlan}
         >
           <Text style={styles.primaryBtnText}>
-            {isTopPlan ? "Top Plan Active ✓" : "Upgrade to Business"}
+            {isTopPlan ? "Top Plan Active ✓" : "Upgrade to Elite"}
           </Text>
         </TouchableOpacity>
 
@@ -138,13 +139,13 @@ export default function ControlPlansScreen() {
 
         {managedDevices.map(device => (
           <TouchableOpacity key={device.id} style={styles.deviceCard} onPress={() => Alert.alert(device.name)}>
-            <Text style={styles.deviceIcon}>{getDeviceIcon(device.type)}</Text>
+            <Text style={styles.deviceIcon}>{device.icon}</Text>
             <View style={styles.deviceInfo}>
               <Text style={styles.deviceName}>{device.name}</Text>
               <Text style={styles.deviceModel}>{device.model}</Text>
             </View>
-            <View style={[styles.statusPill, device.status === 'Online' ? styles.onlinePill : styles.offlinePill]}>
-              <Text style={[styles.statusText, device.status === 'Online' ? styles.onlineText : styles.offlineText]}>
+            <View style={[styles.statusPill, device.status === 'Active' ? styles.onlinePill : styles.offlinePill]}>
+              <Text style={[styles.statusText, device.status === 'Active' ? styles.onlineText : styles.offlineText]}>
                 {device.status}
               </Text>
             </View>
@@ -160,43 +161,37 @@ export default function ControlPlansScreen() {
           <Text style={styles.sectionTitle}>Usage Controls</Text>
         </View>
 
-        <TouchableOpacity style={styles.row} onPress={() => Alert.alert("Daily Limits")}>
-          <Text style={styles.rowIcon}>⏰</Text>
-          <View style={styles.rowContent}>
-            <Text style={styles.rowTitle}>Daily Time Limits</Text>
-            <Text style={styles.rowSubtitle}>Set max usage per category</Text>
-          </View>
-          <Text style={styles.chevron}>→</Text>
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.row} onPress={() => Alert.alert("Schedule")}>
-          <Text style={styles.rowIcon}>📅</Text>
-          <View style={styles.rowContent}>
-            <Text style={styles.rowTitle}>Lockout Schedule</Text>
-            <Text style={styles.rowSubtitle}>Block usage during windows</Text>
-          </View>
-          <Text style={styles.chevron}>→</Text>
-        </TouchableOpacity>
+        {usageControls.map((control) => (
+          <TouchableOpacity 
+            key={control.id} 
+            style={styles.row} 
+            onPress={() => Alert.alert(control.title)}
+          >
+            <Text style={styles.rowIcon}>{control.icon === 'clock' ? '⏰' : '📅'}</Text>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowTitle}>{control.title}</Text>
+              <Text style={styles.rowSubtitle}>{control.description}</Text>
+            </View>
+            <Text style={styles.chevron}>→</Text>
+          </TouchableOpacity>
+        ))}
 
         <View style={styles.spacer} />
 
-        <View style={styles.toggleRow}>
-          <Text style={styles.rowIcon}>🛡️</Text>
-          <View style={styles.rowContent}>
-            <Text style={styles.rowTitle}>Safe Browsing</Text>
-            <Text style={styles.rowSubtitle}>Filter harmful content</Text>
+        {featureToggles.map((toggle) => (
+          <View key={toggle.id} style={styles.toggleRow}>
+            <Text style={styles.rowIcon}>{toggle.key === 'safeBrowsing' ? '🛡️' : '⚡'}</Text>
+            <View style={styles.rowContent}>
+              <Text style={styles.rowTitle}>{toggle.title}</Text>
+              <Text style={styles.rowSubtitle}>{toggle.description}</Text>
+            </View>
+            <Switch 
+              value={toggle.key === 'safeBrowsing' ? safeBrowsing : smartOverride} 
+              onValueChange={toggle.key === 'safeBrowsing' ? setSafeBrowsing : setSmartOverride} 
+              trackColor={{ false: "#E2E8F0", true: "#4F46E5" }} 
+            />
           </View>
-          <Switch value={safeBrowsing} onValueChange={setSafeBrowsing} trackColor={{ false: "#E2E8F0", true: "#4F46E5" }} />
-        </View>
-
-        <View style={styles.toggleRow}>
-          <Text style={styles.rowIcon}>⚡</Text>
-          <View style={styles.rowContent}>
-            <Text style={styles.rowTitle}>Smart Override</Text>
-            <Text style={styles.rowSubtitle}>Allow extra time requests</Text>
-          </View>
-          <Switch value={smartOverride} onValueChange={setSmartOverride} trackColor={{ false: "#E2E8F0", true: "#4F46E5" }} />
-        </View>
+        ))}
 
         {/* 7. Account */}
         <View style={styles.sectionHeader}>
@@ -239,7 +234,16 @@ export default function ControlPlansScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { flexDirection: 'row', alignItems: 'center', padding: 16, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#FFF' },
+  header: { 
+    flexDirection: 'row', 
+    alignItems: 'center', 
+    paddingHorizontal: 16,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
+    paddingBottom: 15,
+    borderBottomWidth: 1, 
+    borderBottomColor: '#E2E8F0', 
+    backgroundColor: '#FFF' 
+  },
   backButton: { padding: 8 },
   backText: { fontSize: 24, fontWeight: 'bold' },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: '#0F172A' },

@@ -8,8 +8,10 @@ import {
   KeyboardAvoidingView,
   Platform,
   ScrollView,
+  Keyboard,
 } from 'react-native';
-import { BaseButton, TextInput, Icon } from '../../components';
+import { useNavigation } from '@react-navigation/native';
+import { BaseButton, TextInput, Icon, Toast } from '../../components';
 
 interface LoginScreenProps {
   onLogin?: (email: string, pass: string) => void;
@@ -22,10 +24,22 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   onNavigateToSignUp,
   onForgotPassword,
 }) => {
+  const navigation = useNavigation<any>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
 
   const handleLogin = () => {
+    if (!email || !password) return;
+    
+    // Dismiss keyboard instantly
+    Keyboard.dismiss();
+    
+    // Instant Navigation with Stack Reset
+    navigation.reset({
+      index: 0,
+      routes: [{ name: 'DashboardScreen' }],
+    });
+
     if (onLogin) {
       onLogin(email, password);
     }
@@ -71,7 +85,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
             {/* 3. Actions: Forgot Password & Login Button */}
             <TouchableOpacity 
               style={styles.forgotPasswordContainer}
-              onPress={onForgotPassword}
+              onPress={() => navigation.navigate('ForgotPassword')}
               activeOpacity={0.6}
             >
               <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
@@ -90,7 +104,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
           {/* 4. Navigation: Bottom Link */}
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account?{" "}</Text>
-            <TouchableOpacity onPress={onNavigateToSignUp} activeOpacity={0.6}>
+            <TouchableOpacity onPress={() => navigation.navigate('Signup')} activeOpacity={0.6}>
               <Text style={styles.signUpText}>Create one</Text>
             </TouchableOpacity>
           </View>

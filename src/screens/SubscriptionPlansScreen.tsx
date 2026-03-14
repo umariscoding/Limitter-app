@@ -9,114 +9,70 @@ import {
   StatusBar,
   Alert,
   ActivityIndicator,
+  Keyboard,
+  Platform,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft, Check, X, Smartphone, Plus, Minus, ShieldCheck, Lock } from 'lucide-react-native';
+import { 
+  subscriptionPlans, 
+  addonPricing, 
+  trustSignals, 
+  planDetails 
+} from '../data/appData';
 
-const PLANS = [
-  {
-    id: 'free',
-    title: 'Free',
-    price: 0,
-    priceLabel: '$0 / mo',
-    features: [
-      { text: '1 Device', enabled: true },
-      { text: 'Standard Overrides', enabled: true },
-      { text: 'Basic Blocking', enabled: true },
-      { text: 'Web Filtering', enabled: true },
-      { text: 'Custom Overrides', enabled: false },
-      { text: 'Advanced Tracking', enabled: false },
-    ],
-    badge: null,
-  },
-  {
-    id: 'pro',
-    title: 'Pro',
-    price: 9.99,
-    priceLabel: '$9.99 / mo',
-    features: [
-      { text: 'Up to 5 Devices', enabled: true },
-      { text: '3 Instant Overrides/day', enabled: true },
-      { text: 'Advanced Tracking', enabled: true },
-      { text: 'Custom Overrides', enabled: true },
-      { text: 'Web Filtering', enabled: true },
-      { text: 'AI Insights', enabled: false },
-      { text: 'Geo-Fencing', enabled: false },
-    ],
-    badge: null,
-  },
-  {
-    id: 'elite',
-    title: 'Elite',
-    price: 19.99,
-    priceLabel: '$19.99 / mo',
-    features: [
-      { text: 'Unlimited Devices', enabled: true },
-      { text: 'Unlimited Overrides', enabled: true },
-      { text: 'AI Insights', enabled: true },
-      { text: 'Geo-Fencing', enabled: true },
-      { text: 'Custom Overrides', enabled: true },
-      { text: '24/7 Priority Support', enabled: true },
-    ],
-    badge: 'Most Popular',
-  },
-];
-
-const DEVICE_PRICE = 2.99;
+// Memoized feature item for max performance
+const FeatureItem = React.memo(({ feature }: { feature: { text: string; enabled: boolean } }) => (
+  <View style={styles.featureRow}>
+    {feature.enabled ? (
+      <Check size={18} color="#10B981" strokeWidth={3} />
+    ) : (
+      <X size={18} color="#94A3B8" strokeWidth={3} />
+    )}
+    <Text
+      style={[
+        styles.featureText,
+        !feature.enabled && styles.disabledFeatureText,
+      ]}
+    >
+      {feature.text}
+    </Text>
+  </View>
+));
 
 export default function SubscriptionPlansScreen() {
   const navigation = useNavigation<any>();
-  const [selectedPlanId, setSelectedPlanId] = useState('pro');
+  const [selectedPlanId, setSelectedPlanId] = useState('2'); // Default to Pro ID
   const [extraDevices, setExtraDevices] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
 
-  const selectedPlan = PLANS.find(p => p.id === selectedPlanId) || PLANS[1];
-  const extraDevicesCost = extraDevices * DEVICE_PRICE;
+  const selectedPlan = subscriptionPlans.find(p => p.id === selectedPlanId) || subscriptionPlans[1];
+  const extraDevicesCost = extraDevices * addonPricing.extraDevicePricePerUnit;
   const totalMonthly = selectedPlan.price + extraDevicesCost;
 
+  const currentIndex = subscriptionPlans.findIndex(
+    p => p.name === planDetails.currentPlan
+  );
+  const nextPlan = subscriptionPlans[currentIndex + 1];
+  const upgradeLabel = nextPlan 
+    ? "Upgrade to " + nextPlan.name 
+    : "You're on the Top Plan ✓";
+
   const handleConfirmPay = () => {
+    Keyboard.dismiss();
     setIsProcessing(true);
-    
-    // Step 1: Mock 1.5s loading
     setTimeout(() => {
       setIsProcessing(false);
-      
-      // Step 2: Show success alert
       Alert.alert(
         "Plan Activated!",
-        `You are now on the ${selectedPlan.title} plan.`,
-        [
-          { 
-            text: "Go to Dashboard", 
-            onPress: () => {
-              // Step 3: Navigate back with params
-              navigation.navigate('ControlPlansScreen', { 
-                activePlan: selectedPlan.title === 'Elite' ? 'Business' : selectedPlan.title 
-              });
-            }
-          }
-        ]
+        `You are now on the ${selectedPlan.name} plan.`,
+        [{ 
+          text: "Go to Dashboard", 
+          onPress: () => navigation.navigate('ControlPlansScreen', { activePlan: selectedPlan.name })
+        }]
       );
-    }, 1500);
+    }, 1500); 
   };
-
-  const renderFeature = (feature: { text: string; enabled: boolean }) => (
-    <View key={feature.text} style={styles.featureRow}>
-      {feature.enabled ? (
-        <Check size={18} color="#10B981" strokeWidth={3} />
-      ) : (
-        <X size={18} color="#94A3B8" strokeWidth={3} />
-      )}
-      <Text
-        style={[
-          styles.featureText,
-          !feature.enabled && styles.disabledFeatureText,
-        ]}
-      >
-        {feature.text}
-      </Text>
-    </View>
-  );
 
   return (
     <SafeAreaView style={styles.container}>
@@ -126,7 +82,7 @@ export default function SubscriptionPlansScreen() {
       <View style={styles.header}>
         <TouchableOpacity 
           style={styles.backButton} 
-          onPress={() => navigation.navigate('ControlPlansScreen')}
+          onPress={() => navigation.goBack()}
         >
           <ChevronLeft size={28} color="#0F172A" />
         </TouchableOpacity>
@@ -143,7 +99,7 @@ export default function SubscriptionPlansScreen() {
         showsVerticalScrollIndicator={false}
       >
         {/* PLAN CARDS */}
-        {PLANS.map((plan) => {
+        {subscriptionPlans.map((plan) => {
           const isSelected = selectedPlanId === plan.id;
           return (
             <TouchableOpacity
@@ -153,7 +109,7 @@ export default function SubscriptionPlansScreen() {
               style={[
                 styles.planCard,
                 isSelected ? styles.selectedCard : styles.unselectedCard,
-                plan.id === 'elite' && { overflow: 'visible' } // Ensure badge isn't clipped
+                plan.id === '3' && { overflow: 'visible' }
               ]}
             >
               {plan.badge && (
@@ -162,13 +118,15 @@ export default function SubscriptionPlansScreen() {
                 </View>
               )}
               
-              <Text style={styles.planTitle}>{plan.title}</Text>
+              <Text style={styles.planTitle}>{plan.name}</Text>
               <Text style={styles.planPrice}>{plan.priceLabel}</Text>
               
               <View style={styles.divider} />
               
               <View style={styles.featuresList}>
-                {plan.features.map(renderFeature)}
+                {plan.features.map((f) => (
+                  <FeatureItem key={f.text} feature={f} />
+                ))}
               </View>
             </TouchableOpacity>
           );
@@ -185,8 +143,8 @@ export default function SubscriptionPlansScreen() {
               <Smartphone size={24} color="#4F46E5" />
             </View>
             <View>
-              <Text style={styles.addOnLabel}>Extra Child Devices</Text>
-              <Text style={styles.addOnSubtext}>${DEVICE_PRICE} / device / mo</Text>
+              <Text style={styles.addOnLabel}>{addonPricing.extraDeviceLabel}</Text>
+              <Text style={styles.addOnSubtext}>${addonPricing.extraDevicePricePerUnit} / device / mo</Text>
             </View>
           </View>
 
@@ -204,35 +162,35 @@ export default function SubscriptionPlansScreen() {
             </View>
 
             <TouchableOpacity 
-              style={[styles.counterBtn, (extraDevices === 10 || isProcessing) && styles.counterBtnDisabled]}
-              onPress={() => setExtraDevices(Math.min(10, extraDevices + 1))}
-              disabled={extraDevices === 10 || isProcessing}
+              style={[styles.counterBtn, (extraDevices === addonPricing.maxExtraDevices || isProcessing) && styles.counterBtnDisabled]}
+              onPress={() => setExtraDevices(Math.min(addonPricing.maxExtraDevices, extraDevices + 1))}
+              disabled={extraDevices === addonPricing.maxExtraDevices || isProcessing}
             >
-              <Plus size={20} color={extraDevices === 10 ? "#94A3B8" : "#4F46E5"} />
+              <Plus size={20} color={extraDevices === addonPricing.maxExtraDevices ? "#94A3B8" : "#4F46E5"} />
             </TouchableOpacity>
           </View>
         </View>
 
         {/* TRUST SIGNAL BANNERS */}
         <View style={styles.trustSection}>
-          <View style={styles.trustBannerGreen}>
-            <ShieldCheck size={20} color="#15803D" />
-            <View style={styles.trustContent}>
-              <Text style={styles.trustTitleGreen}>30-Day Money Back Guarantee</Text>
-              <Text style={styles.trustSubtext}>No questions asked. Cancel anytime.</Text>
+          {trustSignals.map((signal) => (
+            <View 
+              key={signal.id} 
+              style={[styles.trustBannerShared, { backgroundColor: signal.bgColor, borderColor: signal.bgColor }]}
+            >
+              {signal.icon === 'shield-check' ? (
+                <ShieldCheck size={20} color={signal.iconColor} />
+              ) : (
+                <Lock size={20} color={signal.iconColor} />
+              )}
+              <View style={styles.trustContent}>
+                <Text style={[styles.trustTitleShared, { color: signal.iconColor }]}>{signal.title}</Text>
+                <Text style={styles.trustSubtitle}>{signal.subtitle}</Text>
+              </View>
             </View>
-          </View>
-
-          <View style={styles.trustBannerBlue}>
-            <Lock size={20} color="#1D4ED8" />
-            <View style={styles.trustContent}>
-              <Text style={styles.trustTitleBlue}>Secure Stripe Payment</Text>
-              <Text style={styles.trustSubtext}>Your payment info is encrypted and never stored.</Text>
-            </View>
-          </View>
+          ))}
         </View>
         
-        {/* Spacer for scroll content */}
         <View style={{ height: 40 }} />
       </ScrollView>
 
@@ -242,9 +200,8 @@ export default function SubscriptionPlansScreen() {
           <View>
             <Text style={styles.totalLabel}>Total Monthly</Text>
             <Text style={styles.breakdownText}>
-              {selectedPlan.title} Plan ${selectedPlan.price.toFixed(2)}
+              {selectedPlan.name} Plan ${selectedPlan.price.toFixed(2)}
               {extraDevices > 0 ? ` + ${extraDevices} Extra Devices $${extraDevicesCost.toFixed(2)}` : ''}
-              {selectedPlan.id === 'free' && extraDevices === 0 ? ' (Base Plan)' : ''}
             </Text>
           </View>
           <Text style={styles.totalAmount}>${totalMonthly.toFixed(2)} / mo</Text>
@@ -261,35 +218,10 @@ export default function SubscriptionPlansScreen() {
           ) : (
             <>
               <ShieldCheck size={20} color="#FFF" style={{ marginRight: 8 }} />
-              <Text style={styles.payButtonText}>Confirm & Pay</Text>
+              <Text style={styles.payButtonText}>{upgradeLabel}</Text>
               <Text style={styles.arrowIcon}>→</Text>
             </>
           )}
-        </TouchableOpacity>
-      </View>
-
-      {/* STICKY BOTTOM NAV BAR */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity 
-          style={styles.navItem} 
-          onPress={() => navigation.navigate('DashboardScreen')}
-        >
-          <Text style={styles.navEmoji}>🏠</Text>
-          <Text style={styles.navLabel}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.navItem} 
-          onPress={() => navigation.navigate('UsageScreen')}
-        >
-          <Text style={styles.navEmoji}>📊</Text>
-          <Text style={styles.navLabel}>Usage</Text>
-        </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.navItem}
-          onPress={() => navigation.navigate('SettingsScreen')}
-        >
-          <Text style={[styles.navEmoji, styles.activeNavEmoji]}>⚙️</Text>
-          <Text style={[styles.navLabel, styles.activeNavLabel]}>Settings</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -305,7 +237,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
+    paddingBottom: 15,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
@@ -491,40 +424,22 @@ const styles = StyleSheet.create({
     marginTop: 24,
     gap: 12,
   },
-  trustBannerGreen: {
+  trustBannerShared: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#F0FDF4',
     padding: 16,
     borderRadius: 16,
     borderWidth: 1,
-    borderColor: '#DCF7E3',
-    gap: 12,
-  },
-  trustBannerBlue: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#EFF6FF',
-    padding: 16,
-    borderRadius: 16,
-    borderWidth: 1,
-    borderColor: '#DBEAFE',
     gap: 12,
   },
   trustContent: {
     flex: 1,
   },
-  trustTitleGreen: {
+  trustTitleShared: {
     fontSize: 15,
     fontWeight: '700',
-    color: '#166534',
   },
-  trustTitleBlue: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#1E40AF',
-  },
-  trustSubtext: {
+  trustSubtitle: {
     fontSize: 13,
     color: '#64748B',
     marginTop: 2,
@@ -586,35 +501,5 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginLeft: 4,
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    justifyContent: 'space-between',
-    paddingBottom: 24,
-  },
-  navItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  navEmoji: {
-    fontSize: 22,
-    marginBottom: 4,
-    opacity: 0.4,
-  },
-  activeNavEmoji: {
-    opacity: 1,
-  },
-  navLabel: {
-    fontSize: 12,
-    fontWeight: '700',
-    color: '#94A3B8',
-  },
-  activeNavLabel: {
-    color: '#4F46E5',
   },
 });

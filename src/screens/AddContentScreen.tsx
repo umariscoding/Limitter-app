@@ -1,31 +1,27 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Alert } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Alert, Platform, StatusBar } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { managedContent } from '../data/appData';
 
 type ContentItem = {
   id: string;
   name: string;
   category: string;
   icon: string;
-  active: boolean;
+  status: string;
 };
 
 export default function AddContentScreen() {
   const navigation = useNavigation<any>();
 
-  const [contentList, setContentList] = useState<ContentItem[]>([
-    { id: '1', name: 'Instagram', category: 'Social Media', icon: '📱', active: true },
-    { id: '2', name: 'YouTube', category: 'Entertainment', icon: '🎬', active: true },
-    { id: '3', name: 'Call of Duty', category: 'Gaming', icon: '🎮', active: false },
-    { id: '4', name: 'Twitter/X', category: 'Social Media', icon: '📱', active: true },
-    { id: '5', name: 'Netflix', category: 'Entertainment', icon: '🎬', active: false },
-    { id: '6', name: 'Notion', category: 'Productivity', icon: '📈', active: true },
-  ]);
+  const [contentList, setContentList] = useState<ContentItem[]>(managedContent);
 
   const toggleStatus = (id: string) => {
     setContentList((prev) => 
       prev.map((item) => 
-        item.id === id ? { ...item, active: !item.active } : item
+        item.id === id 
+          ? { ...item, status: item.status === 'Active' ? 'Inactive' : 'Active' } 
+          : item
       )
     );
   };
@@ -57,11 +53,11 @@ export default function AddContentScreen() {
               <Text style={styles.category}>{item.category}</Text>
             </View>
             <TouchableOpacity 
-              style={[styles.toggleBtn, item.active ? styles.toggleActive : styles.toggleInactive]}
+              style={[styles.toggleBtn, item.status === 'Active' ? styles.toggleActive : styles.toggleInactive]}
               onPress={() => toggleStatus(item.id)}
             >
-              <Text style={[styles.toggleText, item.active ? styles.toggleTextActive : styles.toggleTextInactive]}>
-                {item.active ? 'Active' : 'Inactive'}
+              <Text style={[styles.toggleText, item.status === 'Active' ? styles.toggleTextActive : styles.toggleTextInactive]}>
+                {item.status}
               </Text>
             </TouchableOpacity>
           </View>
@@ -100,7 +96,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
+    paddingBottom: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
     backgroundColor: '#FFFFFF',

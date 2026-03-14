@@ -1,17 +1,11 @@
 import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Platform, StatusBar } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { overrideLogs } from '../data/appData';
 
 export default function OverrideLogsScreen() {
   const navigation = useNavigation<any>();
 
-  const logs = [
-    { id: '1', app: 'Instagram', date: 'Jun 14, 2025 — 11:20 PM', device: 'iPhone 14 Pro' },
-    { id: '2', app: 'YouTube', date: 'Jun 13, 2025 — 3:05 PM', device: 'iPad Mini' },
-    { id: '3', app: 'Call of Duty', date: 'Jun 12, 2025 — 9:42 PM', device: 'MacBook Air' },
-    { id: '4', app: 'TikTok', date: 'Jun 11, 2025 — 7:15 PM', device: 'iPhone 14 Pro' },
-    { id: '5', app: 'Twitch', date: 'Jun 10, 2025 — 1:30 AM', device: 'MacBook Air' },
-  ];
 
   return (
     <SafeAreaView style={styles.container}>
@@ -26,18 +20,18 @@ export default function OverrideLogsScreen() {
 
       {/* Content */}
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {logs.length === 0 ? (
+        {overrideLogs.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>No overrides recorded yet.</Text>
           </View>
         ) : (
-          logs.map((log) => (
+          overrideLogs.map((log) => (
             <View key={log.id} style={styles.logCard}>
               <View style={styles.logHeader}>
                 <Text style={styles.appName}>{log.app}</Text>
                 <Text style={styles.deviceBadge}>{log.device}</Text>
               </View>
-              <Text style={styles.logDate}>{log.date}</Text>
+              <Text style={styles.logDate}>{log.dateTime}</Text>
             </View>
           ))
         )}
@@ -71,7 +65,8 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 20,
-    paddingVertical: 15,
+    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
+    paddingBottom: 15,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
     backgroundColor: '#FFFFFF',

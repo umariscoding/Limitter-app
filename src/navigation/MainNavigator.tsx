@@ -9,14 +9,22 @@ import {
   ControlPlansScreen,
   OverrideLogsScreen,
   LoginScreen,
-  SubscriptionPlansScreen
+  SignupScreen,
+  ForgotPasswordScreen,
+  SubscriptionPlansScreen,
 } from '../screens';
 
 const Stack = createNativeStackNavigator();
 
 const MainNavigator = () => {
   return (
-    <Stack.Navigator screenOptions={{ headerShown: false }}>
+    <Stack.Navigator 
+      initialRouteName="Login" 
+      screenOptions={{ headerShown: false, animation: 'fade_from_bottom' }}
+    >
+      <Stack.Screen name="Login" component={LoginScreen} />
+      <Stack.Screen name="Signup" component={SignupScreen} />
+      <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
       <Stack.Screen name="DashboardScreen" component={DashboardScreen} />
       <Stack.Screen name="AddContentScreen" component={AddContentScreen} />
       <Stack.Screen name="ActivityScreen" component={ActivityScreen} />
@@ -24,8 +32,11 @@ const MainNavigator = () => {
       <Stack.Screen name="SettingsScreen" component={SettingsScreen} />
       <Stack.Screen name="ControlPlansScreen" component={ControlPlansScreen} />
       <Stack.Screen name="OverrideLogsScreen" component={OverrideLogsScreen} />
-      <Stack.Screen name="Login" component={LoginScreen} />
-      <Stack.Screen name="SubscriptionPlansScreen" component={SubscriptionPlansScreen} />
+      <Stack.Screen 
+        name="SubscriptionPlansScreen" 
+        component={SubscriptionPlansScreen} 
+        options={{ animation: 'none' }}
+      />
     </Stack.Navigator>
   );
 };

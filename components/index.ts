@@ -4,3 +4,4 @@ export * from './Modal';
 export * from './Radio';
 export * from './Alert';
 export * from './Icon';
+export * from './Toast';
