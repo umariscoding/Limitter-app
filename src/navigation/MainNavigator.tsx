@@ -7,7 +7,8 @@ import {
   UsageScreen,
   SettingsScreen,
   ControlPlansScreen,
-  OverrideLogsScreen
+  OverrideLogsScreen,
+  LoginScreen
 } from '../screens';
 
 const Stack = createNativeStackNavigator();
@@ -22,6 +23,7 @@ const MainNavigator = () => {
       <Stack.Screen name="SettingsScreen" component={SettingsScreen} />
       <Stack.Screen name="ControlPlansScreen" component={ControlPlansScreen} />
       <Stack.Screen name="OverrideLogsScreen" component={OverrideLogsScreen} />
+      <Stack.Screen name="Login" component={LoginScreen} />
     </Stack.Navigator>
   );
 };
