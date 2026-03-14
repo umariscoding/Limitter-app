@@ -8,3 +8,4 @@ export { default as UsageScreen } from './UsageScreen';
 export { default as SettingsScreen } from './SettingsScreen';
 export { default as ControlPlansScreen } from './ControlPlansScreen';
 export { default as OverrideLogsScreen } from './OverrideLogsScreen';
+export { default as SubscriptionPlansScreen } from './SubscriptionPlansScreen';

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -9,7 +9,7 @@ import {
   Alert, 
   Switch 
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 
 // Standard React Native app, likely no NativeWind setup shown in package.json
 // Using StyleSheet for maximum compatibility
@@ -27,9 +27,17 @@ interface Device {
 
 export default function ControlPlansScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
 
   // Mock Data
-  const [currentPlan] = useState<PlanTier>('Pro');
+  const [currentPlan, setCurrentPlan] = useState<PlanTier>('Pro');
+
+  // Handle Plan Sync from SubscriptionPlansScreen
+  useEffect(() => {
+    if (route.params?.activePlan) {
+      setCurrentPlan(route.params.activePlan);
+    }
+  }, [route.params?.activePlan]);
   const devicesUsed = 4;
   const devicesTotal = 5;
 
@@ -114,7 +122,7 @@ export default function ControlPlansScreen() {
         {/* 4. Action Buttons */}
         <TouchableOpacity 
           style={[styles.primaryBtn, isTopPlan && styles.disabledBtn]}
-          onPress={() => Alert.alert("Upgrading...")}
+          onPress={() => navigation.navigate('SubscriptionPlansScreen')}
           disabled={isTopPlan}
         >
           <Text style={styles.primaryBtnText}>
