@@ -1,3 +1,10 @@
 export { default as LoginScreen } from './LoginScreen';
 export { default as SignupScreen } from './SignupScreen';
 export { default as ForgotPasswordScreen } from './ForgotPasswordScreen';
+export { default as DashboardScreen } from './DashboardScreen';
+export { default as ActivityScreen } from './ActivityScreen';
+export { default as AddContentScreen } from './AddContentScreen';
+export { default as UsageScreen } from './UsageScreen';
+export { default as SettingsScreen } from './SettingsScreen';
+export { default as ControlPlansScreen } from './ControlPlansScreen';
+export { default as OverrideLogsScreen } from './OverrideLogsScreen';
