@@ -1,7 +1,13 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Platform, StatusBar } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { overrideLogs } from '../data/appData';
+import { overrideLogs, overrideLogLabels, dashboardLabels } from '../data/appData';
+import { 
+  Home, 
+  BarChart2, 
+  Settings as SettingsIcon,
+  ArrowLeft
+} from 'lucide-react-native';
 
 export default function OverrideLogsScreen() {
   const navigation = useNavigation<any>();
@@ -12,9 +18,9 @@ export default function OverrideLogsScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>←</Text>
+          <ArrowLeft size={24} color="#0F172A" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Override Logs</Text>
+        <Text style={styles.headerTitle}>{overrideLogLabels.headerTitle}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -22,7 +28,7 @@ export default function OverrideLogsScreen() {
       <ScrollView contentContainerStyle={styles.scrollContent}>
         {overrideLogs.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>No overrides recorded yet.</Text>
+            <Text style={styles.emptyStateText}>{overrideLogLabels.emptyState}</Text>
           </View>
         ) : (
           overrideLogs.map((log) => (
@@ -40,16 +46,16 @@ export default function OverrideLogsScreen() {
       {/* Bottom Nav */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('DashboardScreen')}>
-          <Text style={styles.navIcon}>🏠</Text>
-          <Text style={styles.navLabel}>Home</Text>
+          <Home size={22} color="#94A3B8" />
+          <Text style={styles.navLabel}>{dashboardLabels.navHome}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('UsageScreen')}>
-          <Text style={styles.navIcon}>📊</Text>
-          <Text style={styles.navLabel}>Usage</Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('AnalyticsScreen')}>
+          <BarChart2 size={22} color="#94A3B8" />
+          <Text style={styles.navLabel}>{dashboardLabels.navUsage}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('SettingsScreen')}>
-          <Text style={styles.navIcon}>⚙️</Text>
-          <Text style={styles.navLabel}>Settings</Text>
+          <SettingsIcon size={22} color="#94A3B8" />
+          <Text style={styles.navLabel}>{dashboardLabels.navSettings}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

@@ -12,6 +12,8 @@ import {
   SignupScreen,
   ForgotPasswordScreen,
   SubscriptionPlansScreen,
+  AnalyticsScreen,
+  ConfirmOverrideScreen,
 } from '../screens';
 
 const Stack = createNativeStackNavigator();
@@ -29,6 +31,7 @@ const MainNavigator = () => {
       <Stack.Screen name="AddContentScreen" component={AddContentScreen} />
       <Stack.Screen name="ActivityScreen" component={ActivityScreen} />
       <Stack.Screen name="UsageScreen" component={UsageScreen} />
+      <Stack.Screen name="AnalyticsScreen" component={AnalyticsScreen} options={{ animation: 'none' }} />
       <Stack.Screen name="SettingsScreen" component={SettingsScreen} />
       <Stack.Screen name="ControlPlansScreen" component={ControlPlansScreen} />
       <Stack.Screen name="OverrideLogsScreen" component={OverrideLogsScreen} />
@@ -37,6 +40,7 @@ const MainNavigator = () => {
         component={SubscriptionPlansScreen} 
         options={{ animation: 'none' }}
       />
+      <Stack.Screen name="ConfirmOverrideScreen" component={ConfirmOverrideScreen} />
     </Stack.Navigator>
   );
 };

@@ -1,7 +1,17 @@
 import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Alert, Platform, StatusBar } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { managedContent } from '../data/appData';
+import { managedContent, addContentLabels, dashboardLabels } from '../data/appData';
+import { 
+  Home, 
+  BarChart2, 
+  Settings as SettingsIcon, 
+  Smartphone, 
+  Gamepad2, 
+  Film, 
+  TrendingUp,
+  ArrowLeft
+} from 'lucide-react-native';
 
 type ContentItem = {
   id: string;
@@ -16,6 +26,16 @@ export default function AddContentScreen() {
 
   const [contentList, setContentList] = useState<ContentItem[]>(managedContent);
 
+  const getIcon = (iconName: string, size = 22, color = "#0F172A") => {
+    switch(iconName) {
+      case 'smartphone': return <Smartphone size={size} color={color} />;
+      case 'gamepad-2': return <Gamepad2 size={size} color={color} />;
+      case 'film': return <Film size={size} color={color} />;
+      case 'trending-up': return <TrendingUp size={size} color={color} />;
+      default: return null;
+    }
+  };
+
   const toggleStatus = (id: string) => {
     setContentList((prev) => 
       prev.map((item) => 
@@ -27,7 +47,7 @@ export default function AddContentScreen() {
   };
 
   const handleAddNew = () => {
-    Alert.alert('Coming Soon', 'This feature is under development.');
+    Alert.alert(addContentLabels.comingSoonTitle, addContentLabels.comingSoonMsg);
   };
 
   return (
@@ -35,9 +55,9 @@ export default function AddContentScreen() {
       {/* Header */}
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backButtonText}>←</Text>
+          <ArrowLeft size={24} color="#0F172A" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Managed Content</Text>
+        <Text style={styles.headerTitle}>{addContentLabels.headerTitle}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -46,7 +66,7 @@ export default function AddContentScreen() {
         {contentList.map((item) => (
           <View key={item.id} style={styles.contentCard}>
             <View style={styles.iconContainer}>
-              <Text style={styles.icon}>{item.icon}</Text>
+              {getIcon(item.icon, 22, "#4F46E5")}
             </View>
             <View style={styles.infoContainer}>
               <Text style={styles.name}>{item.name}</Text>
@@ -64,23 +84,23 @@ export default function AddContentScreen() {
         ))}
 
         <TouchableOpacity style={styles.addButton} onPress={handleAddNew}>
-          <Text style={styles.addButtonText}>+ Add New App / Website</Text>
+          <Text style={styles.addButtonText}>{addContentLabels.addNew}</Text>
         </TouchableOpacity>
       </ScrollView>
 
       {/* Bottom Nav */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('DashboardScreen')}>
-          <Text style={styles.navIcon}>🏠</Text>
-          <Text style={styles.navLabel}>Home</Text>
+          <Home size={22} color="#94A3B8" />
+          <Text style={styles.navLabel}>{dashboardLabels.navHome}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('UsageScreen')}>
-          <Text style={styles.navIcon}>📊</Text>
-          <Text style={styles.navLabel}>Usage</Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('AnalyticsScreen')}>
+          <BarChart2 size={22} color="#94A3B8" />
+          <Text style={styles.navLabel}>{dashboardLabels.navUsage}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('SettingsScreen')}>
-          <Text style={styles.navIcon}>⚙️</Text>
-          <Text style={styles.navLabel}>Settings</Text>
+          <SettingsIcon size={22} color="#94A3B8" />
+          <Text style={styles.navLabel}>{dashboardLabels.navSettings}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>

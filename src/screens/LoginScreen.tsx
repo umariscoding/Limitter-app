@@ -11,7 +11,8 @@ import {
   Keyboard,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { BaseButton, TextInput, Icon, Toast } from '../../components';
+import { BaseButton, TextInput, Toast } from '../../components';
+import { Shield } from 'lucide-react-native';
 
 interface LoginScreenProps {
   onLogin?: (email: string, pass: string) => void;
@@ -58,7 +59,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
           {/* 1. Screen Layout: App Icon & Title */}
           <View style={styles.header}>
             <View style={styles.iconContainer}>
-              <Icon size={48}>🛡️</Icon>
+              <Shield size={48} color="#4F46E5" />
             </View>
             <Text style={styles.title}>Login</Text>
           </View>

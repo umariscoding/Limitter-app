@@ -9,3 +9,5 @@ export { default as SettingsScreen } from './SettingsScreen';
 export { default as ControlPlansScreen } from './ControlPlansScreen';
 export { default as OverrideLogsScreen } from './OverrideLogsScreen';
 export { default as SubscriptionPlansScreen } from './SubscriptionPlansScreen';
+export { default as AnalyticsScreen } from './AnalyticsScreen';
+export { default as ConfirmOverrideScreen } from './ConfirmOverrideScreen';

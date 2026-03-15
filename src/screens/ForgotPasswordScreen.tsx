@@ -9,7 +9,8 @@ import {
   Platform,
   ScrollView,
 } from 'react-native';
-import { BaseButton, TextInput, Icon, Toast } from '../../components';
+import { BaseButton, TextInput, Toast } from '../../components';
+import { Shield } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 
 interface ForgotPasswordScreenProps {
@@ -63,7 +64,7 @@ const ForgotPasswordScreen: React.FC<ForgotPasswordScreenProps> = ({
           {/* Header */}
           <View style={styles.header}>
             <View style={styles.iconContainer}>
-              <Icon size={48}>🛡️</Icon>
+              <Shield size={48} color="#4F46E5" />
             </View>
             <Text style={styles.title}>Reset Password</Text>
             <Text style={styles.subtitle}>

@@ -18,7 +18,8 @@ import {
   subscriptionPlans, 
   addonPricing, 
   trustSignals, 
-  planDetails 
+  planDetails,
+  subscriptionLabels
 } from '../data/appData';
 
 // Memoized feature item for max performance
@@ -55,8 +56,8 @@ export default function SubscriptionPlansScreen() {
   );
   const nextPlan = subscriptionPlans[currentIndex + 1];
   const upgradeLabel = nextPlan 
-    ? "Upgrade to " + nextPlan.name 
-    : "You're on the Top Plan ✓";
+    ? subscriptionLabels.upgradePrefix + nextPlan.name 
+    : subscriptionLabels.topPlanBadge;
 
   const handleConfirmPay = () => {
     Keyboard.dismiss();
@@ -64,10 +65,10 @@ export default function SubscriptionPlansScreen() {
     setTimeout(() => {
       setIsProcessing(false);
       Alert.alert(
-        "Plan Activated!",
-        `You are now on the ${selectedPlan.name} plan.`,
+        subscriptionLabels.alertActivatedTitle,
+        `${subscriptionLabels.alertActivatedMsg}${selectedPlan.name} plan.`,
         [{ 
-          text: "Go to Dashboard", 
+          text: subscriptionLabels.btnDashboard, 
           onPress: () => navigation.navigate('ControlPlansScreen', { activePlan: selectedPlan.name })
         }]
       );
@@ -87,8 +88,8 @@ export default function SubscriptionPlansScreen() {
           <ChevronLeft size={28} color="#0F172A" />
         </TouchableOpacity>
         <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>Choose Your Plan</Text>
-          <Text style={styles.headerSubtitle}>Scale your digital wellness control</Text>
+          <Text style={styles.headerTitle}>{subscriptionLabels.headerTitle}</Text>
+          <Text style={styles.headerSubtitle}>{subscriptionLabels.headerSubtitle}</Text>
         </View>
         <View style={{ width: 36 }} />
       </View>
@@ -134,7 +135,7 @@ export default function SubscriptionPlansScreen() {
 
         {/* ADD-ONS SECTION */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Add-Ons</Text>
+          <Text style={styles.sectionTitle}>{subscriptionLabels.addOnsTitle}</Text>
         </View>
 
         <View style={styles.addOnCard}>
@@ -144,7 +145,7 @@ export default function SubscriptionPlansScreen() {
             </View>
             <View>
               <Text style={styles.addOnLabel}>{addonPricing.extraDeviceLabel}</Text>
-              <Text style={styles.addOnSubtext}>${addonPricing.extraDevicePricePerUnit} / device / mo</Text>
+              <Text style={styles.addOnSubtext}>${addonPricing.extraDevicePricePerUnit}{subscriptionLabels.deviceMo}</Text>
             </View>
           </View>
 
@@ -198,13 +199,13 @@ export default function SubscriptionPlansScreen() {
       <View style={styles.pricingFooter}>
         <View style={styles.pricingRow}>
           <View>
-            <Text style={styles.totalLabel}>Total Monthly</Text>
+            <Text style={styles.totalLabel}>{subscriptionLabels.totalMonthlyLabel}</Text>
             <Text style={styles.breakdownText}>
               {selectedPlan.name} Plan ${selectedPlan.price.toFixed(2)}
-              {extraDevices > 0 ? ` + ${extraDevices} Extra Devices $${extraDevicesCost.toFixed(2)}` : ''}
+              {extraDevices > 0 ? `${subscriptionLabels.extraDevicesSuffix}${extraDevices} $${extraDevicesCost.toFixed(2)}` : ''}
             </Text>
           </View>
-          <Text style={styles.totalAmount}>${totalMonthly.toFixed(2)} / mo</Text>
+          <Text style={styles.totalAmount}>${totalMonthly.toFixed(2)}{subscriptionLabels.mo}</Text>
         </View>
 
         <TouchableOpacity 

@@ -1,5 +1,12 @@
 import React, { ReactNode } from 'react';
-import { TouchableOpacity, Text, ActivityIndicator, StyleSheet, ViewStyle, TextStyle } from 'react-native';
+import { 
+  TouchableOpacity, 
+  Text, 
+  ActivityIndicator, 
+  StyleSheet, 
+  ViewStyle, 
+  TextStyle 
+} from 'react-native';
 
 export interface ButtonProps {
   children?: ReactNode;
@@ -26,25 +33,31 @@ export const BaseButton: React.FC<ButtonProps> = ({
   onPress,
   style,
 }) => {
-  const containerStyle: ViewStyle[] = [styles.base];
-  const textStyle: TextStyle[] = [styles.textBase];
+  const containerStyle: any[] = [styles.base];
+  const textStyle: any[] = [styles.textBase];
 
   // Variants
-  if (variant === 'primary') {
-    containerStyle.push(styles.primaryBg);
-    textStyle.push(styles.primaryText);
-  } else if (variant === 'secondary') {
-    containerStyle.push(styles.secondaryBg);
-    textStyle.push(styles.secondaryText);
-  } else if (variant === 'outline') {
-    containerStyle.push(styles.outlineBg);
-    textStyle.push(styles.outlineText);
-  } else if (variant === 'danger') {
-    containerStyle.push(styles.dangerBg);
-    textStyle.push(styles.dangerText);
-  } else if (variant === 'ghost') {
-    containerStyle.push(styles.ghostBg);
-    textStyle.push(styles.ghostText);
+  switch (variant) {
+    case 'primary':
+      containerStyle.push(styles.primaryBg);
+      textStyle.push(styles.primaryText);
+      break;
+    case 'secondary':
+      containerStyle.push(styles.secondaryBg);
+      textStyle.push(styles.secondaryText);
+      break;
+    case 'outline':
+      containerStyle.push(styles.outlineBg);
+      textStyle.push(styles.outlineText);
+      break;
+    case 'danger':
+      containerStyle.push(styles.dangerBg);
+      textStyle.push(styles.dangerText);
+      break;
+    case 'ghost':
+      containerStyle.push(styles.ghostBg);
+      textStyle.push(styles.ghostText);
+      break;
   }
 
   // Sizes
@@ -56,13 +69,38 @@ export const BaseButton: React.FC<ButtonProps> = ({
   if (fullWidth) containerStyle.push(styles.fullWidth);
   if (disabled || isLoading) containerStyle.push(styles.disabled);
 
+  // Get indicator color from text style if possible
+  const getIndicatorColor = () => {
+    if (variant === 'outline') return '#10B981';
+    if (variant === 'ghost') return '#64748B';
+    if (variant === 'secondary') return '#0F172A';
+    return '#FFFFFF';
+  };
+
   return (
     <TouchableOpacity
       style={[containerStyle, style]}
       disabled={disabled || isLoading}
       onPress={onPress}
       activeOpacity={0.7}
-    >{isLoading ? <ActivityIndicator color={textStyle[1]?.color || '#fff'} style={{ marginRight: 8 }} /> : null}{(!isLoading && leftIcon) ? leftIcon : null}{typeof children === 'string' || Array.isArray(children) ? (<Text style={textStyle}>{children}</Text>) : children}{(!isLoading && rightIcon) ? rightIcon : null}</TouchableOpacity>
+    >
+      {isLoading ? (
+        <ActivityIndicator 
+          color={getIndicatorColor()} 
+          style={{ marginRight: 8 }} 
+        />
+      ) : null}
+      
+      {!isLoading && leftIcon ? leftIcon : null}
+      
+      {typeof children === 'string' ? (
+        <Text style={textStyle}>{children}</Text>
+      ) : (
+        children
+      )}
+      
+      {!isLoading && rightIcon ? rightIcon : null}
+    </TouchableOpacity>
   );
 };
 
@@ -71,13 +109,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    borderRadius: 999, // Pill shape from Figma
+    borderRadius: 999,
   },
   textBase: {
     fontWeight: '700',
     letterSpacing: -0.5,
   },
-  primaryBg: { backgroundColor: '#10B981' }, // Teal from Figma
+  primaryBg: { backgroundColor: '#10B981' },
   primaryText: { color: '#FFFFFF' },
   secondaryBg: { backgroundColor: '#F3F4F6' },
   secondaryText: { color: '#0F172A' },

@@ -13,6 +13,23 @@ import {
   StatusBar
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
+import { 
+  Home, 
+  BarChart2, 
+  Settings as SettingsIcon, 
+  Smartphone, 
+  Monitor, 
+  Laptop, 
+  Tablet,
+  Clock,
+  Calendar,
+  Shield,
+  Zap,
+  Bell,
+  ChevronRight,
+  Plus,
+  ArrowLeft
+} from 'lucide-react-native';
 
 // Standard React Native app, likely no NativeWind setup shown in package.json
 // Using StyleSheet for maximum compatibility
@@ -21,7 +38,9 @@ import {
   planDetails, 
   devices as appDevices, 
   usageControls, 
-  featureToggles 
+  featureToggles,
+  controlLabels,
+  dashboardLabels
 } from '../data/appData';
 
 type PlanTier = 'Free' | 'Pro' | 'Elite';
@@ -64,38 +83,45 @@ export default function ControlPlansScreen() {
   const slotsRemaining = devicesTotal - devicesUsed;
   const isTopPlan = currentPlan === 'Elite';
 
+  const getDeviceIcon = (iconName: string, color = "#64748B") => {
+    switch(iconName) {
+      case 'smartphone': return <Smartphone size={22} color={color} />;
+      case 'monitor': return <Monitor size={22} color={color} />;
+      case 'laptop': return <Laptop size={22} color={color} />;
+      case 'tablet': return <Tablet size={22} color={color} />;
+      default: return null;
+    }
+  };
+
   const handleSignOut = () => {
-    Alert.alert("Sign Out", "Are you sure you want to sign out?", [
-      { text: "Cancel", style: "cancel" },
+    Alert.alert(controlLabels.signOut, controlLabels.signOutConfirm, [
+      { text: controlLabels.cancel, style: "cancel" },
       { 
-        text: "Sign Out", 
+        text: controlLabels.signOut, 
         style: "destructive", 
         onPress: () => {
-          // Clear any auth logic here
-          navigation.navigate('Login'); // Based on AuthNavigator.tsx screen name
+          navigation.navigate('Login'); 
         } 
       }
     ]);
   };
 
-
   return (
     <SafeAreaView style={styles.container}>
-      {/* 1. Header */}
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <Text style={styles.backText}>←</Text>
+          <ArrowLeft size={24} color="#0F172A" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Control & Plans</Text>
+        <Text style={styles.headerTitle}>{controlLabels.headerTitle}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
+      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
         
-        {/* 2. Plan Card */}
         <View style={styles.planCard}>
           <View style={styles.planCardHeader}>
-            <Text style={styles.planTitle}>{currentPlan} Member</Text>
+            <Text style={styles.planTitle}>{currentPlan}{controlLabels.memberSuffix}</Text>
             <View style={styles.activeBadge}>
               <Text style={styles.activeBadgeText}>{planDetails.status}</Text>
             </View>
@@ -105,19 +131,19 @@ export default function ControlPlansScreen() {
           </Text>
         </View>
 
-        {/* 3. Device Progress */}
         <View style={styles.card}>
           <View style={styles.quotaHeader}>
-            <Text style={styles.quotaLabel}>Device Slots Used</Text>
+            <Text style={styles.quotaLabel}>{controlLabels.deviceSlotsLabel}</Text>
             <Text style={styles.quotaValue}>{devicesUsed} / {devicesTotal}</Text>
           </View>
           <View style={styles.progressBg}>
             <View style={[styles.progressFill, { width: `${progressPercentage}%` }]} />
           </View>
-          <Text style={styles.quotaHint}>{slotsRemaining} slot{slotsRemaining !== 1 ? 's' : ''} remaining</Text>
+          <Text style={styles.quotaHint}>
+            {slotsRemaining} {slotsRemaining === 1 ? controlLabels.slotRemaining : controlLabels.slotsRemaining}
+          </Text>
         </View>
 
-        {/* 4. Action Buttons */}
         <TouchableOpacity 
           style={[styles.primaryBtn, isTopPlan && styles.disabledBtn]}
           onPress={() => {
@@ -127,19 +153,20 @@ export default function ControlPlansScreen() {
           disabled={isTopPlan}
         >
           <Text style={styles.primaryBtnText}>
-            {isTopPlan ? "Top Plan Active ✓" : "Upgrade to Elite"}
+            {isTopPlan ? controlLabels.upgradeBtnActive : controlLabels.upgradeBtn}
           </Text>
         </TouchableOpacity>
 
-        {/* 5. Managed Devices */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Managed Devices</Text>
-          <Text style={styles.sectionSubtitle}>Tap a device to manage it</Text>
+          <Text style={styles.sectionTitle}>{controlLabels.managedDevicesTitle}</Text>
+          <Text style={styles.sectionSubtitle}>{controlLabels.managedDevicesSubtitle}</Text>
         </View>
 
         {managedDevices.map(device => (
           <TouchableOpacity key={device.id} style={styles.deviceCard} onPress={() => Alert.alert(device.name)}>
-            <Text style={styles.deviceIcon}>{device.icon}</Text>
+            <View style={styles.deviceIconWrapper}>
+              {getDeviceIcon(device.icon)}
+            </View>
             <View style={styles.deviceInfo}>
               <Text style={styles.deviceName}>{device.name}</Text>
               <Text style={styles.deviceModel}>{device.model}</Text>
@@ -152,13 +179,13 @@ export default function ControlPlansScreen() {
           </TouchableOpacity>
         ))}
 
-        <TouchableOpacity style={styles.addBtn} onPress={() => Alert.alert("Pairing...")}>
-          <Text style={styles.addBtnText}>+ Add New Device</Text>
+        <TouchableOpacity style={styles.addBtn} onPress={() => Alert.alert(controlLabels.pairingAlert)}>
+          <Plus size={18} color="#64748B" style={{ marginRight: 8 }} />
+          <Text style={styles.addBtnText}>{controlLabels.addNewDevice}</Text>
         </TouchableOpacity>
 
-        {/* 6. Usage Controls */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Usage Controls</Text>
+          <Text style={styles.sectionTitle}>{controlLabels.usageControlsTitle}</Text>
         </View>
 
         {usageControls.map((control) => (
@@ -167,12 +194,14 @@ export default function ControlPlansScreen() {
             style={styles.row} 
             onPress={() => Alert.alert(control.title)}
           >
-            <Text style={styles.rowIcon}>{control.icon === 'clock' ? '⏰' : '📅'}</Text>
+            <View style={styles.rowIconBox}>
+              {control.icon === 'clock' ? <Clock size={20} color="#4F46E5" /> : <Calendar size={20} color="#4F46E5" />}
+            </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowTitle}>{control.title}</Text>
               <Text style={styles.rowSubtitle}>{control.description}</Text>
             </View>
-            <Text style={styles.chevron}>→</Text>
+            <ChevronRight size={20} color="#94A3B8" />
           </TouchableOpacity>
         ))}
 
@@ -180,7 +209,9 @@ export default function ControlPlansScreen() {
 
         {featureToggles.map((toggle) => (
           <View key={toggle.id} style={styles.toggleRow}>
-            <Text style={styles.rowIcon}>{toggle.key === 'safeBrowsing' ? '🛡️' : '⚡'}</Text>
+            <View style={styles.rowIconBox}>
+              {toggle.key === 'safeBrowsing' ? <Shield size={20} color="#4F46E5" /> : <Zap size={20} color="#4F46E5" />}
+            </View>
             <View style={styles.rowContent}>
               <Text style={styles.rowTitle}>{toggle.title}</Text>
               <Text style={styles.rowSubtitle}>{toggle.description}</Text>
@@ -193,38 +224,38 @@ export default function ControlPlansScreen() {
           </View>
         ))}
 
-        {/* 7. Account */}
         <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>Account</Text>
+          <Text style={styles.sectionTitle}>{controlLabels.accountTitle}</Text>
         </View>
 
-        <TouchableOpacity style={styles.row} onPress={() => Alert.alert("Notifications")}>
-          <Text style={styles.rowIcon}>🔔</Text>
-          <View style={styles.rowContent}>
-            <Text style={styles.rowTitle}>Notification Settings</Text>
+        <TouchableOpacity style={styles.row} onPress={() => Alert.alert(controlLabels.notificationSettings)}>
+          <View style={styles.rowIconBox}>
+            <Bell size={20} color="#4F46E5" />
           </View>
-          <Text style={styles.chevron}>→</Text>
+          <View style={styles.rowContent}>
+            <Text style={styles.rowTitle}>{controlLabels.notificationSettings}</Text>
+          </View>
+          <ChevronRight size={20} color="#94A3B8" />
         </TouchableOpacity>
 
         <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
-          <Text style={styles.signOutText}>Sign Out</Text>
+          <Text style={styles.signOutText}>{controlLabels.signOut}</Text>
         </TouchableOpacity>
 
       </ScrollView>
 
-      {/* Footer Nav */}
       <View style={styles.footer}>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('DashboardScreen')}>
-          <Text style={styles.navEmoji}>🏠</Text>
-          <Text style={styles.navLabel}>Home</Text>
+          <Home size={22} color="#94A3B8" />
+          <Text style={styles.navLabel}>{dashboardLabels.navHome}</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('UsageScreen')}>
-          <Text style={styles.navEmoji}>📊</Text>
-          <Text style={styles.navLabel}>Usage</Text>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('AnalyticsScreen')}>
+          <BarChart2 size={22} color="#94A3B8" />
+          <Text style={styles.navLabel}>{dashboardLabels.navUsage}</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem}>
-          <Text style={[styles.navEmoji, styles.activeNav]}>⚙️</Text>
-          <Text style={[styles.navLabel, styles.activeNav]}>Settings</Text>
+          <SettingsIcon size={22} color="#4F46E5" />
+          <Text style={[styles.navLabel, styles.activeNav]}>{dashboardLabels.navSettings}</Text>
         </TouchableOpacity>
       </View>
 
@@ -245,7 +276,6 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFF' 
   },
   backButton: { padding: 8 },
-  backText: { fontSize: 24, fontWeight: 'bold' },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: '#0F172A' },
   headerSpacer: { width: 40 },
   scrollContent: { padding: 20, paddingBottom: 40 },
@@ -274,7 +304,7 @@ const styles = StyleSheet.create({
   sectionSubtitle: { fontSize: 14, color: '#64748B' },
 
   deviceCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
-  deviceIcon: { fontSize: 24, marginRight: 12 },
+  deviceIconWrapper: { marginRight: 12 },
   deviceInfo: { flex: 1 },
   deviceName: { fontWeight: '600', color: '#1E293B' },
   deviceModel: { fontSize: 12, color: '#64748B' },
@@ -285,16 +315,15 @@ const styles = StyleSheet.create({
   onlineText: { color: '#15803D' },
   offlineText: { color: '#64748B' },
 
-  addBtn: { padding: 16, borderStyle: 'dashed', borderWidth: 2, borderColor: '#CBD5E1', borderRadius: 12, alignItems: 'center', marginTop: 4, marginBottom: 24 },
+  addBtn: { flexDirection: 'row', padding: 16, borderStyle: 'dashed', borderWidth: 2, borderColor: '#CBD5E1', borderRadius: 12, alignItems: 'center', marginTop: 4, marginBottom: 24, justifyContent: 'center' },
   addBtnText: { fontWeight: '600', color: '#64748B' },
 
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
   toggleRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
-  rowIcon: { fontSize: 20, marginRight: 12 },
+  rowIconBox: { marginRight: 12, width: 24, alignItems: 'center' },
   rowContent: { flex: 1 },
   rowTitle: { fontWeight: '600', color: '#1E293B' },
   rowSubtitle: { fontSize: 12, color: '#64748B' },
-  chevron: { color: '#94A3B8', fontSize: 18 },
   spacer: { height: 10 },
 
   signOutBtn: { marginTop: 20, padding: 16, backgroundColor: '#FEF2F2', borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#FEE2E2' },
@@ -302,7 +331,6 @@ const styles = StyleSheet.create({
 
   footer: { flexDirection: 'row', padding: 12, borderTopWidth: 1, borderTopColor: '#E2E8F0', backgroundColor: '#FFF', justifyContent: 'space-around', paddingBottom: 24 },
   navItem: { alignItems: 'center' },
-  navEmoji: { fontSize: 20, color: '#94A3B8' },
   navLabel: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
   activeNav: { color: '#4F46E5' }
 });

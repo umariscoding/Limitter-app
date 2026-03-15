@@ -10,7 +10,20 @@ import {
   StatusBar 
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { userProfile, categories, devices, deviceLimit } from '../data/appData';
+import { 
+  Home, 
+  BarChart2, 
+  Settings as SettingsIcon, 
+  Smartphone, 
+  Gamepad2, 
+  TrendingUp, 
+  Film, 
+  Laptop, 
+  Monitor, 
+  Tablet,
+  Plus as PlusIcon
+} from 'lucide-react-native';
+import { userProfile, categories, devices, deviceLimit, dashboardLabels } from '../data/appData';
 import { Toast } from '../../components';
 
 export default function DashboardScreen() {
@@ -22,12 +35,25 @@ export default function DashboardScreen() {
     setShowToast(true);
   }, []);
 
+  const getIcon = (iconName: string, size = 20, color = "#0F172A") => {
+    switch(iconName) {
+      case 'smartphone': return <Smartphone size={size} color={color} />;
+      case 'gamepad-2': return <Gamepad2 size={size} color={color} />;
+      case 'trending-up': return <TrendingUp size={size} color={color} />;
+      case 'film': return <Film size={size} color={color} />;
+      case 'laptop': return <Laptop size={size} color={color} />;
+      case 'monitor': return <Monitor size={size} color={color} />;
+      case 'tablet': return <Tablet size={size} color={color} />;
+      default: return null;
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <Toast 
         visible={showToast} 
-        message="Login Successful! Welcome to Limitter." 
+        message={dashboardLabels.welcomeMessage} 
         onHide={() => setShowToast(false)} 
         type="success"
       />
@@ -46,7 +72,7 @@ export default function DashboardScreen() {
             style={styles.addButton}
             onPress={() => navigation.navigate('AddContentScreen')}
           >
-            <Text style={styles.addButtonText}>+</Text>
+            <PlusIcon size={20} color="#FFFFFF" strokeWidth={3} />
           </TouchableOpacity>
         </View>
       </View>
@@ -57,17 +83,17 @@ export default function DashboardScreen() {
           onPress={() => navigation.navigate('OverrideLogsScreen')}
         >
           <Text style={styles.overrideText}>
-            Overrides Used: <Text style={styles.overrideBold}>{userProfile.overridesUsed} / {userProfile.overridesTotal}</Text>
+            {dashboardLabels.overridesUsedLabel}<Text style={styles.overrideBold}>{userProfile.overridesUsed} / {userProfile.overridesTotal}</Text>
           </Text>
         </TouchableOpacity>
 
         <View style={styles.timeCard}>
-          <Text style={styles.timeLabel}>Total Usage Today (All Devices)</Text>
+          <Text style={styles.timeLabel}>{dashboardLabels.totalUsageLabel}</Text>
           <Text style={styles.timeValue}>{userProfile.totalUsageToday}</Text>
         </View>
 
         <View style={styles.categoriesSection}>
-          <Text style={styles.sectionTitle}>Categories</Text>
+          <Text style={styles.sectionTitle}>{dashboardLabels.categoriesTitle}</Text>
           
           <View style={styles.categoryCard}>
             {categories.map((category, index) => (
@@ -79,7 +105,7 @@ export default function DashboardScreen() {
                 ]}
               >
                 <View style={[styles.categoryIcon, { backgroundColor: category.color + '20' }]}>
-                  <Text style={styles.iconEmoji}>{category.icon}</Text>
+                  {getIcon(category.icon, 20, category.color)}
                 </View>
                 <View style={styles.categoryInfo}>
                   <Text style={styles.categoryName}>{category.name}</Text>
@@ -93,18 +119,18 @@ export default function DashboardScreen() {
             style={styles.viewDetailsBtn}
             onPress={() => navigation.navigate('ActivityScreen')}
           >
-            <Text style={styles.viewDetailsText}>View Details →</Text>
+            <Text style={styles.viewDetailsText}>{dashboardLabels.viewDetails}</Text>
           </TouchableOpacity>
         </View>
 
         <View style={styles.devicesSection}>
           <View style={styles.sectionHeaderRow}>
             <View style={styles.sectionHeaderLeft}>
-              <Text style={styles.sectionTitle}>Your Devices</Text>
+              <Text style={styles.sectionTitle}>{dashboardLabels.yourDevicesTitle}</Text>
               <Text style={styles.sectionSubtitle}>{deviceLimit.sharedLimitNote}</Text>
             </View>
             <TouchableOpacity onPress={() => navigation.navigate('ControlPlansScreen')}>
-              <Text style={styles.manageAllText}>Manage All</Text>
+              <Text style={styles.manageAllText}>{dashboardLabels.manageAll}</Text>
             </TouchableOpacity>
           </View>
 
@@ -115,7 +141,9 @@ export default function DashboardScreen() {
           {devices.map((device) => (
             <View key={device.id} style={styles.deviceCard}>
               <View style={styles.deviceHeader}>
-                <Text style={styles.deviceIcon}>{device.icon}</Text>
+                <View style={styles.deviceIconBox}>
+                  {getIcon(device.icon, 20, "#64748B")}
+                </View>
                 <Text style={styles.deviceName}>{device.name}</Text>
                 <View style={[
                   styles.statusBadge, 
@@ -132,14 +160,14 @@ export default function DashboardScreen() {
                   disabled={device.status === 'Locked'}
                   onPress={() => console.log('Lock ' + device.name)}
                 >
-                  <Text style={[styles.actionBtnText, device.status === 'Locked' && styles.actionBtnTextDisabled]}>Lock Now</Text>
+                  <Text style={[styles.actionBtnText, device.status === 'Locked' && styles.actionBtnTextDisabled]}>{dashboardLabels.lockNow}</Text>
                 </TouchableOpacity>
                 <TouchableOpacity 
                   style={[styles.actionBtn, device.status === 'Active' && styles.actionBtnDisabled]} 
                   disabled={device.status === 'Active'}
-                  onPress={() => console.log('Unlock ' + device.name)}
+                  onPress={() => navigation.navigate('ConfirmOverrideScreen')}
                 >
-                  <Text style={[styles.actionBtnText, device.status === 'Active' && styles.actionBtnTextDisabled]}>Unlock</Text>
+                  <Text style={[styles.actionBtnText, device.status === 'Active' && styles.actionBtnTextDisabled]}>{dashboardLabels.unlock}</Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -149,22 +177,22 @@ export default function DashboardScreen() {
 
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem}>
-          <Text style={[styles.navIcon, styles.activeNavText]}>🏠</Text>
-          <Text style={[styles.navLabel, styles.activeNavText]}>Home</Text>
+          <Home size={22} color="#4F46E5" />
+          <Text style={[styles.navLabel, styles.activeNavText]}>{dashboardLabels.navHome}</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={styles.navItem}
-          onPress={() => navigation.navigate('UsageScreen')}
+          onPress={() => navigation.navigate('AnalyticsScreen')}
         >
-          <Text style={styles.navIcon}>📊</Text>
-          <Text style={styles.navLabel}>Usage</Text>
+          <BarChart2 size={22} color="#94A3B8" />
+          <Text style={styles.navLabel}>{dashboardLabels.navUsage}</Text>
         </TouchableOpacity>
         <TouchableOpacity 
           style={styles.navItem}
           onPress={() => navigation.navigate('SettingsScreen')}
         >
-          <Text style={styles.navIcon}>⚙️</Text>
-          <Text style={styles.navLabel}>Settings</Text>
+          <SettingsIcon size={22} color="#94A3B8" />
+          <Text style={styles.navLabel}>{dashboardLabels.navSettings}</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -411,8 +439,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginBottom: 16,
   },
-  deviceIcon: {
-    fontSize: 20,
+  deviceIconBox: {
     marginRight: 12,
   },
   deviceName: {

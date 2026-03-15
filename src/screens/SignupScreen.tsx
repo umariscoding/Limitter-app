@@ -10,7 +10,8 @@ import {
   ScrollView,
   Keyboard,
 } from 'react-native';
-import { BaseButton, TextInput, Icon, Toast } from '../../components';
+import { BaseButton, TextInput, Toast } from '../../components';
+import { Shield } from 'lucide-react-native';
 import { useNavigation } from '@react-navigation/native';
 
 interface SignupScreenProps {
@@ -80,7 +81,7 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
           {/* 1. Screen Layout: App Icon & Title */}
           <View style={styles.header}>
             <View style={styles.iconContainer}>
-              <Icon size={48}>🛡️</Icon>
+              <Shield size={48} color="#4F46E5" />
             </View>
             <Text style={styles.title}>Create Account</Text>
           </View>
