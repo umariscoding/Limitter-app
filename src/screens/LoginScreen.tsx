@@ -1,7 +1,9 @@
 import React, { useState } from 'react';
+import { loginAPI } from '../api/api.js';
 import {
   View,
   Text,
+  Alert,
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
@@ -28,26 +30,74 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   const navigation = useNavigation<any>();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [error, setError] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleLogin = () => {
-    if (!email || !password) return;
+  const handleLogin = async () => {
+    setError(null);
+
+    if (!email || !password) {
+      setError('Email and password are required');
+      return;
+    }
     
     // Dismiss keyboard instantly
     Keyboard.dismiss();
-    
-    // Instant Navigation with Stack Reset
-    navigation.reset({
-      index: 0,
-      routes: [{ name: 'DashboardScreen' }],
-    });
 
-    if (onLogin) {
-      onLogin(email, password);
+    setIsLoading(true);
+
+    try {
+      const response = await loginAPI(email.trim(), password);
+      console.log('Login API response:', response);
+
+      if (!response) {
+        setError('No response from login API');
+        return;
+      }
+
+      const isSuccess =
+        response?.success === true ||
+        response?.status === 'success' ||
+        response?.statusCode === 200 ||
+        response?.token ||
+        /success|logged|authenticated/i.test(response?.message || '');
+
+      Alert.alert('Login API Result', JSON.stringify(response, null, 2));
+
+      if (!isSuccess) {
+        setError(response?.message || 'Login failed (API test)');
+        return;
+      }
+
+      setShowToast(true);
+
+      if (onLogin) {
+        onLogin(email, password);
+      }
+
+      setTimeout(() => {
+        navigation.reset({
+          index: 0,
+          routes: [{ name: 'DashboardScreen' }],
+        });
+      }, 700);
+    } catch (apiError: any) {
+      console.error('Login API test error:', apiError);
+      setError(apiError?.message || 'Login request failed');
+    } finally {
+      setIsLoading(false);
     }
   };
 
   return (
     <SafeAreaView style={styles.container}>
+      <Toast
+        visible={showToast}
+        message="Login API success"
+        onHide={() => setShowToast(false)}
+        type="success"
+      />
       <KeyboardAvoidingView
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
         style={styles.flex}
@@ -81,6 +131,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
               value={password}
               onChangeText={setPassword}
               secureTextEntry={true}
+              error={error || undefined}
             />
 
             {/* 3. Actions: Forgot Password & Login Button */}
@@ -96,9 +147,10 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
               variant="primary"
               fullWidth
               onPress={handleLogin}
+              disabled={isLoading}
               style={styles.loginButton}
             >
-              Login
+              {isLoading ? 'Testing API...' : 'Login'}
             </BaseButton>
           </View>
 

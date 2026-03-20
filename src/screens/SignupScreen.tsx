@@ -1,7 +1,10 @@
 import React, { useState } from 'react';
+import { signupAPI } from '../api/api.js'; 
+
 import {
   View,
   Text,
+  Alert,
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
@@ -29,8 +32,9 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
   const [confirmPassword, setConfirmPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
 
-  const handleSignup = () => {
+  const handleSignup = async () => {
     // Reset error
     setError(null);
 
@@ -42,24 +46,56 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
 
     // Prevent submission if empty (basic check)
     if (!email || !password) {
+      setError('Email and password are required');
       return;
     }
 
     // Dismiss keyboard
     Keyboard.dismiss();
 
-    // Show Success Toast
-    setShowToast(true);
+    setIsLoading(true);
 
-    // Provide some feedback to the app logic if needed
-    if (onSignup) {
-      onSignup(email, password);
+    try {
+      const response = await signupAPI(email.trim(), password);
+      console.log('Signup API response:', response);
+
+      if (!response) {
+        setError('No response from signup API');
+        return;
+      }
+
+      const isSuccess =
+        response?.success === true ||
+        response?.status === 'success' ||
+        response?.statusCode === 200 ||
+        /success|created|registered/i.test(response?.message || '');
+
+      if (!isSuccess) {
+        setError(response?.message || 'Signup failed (API test)');
+        Alert.alert('Signup API Result', JSON.stringify(response, null, 2));
+        return;
+      }
+
+      // Show Success Toast
+      setShowToast(true);
+
+      // Provide some feedback to the app logic if needed
+      if (onSignup) {
+        onSignup(email, password);
+      }
+
+      Alert.alert('Signup API Result', JSON.stringify(response, null, 2));
+
+      // Auto navigate to login after 1.5s
+      setTimeout(() => {
+        navigation.navigate('Login');
+      }, 1500);
+    } catch (apiError: any) {
+      console.error('Signup API test error:', apiError);
+      setError(apiError?.message || 'Signup request failed');
+    } finally {
+      setIsLoading(false);
     }
-
-    // Auto navigate to login after 1.5s
-    setTimeout(() => {
-      navigation.navigate('Login');
-    }, 1500);
   };
 
   return (
@@ -118,9 +154,10 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
               variant="primary"
               fullWidth
               onPress={handleSignup}
+              disabled={isLoading}
               style={styles.signupButton}
             >
-              Create Account
+              {isLoading ? 'Testing API...' : 'Create Account'}
             </BaseButton>
           </View>
 
