@@ -1,198 +1,624 @@
-import React, { useEffect, useState } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  ScrollView, 
-  SafeAreaView,
+import React, { useState } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
   Platform,
-  StatusBar 
+  StatusBar,
+  ActivityIndicator,
+  Alert,
+  RefreshControl,
+  Modal,
+  TextInput,
+  FlatList,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
-import { 
-  Home, 
-  BarChart2, 
-  Settings as SettingsIcon, 
-  Smartphone, 
-  Gamepad2, 
-  TrendingUp, 
-  Film, 
-  Laptop, 
-  Monitor, 
-  Tablet,
-  Plus as PlusIcon
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import {
+  Home,
+  BarChart2,
+  Settings as SettingsIcon,
+  Smartphone,
+  Plus as PlusIcon,
+  AlertCircle,
 } from 'lucide-react-native';
-import { userProfile, categories, devices, deviceLimit, dashboardLabels } from '../data/appData';
+import { useUser } from '../context/UserContext';
+import { getLimitsAPI, createLimitAPI, updateUsageAPI } from '../services/limitService';
 import { Toast } from '../../components';
+import { getInstalledApps, searchApps, InstalledApp } from '../services/appListService';
+import { startAppBlockerService, updateBlockedApps } from '../services/appBlockerService';
 
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
+  const { user } = useUser();
+
+  const [limits, setLimits] = useState<any[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
   const [showToast, setShowToast] = useState(false);
+  const [totalUsageToday, setTotalUsageToday] = useState('0h 0m');
+  const [deviceId] = useState('device_001');
+  const [showCreateModal, setShowCreateModal] = useState(false);
+  const [createAppName, setCreateAppName] = useState('');
+  const [appSearch, setAppSearch] = useState('');
+  const [createCategory, setCreateCategory] = useState('');
+  const [installedAppsList, setInstalledAppsList] = useState<InstalledApp[]>([]);
+  const [loadingApps, setLoadingApps] = useState(false);
+  const [targetType, setTargetType] = useState<'app' | 'category'>('app');
+  const [timerType, setTimerType] = useState<'combined' | 'single'>('combined');
+  const [hours, setHours] = useState('0');
+  const [minutes, setMinutes] = useState('30');
+  const [seconds, setSeconds] = useState('0');
+  const [singleTimerValue, setSingleTimerValue] = useState('30');
+  const [singleTimerUnit, setSingleTimerUnit] = useState<'seconds' | 'minutes' | 'hours'>('minutes');
 
-  useEffect(() => {
-    // Show welcome toast when user lands on dashboard
-    setShowToast(true);
-  }, []);
+  // ✅ Load installed apps when modal opens
+  React.useEffect(() => {
+    if (showCreateModal && installedAppsList.length === 0) {
+      loadInstalledApps();
+    }
+  }, [showCreateModal]);
 
-  const getIcon = (iconName: string, size = 20, color = "#0F172A") => {
-    switch(iconName) {
-      case 'smartphone': return <Smartphone size={size} color={color} />;
-      case 'gamepad-2': return <Gamepad2 size={size} color={color} />;
-      case 'trending-up': return <TrendingUp size={size} color={color} />;
-      case 'film': return <Film size={size} color={color} />;
-      case 'laptop': return <Laptop size={size} color={color} />;
-      case 'monitor': return <Monitor size={size} color={color} />;
-      case 'tablet': return <Tablet size={size} color={color} />;
-      default: return null;
+  const loadInstalledApps = async () => {
+    setLoadingApps(true);
+    try {
+      const apps = await getInstalledApps();
+      setInstalledAppsList(apps);
+      console.log('✅ Loaded', apps.length, 'installed apps');
+    } catch (error) {
+      console.error('❌ Failed to load apps:', error);
+      setInstalledAppsList([]);
+    } finally {
+      setLoadingApps(false);
     }
   };
+
+  // ✅ Search apps as user types
+  const filteredApps = React.useMemo(() => {
+    if (!appSearch) return installedAppsList.slice(0, 8);
+    return installedAppsList
+      .filter(
+        app =>
+          app.appName.toLowerCase().includes(appSearch.toLowerCase()) ||
+          app.packageName.toLowerCase().includes(appSearch.toLowerCase())
+      )
+      .slice(0, 8);
+  }, [appSearch, installedAppsList]);
+
+  const categories = ['Social Media', 'Video Streaming', 'Gaming', 'Productivity', 'Education'];
+
+  // ✅ Fetch limits from backend
+  const fetchLimits = async () => {
+    if (!user?.uid) {
+      console.log('⚠️ No user UID available');
+      setLoading(false);
+      return;
+    }
+
+    try {
+      const response = await getLimitsAPI(user.uid, deviceId);
+
+      if (response.success || response.data) {
+        const limitsData = Array.isArray(response.data) ? response.data : [response.data];
+
+        // ✅ Sort limits - latest first (by creation date)
+        const sortedLimits = limitsData
+          .filter((l: any) => l && l.id)
+          .sort(
+            (a: any, b: any) =>
+              new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+          );
+
+        setLimits(sortedLimits);
+        console.log('✅ Fetched limits (sorted):', sortedLimits);
+
+        // ✅ Start AppBlocker with current blocked apps
+        const blockedAppsList = sortedLimits
+          .filter((l: any) => l.is_blocked && l.app_name)
+          .map((l: any) => ({
+            package_name: l.app_name, // backend returns app_name as package
+            app_name: l.app_name,
+            blocked_until_timestamp: l.blocked_until_timestamp,
+          }));
+
+        if (blockedAppsList.length > 0) {
+          await startAppBlockerService(blockedAppsList);
+        }
+        updateBlockedApps(blockedAppsList);
+
+        // Calculate total usage
+        const totalUsed = sortedLimits.reduce((sum: number, l: any) => sum + (l.time_used_minutes || 0), 0);
+        const hours = Math.floor(totalUsed / 60);
+        const minutes = totalUsed % 60;
+        setTotalUsageToday(`${hours}h ${minutes}m`);
+      }
+    } catch (error) {
+      console.error('❌ Failed to fetch limits:', error);
+      setLimits([]);
+    } finally {
+      setLoading(false);
+      setRefreshing(false);
+    }
+  };
+
+  // ✅ Load data on screen focus
+  useFocusEffect(
+    React.useCallback(() => {
+      setLoading(true);
+      fetchLimits();
+    }, [user?.uid])
+  );
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchLimits();
+  };
+
+  const calculateTotalSeconds = () => {
+    if (timerType === 'combined') {
+      const h = Number(hours || '0');
+      const m = Number(minutes || '0');
+      const s = Number(seconds || '0');
+      return h * 3600 + m * 60 + s;
+    }
+
+    const val = Number(singleTimerValue || '0');
+    if (singleTimerUnit === 'hours') {
+      return val * 3600;
+    }
+    if (singleTimerUnit === 'minutes') {
+      return val * 60;
+    }
+    return val;
+  };
+
+  const handleCreateLimit = async () => {
+    if (!user?.uid) {
+      Alert.alert('Error', 'User not logged in');
+      return;
+    }
+
+    const appName = createAppName.trim();
+    const category = createCategory.trim();
+    const totalSeconds = calculateTotalSeconds();
+    const parsedMinutes = Math.ceil(totalSeconds / 60);
+
+    if (targetType === 'app') {
+      if (!appName) {
+        Alert.alert('Validation', 'App name is required');
+        return;
+      }
+    } else {
+      if (!category) {
+        Alert.alert('Validation', 'Category is required');
+        return;
+      }
+    }
+
+    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
+      Alert.alert('Validation', 'Timer must be greater than 0 seconds');
+      return;
+    }
+
+    setLoading(true);
+    try {
+      const response = await createLimitAPI(
+        user.uid,
+        deviceId,
+        parsedMinutes,
+        targetType === 'app' ? appName : null,
+        targetType === 'category' ? category : null
+      );
+      console.log('Create limit result:', response);
+
+      if (response?.success) {
+        const label = targetType === 'app' ? appName : category;
+        setToastMessage(`Limit created for ${label}`);
+        setShowToast(true);
+        setShowCreateModal(false);
+        setCreateAppName('');
+        setCreateCategory('');
+        setAppSearch('');
+        setHours('0');
+        setMinutes('30');
+        setSeconds('0');
+        setSingleTimerValue('30');
+        setSingleTimerUnit('minutes');
+        await fetchLimits();
+      } else {
+        Alert.alert('Error', response?.message || 'Failed to create limit');
+      }
+    } catch (error) {
+      console.error('Create limit error:', error);
+      Alert.alert('Error', 'Failed to create limit');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleSimulateUsage = async (limitId: string) => {
+    setLoading(true);
+    try {
+      const response = await updateUsageAPI(limitId, 5);
+      console.log('Update usage result:', response);
+
+      if (response?.success) {
+        setToastMessage('Added 5 minutes usage');
+        setShowToast(true);
+        await fetchLimits();
+      } else {
+        Alert.alert('Error', response?.message || 'Failed to update usage');
+      }
+    } catch (error) {
+      console.error('Update usage error:', error);
+      Alert.alert('Error', 'Failed to update usage');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading && !refreshing) {
+    return (
+      <SafeAreaView style={styles.container}>
+        <View style={styles.centerContent}>
+          <ActivityIndicator size="large" color="#4F46E5" />
+          <Text style={styles.loadingText}>Loading your limits...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <Toast 
-        visible={showToast} 
-        message={dashboardLabels.welcomeMessage} 
-        onHide={() => setShowToast(false)} 
+      <Toast
+        visible={showToast}
+        message={toastMessage}
+        onHide={() => setShowToast(false)}
         type="success"
       />
-      <View style={styles.headerContainer}>
-        <Text style={styles.logoText}>{userProfile.appName}</Text>
-        <View style={styles.headerRight}>
-          <TouchableOpacity 
-            activeOpacity={0.7}
-            onPress={() => navigation.navigate('SubscriptionPlansScreen')}
-          >
-            <View style={styles.proBadge}>
-              <Text style={styles.proBadgeText}>{userProfile.plan} Plan</Text>
-            </View>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={styles.addButton}
-            onPress={() => navigation.navigate('AddContentScreen')}
-          >
-            <PlusIcon size={20} color="#FFFFFF" strokeWidth={3} />
-          </TouchableOpacity>
-        </View>
-      </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent}>
-        <TouchableOpacity 
-          style={styles.overrideTracker}
-          onPress={() => navigation.navigate('OverrideLogsScreen')}
-        >
-          <Text style={styles.overrideText}>
-            {dashboardLabels.overridesUsedLabel}<Text style={styles.overrideBold}>{userProfile.overridesUsed} / {userProfile.overridesTotal}</Text>
-          </Text>
-        </TouchableOpacity>
-
-        <View style={styles.timeCard}>
-          <Text style={styles.timeLabel}>{dashboardLabels.totalUsageLabel}</Text>
-          <Text style={styles.timeValue}>{userProfile.totalUsageToday}</Text>
-        </View>
-
-        <View style={styles.categoriesSection}>
-          <Text style={styles.sectionTitle}>{dashboardLabels.categoriesTitle}</Text>
-          
-          <View style={styles.categoryCard}>
-            {categories.map((category, index) => (
-              <View 
-                key={category.id} 
-                style={[
-                  styles.categoryRow, 
-                  index === categories.length - 1 && styles.lastRow
-                ]}
+      <Modal
+        visible={showCreateModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowCreateModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Create Limit</Text>
+            <Text style={styles.modalSubTitle}>Target Type</Text>
+            <View style={styles.selectorRow}>
+              <TouchableOpacity
+                style={[styles.selectorBtn, targetType === 'app' && styles.selectorBtnActive]}
+                onPress={() => setTargetType('app')}
               >
-                <View style={[styles.categoryIcon, { backgroundColor: category.color + '20' }]}>
-                  {getIcon(category.icon, 20, category.color)}
-                </View>
-                <View style={styles.categoryInfo}>
-                  <Text style={styles.categoryName}>{category.name}</Text>
-                </View>
-                <Text style={styles.categoryTime}>{category.time}</Text>
-              </View>
-            ))}
-          </View>
+                <Text style={[styles.selectorBtnText, targetType === 'app' && styles.selectorBtnTextActive]}>App</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.selectorBtn, targetType === 'category' && styles.selectorBtnActive]}
+                onPress={() => setTargetType('category')}
+              >
+                <Text style={[styles.selectorBtnText, targetType === 'category' && styles.selectorBtnTextActive]}>Category</Text>
+              </TouchableOpacity>
+            </View>
 
-          <TouchableOpacity 
-            style={styles.viewDetailsBtn}
-            onPress={() => navigation.navigate('ActivityScreen')}
+            {targetType === 'app' ? (
+              <>
+                <TextInput
+                  value={appSearch}
+                  onChangeText={text => {
+                    setAppSearch(text);
+                    setCreateAppName(text);
+                  }}
+                  placeholder="Search app (e.g. instagram)"
+                  style={styles.modalInput}
+                  placeholderTextColor="#94A3B8"
+                />
+                <FlatList
+                  data={filteredApps}
+                  keyExtractor={item => item.packageName}
+                  style={styles.suggestionList}
+                  nestedScrollEnabled
+                  renderItem={({ item: app }) => (
+                    <TouchableOpacity
+                      style={styles.suggestionItem}
+                      onPress={() => {
+                        setCreateAppName(app.packageName);
+                        setAppSearch(app.appName);
+                      }}
+                    >
+                      <Text style={styles.suggestionText}>{app.appName}</Text>
+                      <Text style={styles.suggestionSubtext}>{app.packageName}</Text>
+                    </TouchableOpacity>
+                  )}
+                  ListHeaderComponent={loadingApps ? <Text style={styles.loadingAppsText}>Loading apps...</Text> : null}
+                  ListEmptyComponent={
+                    !loadingApps ? <Text style={styles.emptyAppsText}>No apps found</Text> : null
+                  }
+                />
+              </>
+            ) : (
+              <View style={styles.categoryWrap}>
+                {categories.map(cat => (
+                  <TouchableOpacity
+                    key={cat}
+                    style={[styles.categoryChip, createCategory === cat && styles.categoryChipActive]}
+                    onPress={() => setCreateCategory(cat)}
+                  >
+                    <Text style={[styles.categoryChipText, createCategory === cat && styles.categoryChipTextActive]}>
+                      {cat}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            )}
+
+            <Text style={styles.modalSubTitle}>Timer Type</Text>
+            <View style={styles.selectorRow}>
+              <TouchableOpacity
+                style={[styles.selectorBtn, timerType === 'combined' && styles.selectorBtnActive]}
+                onPress={() => setTimerType('combined')}
+              >
+                <Text style={[styles.selectorBtnText, timerType === 'combined' && styles.selectorBtnTextActive]}>H:M:S</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.selectorBtn, timerType === 'single' && styles.selectorBtnActive]}
+                onPress={() => setTimerType('single')}
+              >
+                <Text style={[styles.selectorBtnText, timerType === 'single' && styles.selectorBtnTextActive]}>Single Unit</Text>
+              </TouchableOpacity>
+            </View>
+
+            {timerType === 'combined' ? (
+              <View style={styles.timeRow}>
+                <View style={styles.timeBox}>
+                  <Text style={styles.timeLabel}>H</Text>
+                  <TextInput
+                    value={hours}
+                    onChangeText={setHours}
+                    keyboardType="number-pad"
+                    style={styles.timeInput}
+                  />
+                </View>
+                <View style={styles.timeBox}>
+                  <Text style={styles.timeLabel}>M</Text>
+                  <TextInput
+                    value={minutes}
+                    onChangeText={setMinutes}
+                    keyboardType="number-pad"
+                    style={styles.timeInput}
+                  />
+                </View>
+                <View style={styles.timeBox}>
+                  <Text style={styles.timeLabel}>S</Text>
+                  <TextInput
+                    value={seconds}
+                    onChangeText={setSeconds}
+                    keyboardType="number-pad"
+                    style={styles.timeInput}
+                  />
+                </View>
+              </View>
+            ) : (
+              <>
+                <TextInput
+                  value={singleTimerValue}
+                  onChangeText={setSingleTimerValue}
+                  placeholder="Enter timer value"
+                  keyboardType="number-pad"
+                  style={styles.modalInput}
+                  placeholderTextColor="#94A3B8"
+                />
+                <View style={styles.selectorRow}>
+                  {(['seconds', 'minutes', 'hours'] as const).map(unit => (
+                    <TouchableOpacity
+                      key={unit}
+                      style={[styles.selectorBtn, singleTimerUnit === unit && styles.selectorBtnActive]}
+                      onPress={() => setSingleTimerUnit(unit)}
+                    >
+                      <Text style={[styles.selectorBtnText, singleTimerUnit === unit && styles.selectorBtnTextActive]}>
+                        {unit}
+                      </Text>
+                    </TouchableOpacity>
+                  ))}
+                </View>
+              </>
+            )}
+
+            <View style={styles.readonlyTargetBox}>
+              <Text style={styles.readonlyTargetText}>
+                {targetType === 'app'
+                  ? (createAppName || 'No app selected')
+                  : (createCategory || 'No category selected')}
+              </Text>
+            </View>
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCancel]}
+                onPress={() => setShowCreateModal(false)}
+              >
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalCreate]}
+                onPress={handleCreateLimit}
+              >
+                <Text style={styles.modalCreateText}>Create</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
+
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
+        {/* ===== HEADER ===== */}
+        <View style={styles.header}>
+          <View>
+            <Text style={styles.logoText}>Limitter</Text>
+            <Text style={styles.subtitle}>Welcome, {user?.name || 'User'}</Text>
+          </View>
+          <TouchableOpacity
+            style={styles.settingsBtn}
+            onPress={() => navigation.navigate('SettingsScreen')}
           >
-            <Text style={styles.viewDetailsText}>{dashboardLabels.viewDetails}</Text>
+            <SettingsIcon size={24} color="#4F46E5" />
           </TouchableOpacity>
         </View>
 
-        <View style={styles.devicesSection}>
-          <View style={styles.sectionHeaderRow}>
-            <View style={styles.sectionHeaderLeft}>
-              <Text style={styles.sectionTitle}>{dashboardLabels.yourDevicesTitle}</Text>
-              <Text style={styles.sectionSubtitle}>{deviceLimit.sharedLimitNote}</Text>
-            </View>
-            <TouchableOpacity onPress={() => navigation.navigate('ControlPlansScreen')}>
-              <Text style={styles.manageAllText}>{dashboardLabels.manageAll}</Text>
+        {/* ===== USER STATS ===== */}
+        <View style={styles.statsContainer}>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Plan</Text>
+            <Text style={styles.statValue}>{user?.plan?.toUpperCase() || 'FREE'}</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Overrides</Text>
+            <Text style={styles.statValue}>{user?.overrides_left || 0}</Text>
+          </View>
+          <View style={styles.statCard}>
+            <Text style={styles.statLabel}>Total Usage</Text>
+            <Text style={styles.statValue}>{totalUsageToday}</Text>
+          </View>
+        </View>
+
+        {/* ===== LIMITS SECTION ===== */}
+        <View style={styles.section}>
+          <View style={styles.sectionHeader}>
+            <Text style={styles.sectionTitle}>Active Limits</Text>
+            <TouchableOpacity onPress={() => setShowCreateModal(true)}>
+              <Plus size={20} color="#4F46E5" />
             </TouchableOpacity>
           </View>
 
-          <View style={styles.infoBanner}>
-            <Text style={styles.infoBannerText}>{deviceLimit.infoText}</Text>
-          </View>
+          {limits.length === 0 ? (
+            <View style={styles.emptyState}>
+              <AlertCircle size={48} color="#94A3B8" />
+              <Text style={styles.emptyText}>No limits yet</Text>
+              <TouchableOpacity style={styles.createBtn} onPress={() => setShowCreateModal(true)}>
+                <Text style={styles.createBtnText}>Create First Limit</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <ScrollView
+              style={styles.limitsScrollWrap}
+              contentContainerStyle={styles.limitsScrollContent}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+            >
+              {limits.slice(0, 5).map((limit: any) => (
+                <View key={limit.id} style={styles.limitCard}>
+                  <View style={styles.limitInfo}>
+                    <Text style={styles.limitName}>{limit.app_name || limit.category || 'App'}</Text>
+                    <View style={styles.limitStats}>
+                      <Text style={styles.limitStat}>
+                        {limit.time_used_minutes || 0} / {limit.max_time_minutes} min
+                      </Text>
+                      <View
+                        style={[
+                          styles.statusBadge,
+                          limit.is_blocked ? styles.statusBlocked : styles.statusActive,
+                        ]}
+                      >
+                        <Text style={[styles.statusText, limit.is_blocked ? styles.statusBlockedText : styles.statusActiveText]}>
+                          {limit.is_blocked ? 'BLOCKED' : 'ACTIVE'}
+                        </Text>
+                      </View>
+                    </View>
+                  </View>
 
-          {devices.map((device) => (
-            <View key={device.id} style={styles.deviceCard}>
-              <View style={styles.deviceHeader}>
-                <View style={styles.deviceIconBox}>
-                  {getIcon(device.icon, 20, "#64748B")}
+                  <View style={styles.progressContainer}>
+                    <View
+                      style={[
+                        styles.progressBar,
+                        { width: `${Math.min((limit.time_used_minutes / limit.max_time_minutes) * 100, 100)}%` },
+                        limit.is_blocked && styles.progressBarBlocked,
+                      ]}
+                    />
+                  </View>
+
+                  <TouchableOpacity
+                    onPress={() =>
+                      navigation.navigate('ConfirmOverrideScreen', { limitId: limit.id })
+                    }
+                    style={styles.overrideBtn}
+                  >
+                    <Text style={styles.overrideBtnText}>Use Override</Text>
+                  </TouchableOpacity>
+
+                  <TouchableOpacity
+                    onPress={() => handleSimulateUsage(limit.id)}
+                    style={styles.simulateBtn}
+                  >
+                    <Text style={styles.simulateBtnText}>Simulate +5 min</Text>
+                  </TouchableOpacity>
                 </View>
-                <Text style={styles.deviceName}>{device.name}</Text>
-                <View style={[
-                  styles.statusBadge, 
-                  device.status === 'Active' ? styles.statusActive : styles.statusLocked
-                ]}>
-                  <Text style={device.status === 'Active' ? styles.statusTextActive : styles.statusTextLocked}>
-                    {device.status}
+              ))}
+              {limits.length > 5 && (
+                <View style={styles.moreItemsNote}>
+                  <Text style={styles.moreItemsText}>
+                    +{limits.length - 5} more limit{limits.length - 5 > 1 ? 's' : ''} • View Activity to see all
                   </Text>
                 </View>
-              </View>
-              <View style={styles.deviceActions}>
-                <TouchableOpacity 
-                  style={[styles.actionBtn, device.status === 'Locked' && styles.actionBtnDisabled]} 
-                  disabled={device.status === 'Locked'}
-                  onPress={() => console.log('Lock ' + device.name)}
-                >
-                  <Text style={[styles.actionBtnText, device.status === 'Locked' && styles.actionBtnTextDisabled]}>{dashboardLabels.lockNow}</Text>
-                </TouchableOpacity>
-                <TouchableOpacity 
-                  style={[styles.actionBtn, device.status === 'Active' && styles.actionBtnDisabled]} 
-                  disabled={device.status === 'Active'}
-                  onPress={() => navigation.navigate('ConfirmOverrideScreen')}
-                >
-                  <Text style={[styles.actionBtnText, device.status === 'Active' && styles.actionBtnTextDisabled]}>{dashboardLabels.unlock}</Text>
-                </TouchableOpacity>
-              </View>
+              )}
+            </ScrollView>
+          )}
+        </View>
+
+        {/* ===== QUICK ACTIONS ===== */}
+        <View style={styles.section}>
+          <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('ActivityScreen')}>
+            <BarChart2 size={24} color="#4F46E5" />
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>View Activity</Text>
+              <Text style={styles.actionDesc}>See usage breakdown</Text>
             </View>
-          ))}
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('ControlPlansScreen')}
+          >
+            <Smartphone size={24} color="#4F46E5" />
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>Manage Devices</Text>
+              <Text style={styles.actionDesc}>Configure your devices</Text>
+            </View>
+          </TouchableOpacity>
+
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('SubscriptionPlansScreen')}
+          >
+            <PlusIcon size={24} color="#4F46E5" />
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>Upgrade Plan</Text>
+              <Text style={styles.actionDesc}>Get more overrides</Text>
+            </View>
+          </TouchableOpacity>
         </View>
       </ScrollView>
 
+      {/* ===== BOTTOM NAV ===== */}
       <View style={styles.bottomNav}>
         <TouchableOpacity style={styles.navItem}>
           <Home size={22} color="#4F46E5" />
-          <Text style={[styles.navLabel, styles.activeNavText]}>{dashboardLabels.navHome}</Text>
+          <Text style={styles.navLabel}>Home</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.navItem}
-          onPress={() => navigation.navigate('AnalyticsScreen')}
-        >
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('AnalyticsScreen')}>
           <BarChart2 size={22} color="#94A3B8" />
-          <Text style={styles.navLabel}>{dashboardLabels.navUsage}</Text>
+          <Text style={[styles.navLabel, styles.inactiveLabel]}>Analytics</Text>
         </TouchableOpacity>
-        <TouchableOpacity 
-          style={styles.navItem}
-          onPress={() => navigation.navigate('SettingsScreen')}
-        >
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('SettingsScreen')}>
           <SettingsIcon size={22} color="#94A3B8" />
-          <Text style={styles.navLabel}>{dashboardLabels.navSettings}</Text>
+          <Text style={[styles.navLabel, styles.inactiveLabel]}>Settings</Text>
         </TouchableOpacity>
       </View>
     </SafeAreaView>
@@ -200,298 +626,254 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: {
+  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  modalOverlay: {
     flex: 1,
-    backgroundColor: '#F8FAFC',
-  },
-  headerContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
     paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 10,
-    paddingBottom: 15,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
   },
-  logoText: {
-    fontSize: 24,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  proBadge: {
-    backgroundColor: '#EEF2FF',
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#C7D2FE',
-  },
-  proBadgeText: {
-    color: '#4F46E5',
-    fontWeight: '700',
-    fontSize: 12,
-  },
-  addButton: {
-    backgroundColor: '#0F172A',
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  addButtonText: {
-    color: '#FFFFFF',
-    fontSize: 20,
-    fontWeight: '600',
-    lineHeight: 22,
-  },
-  scrollContent: {
-    padding: 20,
-    paddingBottom: 40,
-  },
-  overrideTracker: {
-    backgroundColor: '#FEF2F2',
-    padding: 12,
-    borderRadius: 12,
-    marginBottom: 20,
-    borderWidth: 1,
-    borderColor: '#FECACA',
-  },
-  overrideText: {
-    color: '#991B1B',
-    fontSize: 14,
-    fontWeight: '500',
-    textAlign: 'center',
-  },
-  overrideBold: {
-    fontWeight: '800',
-  },
-  timeCard: {
-    backgroundColor: '#4F46E5',
-    padding: 24,
-    borderRadius: 24,
-    alignItems: 'center',
-    marginBottom: 24,
-    shadowColor: '#4F46E5',
-    shadowOffset: { width: 0, height: 8 },
-    shadowOpacity: 0.25,
-    shadowRadius: 12,
-    elevation: 8,
-  },
-  timeLabel: {
-    color: '#E0E7FF',
-    fontSize: 14,
-    fontWeight: '600',
-    marginBottom: 8,
-    textAlign: 'center',
-  },
-  timeValue: {
-    color: '#FFFFFF',
-    fontSize: 48,
-    fontWeight: '800',
-  },
-  categoriesSection: {
-    marginBottom: 20,
-  },
-  sectionTitle: {
-    fontSize: 18,
-    fontWeight: '700',
-    color: '#1E293B',
-    marginBottom: 12,
-  },
-  categoryCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 20,
-    padding: 16,
-    shadowColor: '#94A3B8',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.1,
-    shadowRadius: 8,
-    elevation: 3,
-  },
-  categoryRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#F1F5F9',
-  },
-  lastRow: {
-    borderBottomWidth: 0,
-  },
-  categoryIcon: {
-    width: 40,
-    height: 40,
-    borderRadius: 12,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginRight: 12,
-  },
-  iconEmoji: {
-    fontSize: 20,
-  },
-  categoryInfo: {
-    flex: 1,
-  },
-  categoryName: {
-    fontSize: 15,
-    fontWeight: '600',
-    color: '#334155',
-  },
-  categoryTime: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  viewDetailsBtn: {
-    marginTop: 16,
-    alignItems: 'center',
-    paddingVertical: 12,
-  },
-  viewDetailsText: {
-    color: '#4F46E5',
-    fontWeight: '700',
-    fontSize: 15,
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    justifyContent: 'space-between',
-    paddingBottom: 24, // Safe area padding
-  },
-  navItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  navIcon: {
-    fontSize: 20,
-    marginBottom: 4,
-    color: '#94A3B8',
-  },
-  navLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#94A3B8',
-  },
-  activeNavText: {
-    color: '#4F46E5',
-  },
-  devicesSection: {
-    marginTop: 10,
-  },
-  sectionHeaderRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'flex-start',
-    marginBottom: 12,
-  },
-  sectionHeaderLeft: {
-    flex: 1,
-    paddingRight: 10,
-  },
-  sectionSubtitle: {
-    fontSize: 12,
-    color: '#64748B',
-    marginTop: 2,
-    lineHeight: 16,
-  },
-  manageAllText: {
-    color: '#4F46E5',
-    fontWeight: '700',
-    fontSize: 14,
-    marginTop: 2,
-  },
-  infoBanner: {
-    backgroundColor: '#EFF6FF',
-    padding: 12,
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#BFDBFE',
-    marginBottom: 16,
-  },
-  infoBannerText: {
-    color: '#1E3A8A',
-    fontSize: 13,
-    fontWeight: '600',
-    textAlign: 'center',
-  },
-  deviceCard: {
+  modalCard: {
     backgroundColor: '#FFFFFF',
     borderRadius: 16,
     padding: 16,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
     marginBottom: 12,
   },
-  deviceHeader: {
+  modalSubTitle: {
+    color: '#334155',
+    fontWeight: '700',
+    marginBottom: 8,
+    marginTop: 4,
+  },
+  selectorRow: {
     flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  selectorBtn: {
+    flex: 1,
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    paddingVertical: 9,
     alignItems: 'center',
-    marginBottom: 16,
-  },
-  deviceIconBox: {
-    marginRight: 12,
-  },
-  deviceName: {
-    flex: 1,
-    fontSize: 16,
-    fontWeight: '700',
-    color: '#1E293B',
-  },
-  statusBadge: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
-  },
-  statusActive: {
-    backgroundColor: '#DCFCE7',
-  },
-  statusLocked: {
-    backgroundColor: '#F1F5F9',
-  },
-  statusTextActive: {
-    color: '#166534',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  statusTextLocked: {
-    color: '#64748B',
-    fontSize: 12,
-    fontWeight: '700',
-  },
-  deviceActions: {
-    flexDirection: 'row',
-    gap: 12,
-  },
-  actionBtn: {
-    flex: 1,
     backgroundColor: '#F8FAFC',
+  },
+  selectorBtnActive: {
+    borderColor: '#4F46E5',
+    backgroundColor: '#EEF2FF',
+  },
+  selectorBtnText: {
+    color: '#475569',
+    fontWeight: '600',
+    fontSize: 12,
+  },
+  selectorBtnTextActive: {
+    color: '#3730A3',
+  },
+  suggestionList: {
+    maxHeight: 140,
+    marginBottom: 10,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    borderRadius: 10,
+    backgroundColor: '#FFFFFF',
+  },
+  suggestionItem: {
     paddingVertical: 10,
-    borderRadius: 8,
-    alignItems: 'center',
+    paddingHorizontal: 12,
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
   },
-  actionBtnDisabled: {
-    backgroundColor: '#F1F5F9',
-    borderColor: '#F1F5F9',
+  suggestionText: {
+    color: '#0F172A',
+    fontSize: 12,
   },
-  actionBtnText: {
-    color: '#334155',
-    fontSize: 14,
+  suggestionSubtext: {
+    color: '#94A3B8',
+    fontSize: 11,
+    marginTop: 2,
+  },
+  loadingAppsText: {
+    color: '#64748B',
+    fontSize: 13,
+    textAlign: 'center',
+    padding: 12,
     fontWeight: '600',
   },
-  actionBtnTextDisabled: {
+  emptyAppsText: {
     color: '#94A3B8',
+    fontSize: 12,
+    textAlign: 'center',
+    paddingVertical: 12,
   },
+  categoryWrap: {
+    flexDirection: 'row',
+    flexWrap: 'wrap',
+    gap: 8,
+    marginBottom: 10,
+  },
+  categoryChip: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 999,
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    backgroundColor: '#F8FAFC',
+  },
+  categoryChipActive: {
+    borderColor: '#4F46E5',
+    backgroundColor: '#EEF2FF',
+  },
+  categoryChipText: {
+    color: '#475569',
+    fontSize: 12,
+    fontWeight: '600',
+  },
+  categoryChipTextActive: {
+    color: '#3730A3',
+  },
+  timeRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 10,
+  },
+  timeBox: {
+    flex: 1,
+  },
+  timeLabel: {
+    color: '#64748B',
+    fontSize: 11,
+    marginBottom: 4,
+    fontWeight: '700',
+  },
+  timeInput: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    paddingHorizontal: 10,
+    paddingVertical: 8,
+    backgroundColor: '#F8FAFC',
+    color: '#0F172A',
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: Platform.OS === 'ios' ? 12 : 10,
+    fontSize: 14,
+    color: '#0F172A',
+    marginBottom: 10,
+    backgroundColor: '#F8FAFC',
+  },
+  readonlyTargetBox: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    marginBottom: 10,
+    backgroundColor: '#F1F5F9',
+  },
+  readonlyTargetText: {
+    color: '#0F172A',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    marginTop: 4,
+  },
+  modalButton: {
+    paddingHorizontal: 14,
+    paddingVertical: 10,
+    borderRadius: 10,
+    marginLeft: 8,
+  },
+  modalCancel: {
+    backgroundColor: '#E2E8F0',
+  },
+  modalCreate: {
+    backgroundColor: '#4F46E5',
+  },
+  modalCancelText: {
+    color: '#334155',
+    fontWeight: '700',
+  },
+  modalCreateText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  loadingText: { marginTop: 12, color: '#64748B', fontSize: 14 },
+  scrollContent: { paddingBottom: 100 },
+  header: { backgroundColor: '#FFFFFF', padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  logoText: { fontSize: 28, fontWeight: '800', color: '#0F172A' },
+  subtitle: { fontSize: 12, color: '#64748B', marginTop: 2 },
+  settingsBtn: { padding: 8 },
+  statsContainer: { flexDirection: 'row', padding: 20, gap: 12 },
+  statCard: { flex: 1, backgroundColor: '#FFFFFF', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center' },
+  statLabel: { fontSize: 11, color: '#94A3B8', fontWeight: '600' },
+  statValue: { fontSize: 18, fontWeight: '700', color: '#0F172A', marginTop: 4 },
+  section: { padding: 20 },
+  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
+  limitsScrollWrap: {
+    maxHeight: 320,
+  },
+  limitsScrollContent: {
+    paddingRight: 6,
+  },
+  moreItemsNote: {
+    backgroundColor: '#EEF2FF',
+    borderLeftWidth: 4,
+    borderLeftColor: '#4F46E5',
+    padding: 12,
+    borderRadius: 8,
+    marginTop: 8,
+  },
+  moreItemsText: {
+    color: '#3730A3',
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  emptyState: { alignItems: 'center', paddingVertical: 40, backgroundColor: '#FFFFFF', borderRadius: 12 },
+  emptyText: { marginTop: 12, color: '#64748B', fontSize: 14, fontWeight: '500' },
+  createBtn: { marginTop: 16, backgroundColor: '#4F46E5', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
+  createBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+  limitCard: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0' },
+  limitInfo: { marginBottom: 12 },
+  limitName: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
+  limitStats: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+  limitStat: { fontSize: 13, color: '#64748B', fontWeight: '500' },
+  statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
+  statusActive: { backgroundColor: '#DCFCE7' },
+  statusBlocked: { backgroundColor: '#FEE2E2' },
+  statusText: { fontSize: 11, fontWeight: '700' },
+  statusActiveText: { color: '#166534' },
+  statusBlockedText: { color: '#991B1B' },
+  progressContainer: { height: 8, backgroundColor: '#E2E8F0', borderRadius: 4, overflow: 'hidden', marginBottom: 12 },
+  progressBar: { height: '100%', backgroundColor: '#10B981', borderRadius: 4 },
+  progressBarBlocked: { backgroundColor: '#EF4444' },
+  overrideBtn: { backgroundColor: '#F59E0B', paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+  overrideBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
+  simulateBtn: { backgroundColor: '#0EA5E9', paddingVertical: 10, borderRadius: 8, alignItems: 'center', marginTop: 8 },
+  simulateBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
+  actionCard: { backgroundColor: '#FFFFFF', padding: 14, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
+  actionContent: { marginLeft: 12, flex: 1 },
+  actionTitle: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
+  actionDesc: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
+  bottomNav: { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingVertical: 12, paddingHorizontal: 24, borderTopWidth: 1, borderTopColor: '#E2E8F0', justifyContent: 'space-around', position: 'absolute', bottom: 0, left: 0, right: 0 },
+  navItem: { alignItems: 'center', justifyContent: 'center' },
+  navLabel: { fontSize: 11, fontWeight: '600', color: '#4F46E5', marginTop: 4 },
+  inactiveLabel: { color: '#94A3B8' },
 });
+
+const Plus = PlusIcon;

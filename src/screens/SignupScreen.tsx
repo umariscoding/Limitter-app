@@ -55,47 +55,28 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
 
     setIsLoading(true);
 
-    try {
-      const response = await signupAPI(email.trim(), password);
-      console.log('Signup API response:', response);
+  try {
+  const response = await signupAPI(email.trim(), password, confirmPassword);
+  console.log('Signup API response:', response);
 
-      if (!response) {
-        setError('No response from signup API');
-        return;
-      }
+  if (!response) {
+    setError('No response from signup API');
+    return;
+  }
 
-      const isSuccess =
-        response?.success === true ||
-        response?.status === 'success' ||
-        response?.statusCode === 200 ||
-        /success|created|registered/i.test(response?.message || '');
+  if (!response.success) {
+    setError(response.message || 'Signup failed');
+    return;
+  }
 
-      if (!isSuccess) {
-        setError(response?.message || 'Signup failed (API test)');
-        Alert.alert('Signup API Result', JSON.stringify(response, null, 2));
-        return;
-      }
-
-      // Show Success Toast
-      setShowToast(true);
-
-      // Provide some feedback to the app logic if needed
-      if (onSignup) {
-        onSignup(email, password);
-      }
-
-      Alert.alert('Signup API Result', JSON.stringify(response, null, 2));
-
-      // Auto navigate to login after 1.5s
-      setTimeout(() => {
-        navigation.navigate('Login');
-      }, 1500);
-    } catch (apiError: any) {
-      console.error('Signup API test error:', apiError);
-      setError(apiError?.message || 'Signup request failed');
-    } finally {
-      setIsLoading(false);
-    }
+  setShowToast(true);
+  navigation.navigate('Login'); // auto navigate after success
+} catch (apiError: unknown) {
+  console.error(apiError);
+  const errorMessage =
+    apiError instanceof Error ? apiError.message : 'Signup request failed';
+  setError(errorMessage);
+}
   };
 
   return (

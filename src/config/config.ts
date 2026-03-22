@@ -1,7 +1,15 @@
-import { LogIn } from "lucide-react-native"
+export const BASE_URL = 'https://nonremediably-nonbearded-miguel.ngrok-free.dev';
 
-export const BASE_URL='http://localhost:3000'//isko bad main cvhange kar  sakta hun
-export const  API={
-    LogIn:"/api/login",
-    SIGNUP:"/api/signup"
-}
+export const API = {
+  // Auth
+  LogIn: '/api/auth/login',
+  SIGNUP: '/api/auth/signup',
+  Logout: '/api/auth/logout',
+  
+  // Limits
+  CreateLimit: '/api/limits/create',
+  UpdateUsage: '/api/limits/update-usage',
+  Override: '/api/limits/override',
+  GetLimits: '/api/limits/:user_id/:device_id',
+  DeleteLimit: '/api/limits/:limit_id',
+};

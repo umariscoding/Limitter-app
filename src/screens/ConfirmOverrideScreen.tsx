@@ -4,14 +4,14 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   Platform,
   ScrollView,
   Alert,
   ActivityIndicator,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { SafeAreaView } from 'react-native-safe-area-context';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { 
   ChevronLeft, 
   ShieldOff, 
@@ -38,9 +38,15 @@ import {
   activeNudgeContext,
   overrideLabels
 } from '../data/appData';
+import { useUser } from '../context/UserContext';
+import { useOverrideAPI } from '../services/limitService';
 
 export default function ConfirmOverrideScreen() {
   const navigation = useNavigation<any>();
+  const route = useRoute<any>();
+  const { user, updateUser } = useUser();
+  const limitId = route?.params?.limitId;
+  const deviceId = 'device_001';
   
   // Use the requested logic but can fallback safely
   const currentPlan = (userProfile.plan || "Pro") as keyof typeof overrideTierLogic;
@@ -73,29 +79,42 @@ export default function ConfirmOverrideScreen() {
   };
 
   // STEP 3 — CONFIRM & UNLOCK BUTTON logic
-  const handleConfirm = () => {
+  const handleConfirm = async () => {
+    if (!user?.uid) {
+      Alert.alert('Error', 'User not logged in');
+      return;
+    }
+
+    if (!limitId) {
+      Alert.alert('Error', 'Missing limit id for override');
+      return;
+    }
+
     setIsLoading(true);
-    setTimeout(() => {
-      setIsLoading(false);
-      if (tierData.isFree) {
-        // simulation
-        const remaining = typeof tierData.remainingOverrides === 'number' 
-          ? tierData.remainingOverrides - 1 
-          : tierData.remainingOverrides;
-        
-        Alert.alert(
-          overrideLabels.alertUnlockedTitle, 
-          `${overrideLabels.alertCreditUsed}${remaining}`,
-          [{ text: "OK", onPress: () => navigation.goBack() }]
-        );
-      } else {
-        Alert.alert(
-          overrideLabels.alertPaymentSuccessTitle, 
-          overrideLabels.alertPaymentProcessed,
-          [{ text: "OK", onPress: () => navigation.goBack() }]
-        );
+    try {
+      const response = await useOverrideAPI(user.uid, deviceId, limitId);
+
+      if (!response?.success) {
+        Alert.alert('Error', response?.message || 'Override failed');
+        return;
       }
-    }, 2000);
+
+      const remaining = response?.data?.overrides_left;
+      if (typeof remaining === 'number') {
+        updateUser({ overrides_left: remaining });
+      }
+
+      Alert.alert(
+        overrideLabels.alertUnlockedTitle,
+        response?.data?.message || 'Override applied successfully',
+        [{ text: 'OK', onPress: () => navigation.goBack() }]
+      );
+    } catch (error) {
+      console.error('Override error:', error);
+      Alert.alert('Error', 'Failed to use override');
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (

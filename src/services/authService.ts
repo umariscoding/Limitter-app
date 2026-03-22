@@ -19,5 +19,5 @@ export const signupService = async (email: string, password: string, name: strin
     body: JSON.stringify({ email, password, name }),
   });
 
-  return res.json();
+  return  await res.json();
 };

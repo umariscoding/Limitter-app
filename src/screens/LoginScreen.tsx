@@ -5,14 +5,15 @@ import {
   Text,
   Alert,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   KeyboardAvoidingView,
   Platform,
   ScrollView,
   Keyboard,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { useUser } from '../context/UserContext';
 import { BaseButton, TextInput, Toast } from '../../components';
 import { Shield } from 'lucide-react-native';
 
@@ -28,6 +29,7 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
   onForgotPassword,
 }) => {
   const navigation = useNavigation<any>();
+  const { login: loginUser } = useUser();
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
@@ -42,33 +44,37 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
       return;
     }
     
-    // Dismiss keyboard instantly
     Keyboard.dismiss();
-
     setIsLoading(true);
 
     try {
       const response = await loginAPI(email.trim(), password);
-      console.log('Login API response:', response);
+      console.log('✅ Login API response:', response);
 
       if (!response) {
-        setError('No response from login API');
+        setError('❌ No response from backend - server may be down');
+        console.error('No response received');
         return;
       }
 
-      const isSuccess =
-        response?.success === true ||
-        response?.status === 'success' ||
-        response?.statusCode === 200 ||
-        response?.token ||
-        /success|logged|authenticated/i.test(response?.message || '');
-
-      Alert.alert('Login API Result', JSON.stringify(response, null, 2));
+      const isSuccess = response?.success === true || response?.data;
 
       if (!isSuccess) {
-        setError(response?.message || 'Login failed (API test)');
+        setError(response?.message || 'Login failed - check credentials');
+        console.warn('Login failed:', response?.message);
         return;
       }
+
+      // ✅ Save user data to context
+      const userData = response.data || response;
+      loginUser({
+        uid: userData.uid,
+        email: userData.email,
+        name: userData.name || 'User',
+        plan: userData.plan || 'free',
+        overrides_left: userData.overrides_left || 3,
+        idToken: userData.idToken,
+      });
 
       setShowToast(true);
 
@@ -83,8 +89,32 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
         });
       }, 700);
     } catch (apiError: any) {
-      console.error('Login API test error:', apiError);
-      setError(apiError?.message || 'Login request failed');
+      console.error('❌ Login catch error:', apiError);
+      console.error('❌ Error type:', apiError?.constructor?.name);
+      console.error('❌ Error message:', apiError?.message);
+      
+      const errorMsg = apiError?.message || 'Login request failed';
+      
+      let displayError = errorMsg;
+      
+      if (errorMsg.includes('JSON')) {
+        displayError = '⚠️ Backend Error: Backend is not returning valid JSON.\n\nCheck:\n1. Is backend running?\n2. Is ngrok tunnel active?\n3. Are there backend errors?';
+      } else if (errorMsg.includes('Network')) {
+        displayError = '🌐 Network Error:\n\nCheck:\n1. Is backend running? (node index.js)\n2. Is ngrok active? (ngrok http 3000)\n3. Is ngrok URL correct in config.ts?';
+      } else if (errorMsg.includes('timeout')) {
+        displayError = '⏱️ Timeout: Backend not responding\n\nStart backend:\nnode index.js';
+      } else if (errorMsg.includes('HTTP 5')) {
+        displayError = '💥 Server Error 5xx\n\nBackend crashed. Check backend logs';
+      } else if (errorMsg.includes('HTTP 401') || errorMsg.includes('unauthorized')) {
+        displayError = '🔐 Wrong credentials\n\nCheck email and password';
+      } else if (errorMsg.includes('HTTP 404')) {
+        displayError = '❌ Backend not found (404)\n\nCheck:\n1. Backend running?\n2. ngrok URL correct?';
+      }
+      
+      setError(displayError);
+      console.error('Final error shown to user:', displayError);
+      
+      Alert.alert('❌ Login Failed', displayError);
     } finally {
       setIsLoading(false);
     }
