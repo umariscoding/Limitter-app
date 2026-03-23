@@ -11,3 +11,4 @@ export { default as OverrideLogsScreen } from './OverrideLogsScreen';
 export { default as SubscriptionPlansScreen } from './SubscriptionPlansScreen';
 export { default as AnalyticsScreen } from './AnalyticsScreen';
 export { default as ConfirmOverrideScreen } from './ConfirmOverrideScreen';
+export { default as DailyLimitsGraphScreen } from './DailyLimitsGraphScreen';

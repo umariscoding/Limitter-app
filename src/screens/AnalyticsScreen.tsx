@@ -1,189 +1,154 @@
-import React, { useState, useEffect, useMemo, memo } from 'react';
-import {
-  View,
-  Text,
-  StyleSheet,
-  TouchableOpacity,
-  ScrollView,
-  SafeAreaView,
-  StatusBar,
-  Dimensions,
-  Platform,
-} from 'react-native';
+import React from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, Platform, ScrollView } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { 
-  Bell, 
-  ChevronLeft, 
-  AlertTriangle, 
-  Instagram, 
-  Gamepad2, 
-  Youtube, 
-  BookOpen, 
-  BellRing,
-  Home,
-  BarChart2,
-  Settings as SettingsIcon
-} from 'lucide-react-native';
-import { 
-  todayUsage, 
-  hourlyChart, 
-  thresholdAlert, 
-  appBreakdown, 
-  quickInsights,
-  analyticsLabels
-} from '../data/appData';
+import { ChevronLeft } from 'lucide-react-native';
+import { useUser } from '../context/UserContext';
+import { useUsageContext } from '../context/UsageContext';
+import { WeeklyUsageGraph } from '../components/WeeklyUsageGraph';
+import { getLimitsAPI } from '../services/limitService';
+import { getNativeBlockedPackages } from '../services/appBlockerService';
+import { getLimitHistory } from '../services/limitHistoryService';
 
-const { width } = Dimensions.get('window');
+interface BreakdownItem {
+  id: string;
+  name: string;
+  category: string;
+  usedMinutes: number;
+  limitMinutes: number;
+  isBlocked: boolean;
+  timerSetAt: number;
+}
 
-// ─── MEMOIZED SUB-COMPONENTS TO PREVENT UNNECESSARY RE-RENDERS ────────────────
-
-const CountdownTimer = memo(() => {
-  const [timeLeft, setTimeLeft] = useState('');
-
-  useEffect(() => {
-    const update = () => {
-      const now = new Date();
-      const midnight = new Date();
-      midnight.setHours(24, 0, 0, 0);
-      const diff = midnight.getTime() - now.getTime();
-      if (diff <= 0) {
-        setTimeLeft('00:00:00');
-        return;
-      }
-      const hours = Math.floor((diff / (1000 * 60 * 60)) % 24);
-      const minutes = Math.floor((diff / (1000 * 60)) % 60);
-      const seconds = Math.floor((diff / 1000) % 60);
-      const format = (num: number) => num.toString().padStart(2, '0');
-      setTimeLeft(`${format(hours)}:${format(minutes)}:${format(seconds)}`);
-    };
-    update();
-    const timer = setInterval(update, 1000);
-    return () => clearInterval(timer);
-  }, []);
-
-  return (
-    <View style={styles.countdownContainer}>
-      <Text style={styles.countdownLabel}>{String(analyticsLabels.resetsIn)}</Text>
-      <Text style={styles.countdownValue}>{String(timeLeft || '00:00:00')}</Text>
-    </View>
-  );
-});
-
-const HourlyActivityChart = memo(({ data }: { data: typeof hourlyChart }) => (
-  <View style={styles.chartSection}>
-    <Text style={styles.sectionTitle}>{String(analyticsLabels.hourlyActivity)}</Text>
-    <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.chartScroll}>
-      <View style={styles.chartContainer}>
-        {data.map((item, index) => {
-          const barHeight = (item.minutes / 70) * 120;
-          return (
-            <View key={index} style={styles.barWrapper}>
-              <Text style={styles.barValue}>{String(item.minutes)}m</Text>
-              <View style={styles.barBase}>
-                <View style={[styles.barFill, { height: barHeight }]} />
-              </View>
-              <Text style={styles.barLabel}>{String(item.label)}</Text>
-            </View>
-          );
-        })}
-      </View>
-    </ScrollView>
-  </View>
-));
-
-const AppBreakdownList = memo(({ 
-  data, 
-  onNavigate 
-}: { 
-  data: typeof appBreakdown; 
-  onNavigate: () => void 
-}) => {
-  const formatTime = (mins: number) => {
-    if (mins < 60) return `${mins}m`;
-    return `${Math.floor(mins / 60)}h ${mins % 60}m`;
-  };
-
-  return (
-    <View style={styles.breakdownSection}>
-      <View style={styles.sectionHeader}>
-        <Text style={styles.sectionTitle}>{String(analyticsLabels.appBreakdown)}</Text>
-        <TouchableOpacity onPress={onNavigate}>
-          <Text style={styles.viewAllText}>{String(analyticsLabels.viewAllLink)}</Text>
-        </TouchableOpacity>
-      </View>
-      {data.map((item) => {
-        const itemPct = (item.usedMinutes / item.limitMinutes) * 100;
-        let barColor = '#10B981';
-        let badgeText = '';
-        if (itemPct >= 90) {
-          barColor = '#EF4444';
-          badgeText = 'Critical Threshold Reached';
-        } else if (itemPct >= 75) {
-          barColor = '#F59E0B';
-          badgeText = 'Approaching Daily Limit';
-        }
-        const IconComponent = 
-          item.icon === 'instagram' ? Instagram :
-          item.icon === 'gamepad-2' ? Gamepad2 :
-          item.icon === 'youtube' ? Youtube :
-          item.icon === 'book-open' ? BookOpen : AlertTriangle;
-
-        return (
-          <View key={item.id} style={styles.appCard}>
-            <View style={styles.appTopRow}>
-              <View style={[styles.iconCircle, { backgroundColor: item.color + '20' }]}>
-                <IconComponent size={20} color={item.color} />
-              </View>
-              <View style={styles.appNameContainer}>
-                <Text style={styles.appName}>{String(item.name)}</Text>
-                <Text style={styles.appCategory}>{String(item.category)}</Text>
-              </View>
-              <Text style={styles.appTimeUsed}>{String(formatTime(item.usedMinutes))}</Text>
-            </View>
-            <View style={styles.appProgressContainer}>
-              <View style={styles.appProgressBarBackground}>
-                <View style={[styles.appProgressBarFill, { width: `${Math.min(itemPct, 100)}%`, backgroundColor: barColor }]} />
-                <View style={styles.criticalMarker} />
-              </View>
-            </View>
-            {!!badgeText && (
-              <View style={[styles.warningBadge, { backgroundColor: itemPct >= 90 ? '#FEE2E2' : '#FEF9C3' }]}>
-                <Text style={[styles.warningText, { color: itemPct >= 90 ? '#DC2626' : '#CA8A04' }]}>{String(badgeText)}</Text>
-              </View>
-            )}
-            <View style={styles.appBottomRow}>
-              <Text style={styles.mutedText}>{String(formatTime(item.usedMinutes))} used</Text>
-              <Text style={styles.mutedText}>{String(formatTime(item.limitMinutes))} limit</Text>
-            </View>
-          </View>
-        );
-      })}
-      <TouchableOpacity style={styles.viewAllButton} onPress={onNavigate}>
-        <Text style={styles.viewAllButtonText}>{String(analyticsLabels.viewAllButton)}</Text>
-      </TouchableOpacity>
-    </View>
-  );
-});
-
-// ─── MAIN SCREEN ─────────────────────────────────────────────────────────────
+const formatMinutes = (mins: number) => {
+  const safe = Math.max(0, Number(mins || 0));
+  const h = Math.floor(safe / 60);
+  const m = safe % 60;
+  return `${h}h ${m}m`;
+};
 
 export default function AnalyticsScreen() {
   const navigation = useNavigation<any>();
-  const [isReady, setIsReady] = useState(false);
+  const { user } = useUser();
+  const { weeklyUsage, isLoadingWeekly, weeklyError, refetchWeeklyUsage, isRefreshing, currentDeviceId } = useUsageContext();
+  const [breakdown, setBreakdown] = React.useState<BreakdownItem[]>([]);
 
-  useEffect(() => {
-    // Small delay to ensure navigation transition completes before rendering heavy UI
-    const timer = setTimeout(() => setIsReady(true), 50);
-    return () => clearTimeout(timer);
+  const getLimitPackageKey = React.useCallback((item: any) => {
+    return String(item?.app_name || item?.package_name || item?.packageName || '')
+      .trim()
+      .toLowerCase();
   }, []);
 
-  const pct = useMemo(() => (todayUsage.usedMinutes / todayUsage.limitMinutes) * 100, []);
-  
-  const progressBarColor = useMemo(() => {
-    if (pct > 90) return '#EF4444';
-    if (pct >= 75) return '#F59E0B';
-    return '#10B981';
-  }, [pct]);
+  const fetchBreakdown = React.useCallback(async () => {
+    if (!user?.uid || !currentDeviceId) {
+      setBreakdown([]);
+      return;
+    }
+
+    try {
+      const response = await getLimitsAPI(user.uid, currentDeviceId);
+      const rows = Array.isArray(response?.data) ? response.data : [];
+
+      const history = await getLimitHistory();
+      const latestHistoryByPackage = new Map<string, { type: 'blocked' | 'override'; timestamp: number }>();
+      history.forEach(entry => {
+        const key = String(entry.packageName || '').trim().toLowerCase();
+        if (!key) return;
+
+        const current = latestHistoryByPackage.get(key);
+        const ts = Number(entry.timestamp || 0);
+        if (!current || ts > current.timestamp) {
+          latestHistoryByPackage.set(key, {
+            type: entry.type,
+            timestamp: ts,
+          });
+        }
+      });
+
+      const nativeBlockedPackages = await getNativeBlockedPackages();
+
+      const normalized: BreakdownItem[] = rows
+        .map((row: any, idx: number) => {
+          const appName = String(row?.app_name || row?.package_name || row?.packageName || '').trim();
+          if (!appName) return null;
+
+          const packageKey = getLimitPackageKey(row);
+
+          const usedMinutes = Math.max(0, Number(row?.time_used_minutes ?? row?.used_minutes ?? 0));
+          const limitMinutes = Math.max(0, Number(row?.max_time_minutes ?? row?.limit_minutes ?? 0));
+          const blockedRaw = row?.is_blocked;
+          const statusText = String(row?.status_text || row?.status || '').toLowerCase();
+          const isBlocked =
+            typeof blockedRaw === 'boolean'
+              ? blockedRaw
+              : statusText.includes('block') || statusText.includes('blocked');
+
+          // Keep app ACTIVE until it actually reaches timer limit.
+          const blockedByUsage = limitMinutes > 0 && usedMinutes >= limitMinutes;
+          const blockedUntil = Number(row?.blocked_until_timestamp || 0);
+          const blockedByUntil = blockedUntil > Date.now();
+          const blockedByNative = packageKey ? nativeBlockedPackages.has(packageKey) : false;
+
+          const latest = packageKey ? latestHistoryByPackage.get(packageKey) : undefined;
+          const blockedByHistory = latest?.type === 'blocked';
+          const overriddenByHistory = latest?.type === 'override';
+
+          // Final status priority:
+          // 1) Native blocked / blocked-until / timer reached => blocked
+          // 2) Latest override only unblocks when none of the hard block states above are true
+          let resolvedBlocked = isBlocked || blockedByUsage || blockedByUntil || blockedByNative || blockedByHistory;
+          if (overriddenByHistory && !blockedByUsage && !blockedByUntil && !blockedByNative) {
+            resolvedBlocked = false;
+          }
+
+          // Recent timer logic: prefer when timer/limit was created.
+          const timerSetAt = Math.max(
+            Number(new Date(row?.created_at || 0).getTime() || 0),
+            Number(new Date(row?.updated_at || 0).getTime() || 0)
+          );
+
+          return {
+            id: String(row?.id || row?.limit_id || `${appName}-${idx}`),
+            name: appName,
+            category: String(row?.category || row?.category_name || 'General').trim(),
+            usedMinutes,
+            limitMinutes,
+            isBlocked: resolvedBlocked,
+            timerSetAt,
+          } as BreakdownItem;
+        })
+        .filter((item: BreakdownItem | null): item is BreakdownItem => !!item);
+
+      // Deduplicate per app and keep latest timer-set entry for that app.
+      const latestByApp = new Map<string, BreakdownItem>();
+      normalized.forEach((item: BreakdownItem) => {
+        const key = item.name.trim().toLowerCase();
+        const existing = latestByApp.get(key);
+        if (!existing || item.timerSetAt > existing.timerSetAt) {
+          latestByApp.set(key, item);
+        }
+      });
+
+      const mapped = Array.from(latestByApp.values())
+        .sort((a: BreakdownItem, b: BreakdownItem) => {
+          if (b.timerSetAt !== a.timerSetAt) return b.timerSetAt - a.timerSetAt;
+          return b.limitMinutes - a.limitMinutes;
+        })
+        .slice(0, 6);
+
+      setBreakdown(mapped);
+    } catch (error) {
+      console.error('❌ Analytics breakdown fetch failed:', error);
+      setBreakdown([]);
+    }
+  }, [user?.uid, currentDeviceId]);
+
+  React.useEffect(() => {
+    void fetchBreakdown();
+  }, [fetchBreakdown]);
+
+  const onRefreshAll = React.useCallback(async () => {
+    await Promise.all([refetchWeeklyUsage(true), fetchBreakdown()]);
+  }, [refetchWeeklyUsage, fetchBreakdown]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -192,169 +157,186 @@ export default function AnalyticsScreen() {
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
           <ChevronLeft size={24} color="#0F172A" />
         </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>{String(analyticsLabels.headerTitle)}</Text>
-          <Text style={styles.headerSubtitle}>{String(analyticsLabels.headerSubtitle)}</Text>
-        </View>
-        <View style={{ width: 40 }} />
+        <Text style={styles.headerTitle}>Analytics</Text>
+        <View style={styles.rightSpace} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-        {!isReady ? (
-          <View style={{ height: 300, justifyContent: 'center', alignItems: 'center' }}>
-            {/* Optional: Add a subtle loading indicator or just empty space for a split second */}
-          </View>
-        ) : (
-          <>
-            {/* Today's Usage Section */}
-            <View style={styles.usageCard}>
-              <Text style={styles.usageTime}>{String(todayUsage.totalTime)}</Text>
-              <Text style={styles.usageLabel}>{String(analyticsLabels.usageLabel)}</Text>
-              <Text style={styles.limitLabel}>{String(analyticsLabels.limitLabel)}{String(todayUsage.dailyLimitLabel)}</Text>
-              <View style={styles.progressContainer}>
-                <View style={styles.progressBarBackground}>
-                  <View style={[styles.progressBarFill, { width: `${Math.min(pct, 100)}%`, backgroundColor: progressBarColor }]} />
-                </View>
-              </View>
-              <CountdownTimer />
+      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+        <WeeklyUsageGraph
+          title="My Activity - 7 Day Usage"
+          data={weeklyUsage}
+          isLoading={isLoadingWeekly || isRefreshing}
+          error={weeklyError}
+          onRefresh={() => {
+            void onRefreshAll();
+          }}
+        />
+
+        <View style={styles.breakdownSection}>
+          <Text style={styles.breakdownTitle}>App Breakdown (Recent Timers)</Text>
+          {breakdown.length === 0 ? (
+            <View style={styles.breakdownCard}>
+              <Text style={styles.emptyText}>No app usage breakdown available yet.</Text>
             </View>
-
-            <HourlyActivityChart data={hourlyChart} />
-
-            {/* Alert Section */}
-            <View style={styles.alertBox}>
-              <View style={styles.alertHeader}>
-                <Bell size={20} color="#F59E0B" style={styles.alertIcon} />
-                <View style={styles.alertTextContainer}>
-                  <Text style={styles.alertMessage}>{String(thresholdAlert.message)}</Text>
-                  <Text style={styles.alertSubtext}>{String("You will receive a push notification at each threshold.")}</Text>
-                </View>
-              </View>
-            </View>
-
-            <AppBreakdownList 
-              data={appBreakdown} 
-              onNavigate={() => navigation.navigate('AddContentScreen')} 
-            />
-
-            {/* Quick Insights Section */}
-            <View style={styles.insightsSection}>
-              <Text style={styles.sectionTitle}>{String(analyticsLabels.quickInsights)}</Text>
-              <View style={styles.insightsRow}>
-                <View style={styles.insightWidget1}>
-                  <Gamepad2 size={24} color={String(quickInsights.mostUsedCategory.color)} style={styles.insightIcon} />
-                  <Text style={styles.insightLabel}>{String(analyticsLabels.mostUsedCategory)}</Text>
-                  <Text style={styles.insightValue}>{String(quickInsights.mostUsedCategory.name)}</Text>
-                  <Text style={styles.insightSubtext}>{String(quickInsights.mostUsedCategory.totalTime)}{String(analyticsLabels.todayAt)}</Text>
-                </View>
-                <View style={styles.insightWidget2}>
-                  <BellRing size={24} color="#EF4444" style={styles.insightIcon} />
-                  <Text style={styles.insightLabel}>{String(analyticsLabels.alertsTriggered)}</Text>
-                  <Text style={styles.insightValueRed}>{String(quickInsights.alertsTriggered.count)}</Text>
-                  <Text style={styles.insightSubtext}>{String(quickInsights.alertsTriggered.label)}</Text>
-                </View>
-              </View>
-            </View>
-
-            <View style={{ height: 100 }} />
-          </>
-        )}
+          ) : (
+            <ScrollView
+              style={styles.breakdownScroll}
+              contentContainerStyle={styles.breakdownScrollContent}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator
+            >
+              {breakdown.map(item => {
+                const pct = item.limitMinutes > 0 ? Math.min(100, (item.usedMinutes / item.limitMinutes) * 100) : 0;
+                return (
+                  <View key={item.id} style={styles.breakdownCard}>
+                    <View style={styles.breakdownRow}>
+                      <Text style={styles.appName}>{item.name}</Text>
+                      <View style={[styles.statusBadge, item.isBlocked ? styles.statusBlocked : styles.statusActive]}>
+                        <Text style={[styles.statusText, item.isBlocked ? styles.statusTextBlocked : styles.statusTextActive]}>
+                          {item.isBlocked ? 'Blocked' : 'Active'}
+                        </Text>
+                      </View>
+                    </View>
+                    <View style={styles.breakdownRow}>
+                      <Text style={styles.appCategory}>{item.category}</Text>
+                      <Text style={styles.appTime}>{formatMinutes(item.usedMinutes)}</Text>
+                    </View>
+                    <View style={styles.track}>
+                      <View style={[styles.fill, { width: `${pct}%` }]} />
+                    </View>
+                    <View style={styles.breakdownRow}>
+                      <Text style={styles.metaText}>Used: {formatMinutes(item.usedMinutes)}</Text>
+                      <Text style={styles.metaText}>Limit: {formatMinutes(item.limitMinutes)}</Text>
+                    </View>
+                  </View>
+                );
+              })}
+            </ScrollView>
+          )}
+        </View>
       </ScrollView>
-
-      {/* Bottom Nav Bar */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('DashboardScreen')}>
-          <Home size={22} color="#94A3B8" />
-          <Text style={styles.navLabel}>Home</Text>
-        </TouchableOpacity>
-        <View style={styles.navItem}>
-          <BarChart2 size={22} color="#4F46E5" />
-          <Text style={[styles.navLabel, styles.activeNavText]}>Usage</Text>
-        </View>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('SettingsScreen')}>
-          <SettingsIcon size={22} color="#94A3B8" />
-          <Text style={styles.navLabel}>Settings</Text>
-        </TouchableOpacity>
-      </View>
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    justifyContent: 'space-between', 
-    paddingHorizontal: 16, 
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
     paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
-    paddingBottom: 12, 
-    backgroundColor: '#FFFFFF', 
-    borderBottomWidth: 1, 
-    borderBottomColor: '#F1F5F9' 
+    paddingBottom: 12,
+    backgroundColor: '#FFFFFF',
+    borderBottomWidth: 1,
+    borderBottomColor: '#E2E8F0',
   },
-  backButton: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F1F5F9' },
-  headerTitleContainer: { alignItems: 'center' },
-  headerTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
-  headerSubtitle: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  scrollContent: { padding: 20, paddingBottom: 0 },
-  usageCard: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 24, alignItems: 'center', marginBottom: 24, shadowColor: '#64748B', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.1, shadowRadius: 12, elevation: 4 },
-  usageTime: { fontSize: 48, fontWeight: '800', color: '#0F172A' },
-  usageLabel: { fontSize: 16, fontWeight: '600', color: '#64748B', marginTop: 4 },
-  limitLabel: { fontSize: 14, color: '#94A3B8', marginTop: 8 },
-  progressContainer: { width: '100%', marginTop: 20, marginBottom: 16 },
-  progressBarBackground: { height: 8, width: '100%', backgroundColor: '#F1F5F9', borderRadius: 4, overflow: 'hidden' },
-  progressBarFill: { height: '100%', borderRadius: 4 },
-  countdownContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', paddingHorizontal: 16, paddingVertical: 8, borderRadius: 12 },
-  countdownLabel: { fontSize: 14, fontWeight: '600', color: '#64748B', marginRight: 8 },
-  countdownValue: { fontSize: 16, fontWeight: '700', color: '#4F46E5', fontFamily: Platform.OS === 'ios' ? 'Courier' : 'monospace' },
-  chartSection: { marginBottom: 24 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#1E293B', marginBottom: 16 },
-  chartScroll: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 16, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  chartContainer: { flexDirection: 'row', alignItems: 'flex-end', paddingBottom: 8 },
-  barWrapper: { alignItems: 'center', marginRight: 16, width: 28 },
-  barValue: { fontSize: 10, fontWeight: '600', color: '#64748B', marginBottom: 4 },
-  barBase: { height: 120, width: 28, backgroundColor: '#F8FAFC', borderRadius: 6, justifyContent: 'flex-end', overflow: 'hidden' },
-  barFill: { width: '100%', backgroundColor: '#6366F1', borderRadius: 6 },
-  barLabel: { fontSize: 10, color: '#94A3B8', marginTop: 8, fontWeight: '500' },
-  alertBox: { backgroundColor: '#FFFBEB', borderRadius: 16, borderLeftWidth: 4, borderLeftColor: '#F59E0B', padding: 16, marginBottom: 24 },
-  alertHeader: { flexDirection: 'row' },
-  alertIcon: { marginTop: 2, marginRight: 12 },
-  alertTextContainer: { flex: 1 },
-  alertMessage: { fontSize: 14, fontWeight: '700', color: '#92400E', marginBottom: 4 },
-  alertSubtext: { fontSize: 12, color: '#B45309', lineHeight: 16 },
-  breakdownSection: { marginBottom: 24 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  viewAllText: { fontSize: 14, color: '#4F46E5', fontWeight: '600' },
-  appCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 16, marginBottom: 12, shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.05, shadowRadius: 8, elevation: 2 },
-  appTopRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 12 },
-  iconCircle: { width: 40, height: 40, borderRadius: 20, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
-  appNameContainer: { flex: 1 },
-  appName: { fontSize: 16, fontWeight: '700', color: '#1E293B' },
-  appCategory: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  appTimeUsed: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
-  appProgressContainer: { marginBottom: 12 },
-  appProgressBarBackground: { height: 8, width: '100%', backgroundColor: '#F1F5F9', borderRadius: 4, position: 'relative', overflow: 'hidden' },
-  appProgressBarFill: { height: '100%', borderRadius: 4 },
-  criticalMarker: { position: 'absolute', left: '90%', width: 2, height: 16, backgroundColor: '#EF4444', top: -4 },
-  warningBadge: { alignSelf: 'flex-start', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 6, marginBottom: 10 },
-  warningText: { fontSize: 11, fontWeight: '700' },
-  appBottomRow: { flexDirection: 'row', justifyContent: 'space-between' },
-  mutedText: { fontSize: 11, color: '#94A3B8', fontWeight: '500' },
-  viewAllButton: { width: '100%', paddingVertical: 14, borderRadius: 12, borderWidth: 1, borderColor: '#6366F1', alignItems: 'center', marginTop: 8 },
-  viewAllButtonText: { color: '#6366F1', fontWeight: '700', fontSize: 14 },
-  insightsSection: { marginBottom: 24 },
-  insightsRow: { flexDirection: 'row', gap: 8 },
-  insightWidget1: { flex: 1, backgroundColor: '#FDF2F8', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#FBCFE8' },
-  insightWidget2: { flex: 1, backgroundColor: '#FEF2F2', borderRadius: 12, padding: 14, borderWidth: 1, borderColor: '#FECACA' },
-  insightIcon: { marginBottom: 8 },
-  insightLabel: { fontSize: 12, color: '#64748B', marginBottom: 4, fontWeight: '500' },
-  insightValue: { fontSize: 18, fontWeight: '800', color: '#1E293B', marginBottom: 2 },
-  insightValueRed: { fontSize: 22, fontWeight: '800', color: '#EF4444', marginBottom: 2 },
-  insightSubtext: { fontSize: 11, color: '#64748B', fontWeight: '500' },
-  bottomNav: { position: 'absolute', bottom: 0, left: 0, right: 0, flexDirection: 'row', backgroundColor: '#FFFFFF', paddingVertical: 12, paddingHorizontal: 24, borderTopWidth: 1, borderTopColor: '#E2E8F0', justifyContent: 'space-between', paddingBottom: 24 },
-  navItem: { alignItems: 'center', flex: 1 },
-  navIcon: { fontSize: 20, marginBottom: 4, color: '#94A3B8' },
-  navLabel: { fontSize: 12, fontWeight: '600', color: '#94A3B8' },
-  activeNavText: { color: '#6366F1' },
+  backButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#F1F5F9',
+  },
+  rightSpace: {
+    width: 40,
+    height: 40,
+  },
+  headerTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+  },
+  content: {
+    padding: 16,
+    paddingBottom: 30,
+  },
+  breakdownSection: {
+    marginTop: 16,
+  },
+  breakdownScroll: {
+    maxHeight: 360,
+  },
+  breakdownScrollContent: {
+    paddingBottom: 6,
+  },
+  breakdownTitle: {
+    fontSize: 18,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 10,
+  },
+  breakdownCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    padding: 12,
+    marginBottom: 10,
+  },
+  breakdownRow: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  appName: {
+    fontSize: 15,
+    fontWeight: '700',
+    color: '#0F172A',
+  },
+  appTime: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#1D4ED8',
+  },
+  statusBadge: {
+    paddingHorizontal: 8,
+    paddingVertical: 4,
+    borderRadius: 10,
+  },
+  statusActive: {
+    backgroundColor: '#DCFCE7',
+  },
+  statusBlocked: {
+    backgroundColor: '#FEE2E2',
+  },
+  statusText: {
+    fontSize: 10,
+    fontWeight: '800',
+  },
+  statusTextActive: {
+    color: '#166534',
+  },
+  statusTextBlocked: {
+    color: '#991B1B',
+  },
+  appCategory: {
+    marginTop: 4,
+    fontSize: 12,
+    color: '#64748B',
+  },
+  track: {
+    marginTop: 8,
+    height: 8,
+    borderRadius: 5,
+    backgroundColor: '#E2E8F0',
+    overflow: 'hidden',
+  },
+  fill: {
+    height: '100%',
+    backgroundColor: '#2563EB',
+  },
+  metaText: {
+    marginTop: 8,
+    fontSize: 11,
+    color: '#64748B',
+    fontWeight: '600',
+  },
+  emptyText: {
+    fontSize: 13,
+    color: '#64748B',
+    fontWeight: '600',
+  },
 });

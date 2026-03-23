@@ -12,6 +12,14 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
 import { getLimitsAPI } from '../services/limitService';
+import { getNativeBlockedPackages } from '../services/appBlockerService';
+import { getLimitHistory, subscribeLimitHistory } from '../services/limitHistoryService';
+import {
+  startTimerRealtimeTracking,
+  subscribeTimerBlocked,
+  subscribeTimerTicks,
+} from '../services/timerRealtimeService';
+import { resolveCurrentDeviceId } from '../services/currentDeviceService';
 
 export default function ActivityScreen() {
   const navigation = useNavigation<any>();
@@ -20,6 +28,60 @@ export default function ActivityScreen() {
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [limits, setLimits] = useState<any[]>([]);
+  const [deviceId, setDeviceId] = useState<string>('');
+
+  const getLimitPackageKey = React.useCallback((item: any) => {
+    return String(item?.app_name || item?.package_name || item?.packageName || '')
+      .trim()
+      .toLowerCase();
+  }, []);
+
+  const matchesLimitPackage = React.useCallback(
+    (item: any, packageName?: string) => {
+      if (!packageName) return false;
+      return getLimitPackageKey(item) === String(packageName).trim().toLowerCase();
+    },
+    [getLimitPackageKey]
+  );
+
+  const resolveBlockedState = React.useCallback((item: any) => {
+    if (typeof item?.is_blocked === 'boolean') return item.is_blocked;
+
+    const rawStatus = String(item?.status_text || item?.status || '')
+      .trim()
+      .toLowerCase();
+    if (rawStatus.includes('block')) return true;
+    if (rawStatus.includes('active') || rawStatus.includes('running') || rawStatus.includes('unblocked')) {
+      return false;
+    }
+
+    const blockedUntil = Number(item?.blocked_until_timestamp || 0);
+    if (blockedUntil > Date.now()) return true;
+
+    const maxMinutes = Number(item?.max_time_minutes || 0);
+    const usedMinutes = Number(item?.time_used_minutes || 0);
+    return maxMinutes > 0 && usedMinutes >= maxMinutes;
+  }, []);
+
+  const normalizeLimit = React.useCallback(
+    (item: any) => ({
+      ...item,
+      is_blocked: resolveBlockedState(item),
+    }),
+    [resolveBlockedState]
+  );
+
+  React.useEffect(() => {
+    const loadCurrentDevice = async () => {
+      if (!user?.uid) return;
+      const resolvedId = await resolveCurrentDeviceId(user.uid);
+      if (resolvedId) {
+        setDeviceId(resolvedId);
+      }
+    };
+
+    loadCurrentDevice();
+  }, [user?.uid]);
 
   const fetchActivity = async () => {
     if (!user?.uid) {
@@ -27,15 +89,59 @@ export default function ActivityScreen() {
       return;
     }
 
+    if (!deviceId) {
+      setLoading(false);
+      setRefreshing(false);
+      return;
+    }
+
     try {
-      const response = await getLimitsAPI(user.uid, 'device_001');
+      const response = await getLimitsAPI(user.uid, deviceId);
       const list = Array.isArray(response?.data) ? response.data : [];
       // Sort with latest first
       const sortedList = list.sort(
         (a: any, b: any) =>
           new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
       );
-      setLimits(sortedList);
+      const normalizedList = sortedList.map(normalizeLimit);
+      const history = await getLimitHistory();
+      const latestHistoryByPackage = new Map<string, { type: 'blocked' | 'override'; timestamp: number }>();
+
+      history.forEach(entry => {
+        const key = String(entry.packageName || '').trim().toLowerCase();
+        if (!key) return;
+
+        const current = latestHistoryByPackage.get(key);
+        if (!current || Number(entry.timestamp || 0) > current.timestamp) {
+          latestHistoryByPackage.set(key, {
+            type: entry.type,
+            timestamp: Number(entry.timestamp || 0),
+          });
+        }
+      });
+
+      const nativeBlockedPackages = await getNativeBlockedPackages();
+
+      const reconciledList = normalizedList.map((item: any) => {
+        const key = getLimitPackageKey(item);
+        const latest = latestHistoryByPackage.get(key);
+
+        if (nativeBlockedPackages.has(key)) {
+          return { ...item, is_blocked: true };
+        }
+
+        if (!latest) return item;
+
+        if (latest.type === 'blocked') {
+          return { ...item, is_blocked: true };
+        }
+        if (latest.type === 'override') {
+          return { ...item, is_blocked: false };
+        }
+        return item;
+      });
+
+      setLimits(reconciledList);
       console.log('📊 Activity - All limits:', sortedList);
     } catch (error) {
       console.error('Activity fetch failed:', error);
@@ -48,10 +154,79 @@ export default function ActivityScreen() {
 
   useFocusEffect(
     React.useCallback(() => {
+      if (!deviceId) return;
       setLoading(true);
       fetchActivity();
-    }, [user?.uid])
+    }, [user?.uid, deviceId])
   );
+
+  React.useEffect(() => {
+    startTimerRealtimeTracking();
+
+    const unsubTick = subscribeTimerTicks(event => {
+      if (!event?.package) return;
+
+      setLimits(prev =>
+        prev.map((item: any) => {
+          if (!matchesLimitPackage(item, event.package)) return item;
+
+          const maxMinutes = Number(item.max_time_minutes || 0);
+          const consumedSeconds = Math.max(0, maxMinutes * 60 - Number(event.remaining || 0));
+          const eventBlocked =
+            typeof event.isBlocked === 'boolean'
+              ? event.isBlocked
+              : String(event.status || '').toLowerCase() === 'blocked';
+
+          return {
+            ...item,
+            time_used_minutes: Math.floor(consumedSeconds / 60),
+            is_blocked: eventBlocked,
+          };
+        })
+      );
+    });
+
+    const unsubBlocked = subscribeTimerBlocked(event => {
+      if (!event?.package) return;
+      setLimits(prev =>
+        prev.map((item: any) =>
+          matchesLimitPackage(item, event.package) ? { ...item, is_blocked: true } : item
+        )
+      );
+    });
+
+    const unsubHistory = subscribeLimitHistory(() => {
+      getLimitHistory().then(history => {
+        const latest = history[0];
+        if (!latest?.packageName) return;
+
+        if (latest.type === 'blocked') {
+          setLimits(prev =>
+            prev.map((item: any) =>
+              matchesLimitPackage(item, latest.packageName) ? { ...item, is_blocked: true } : item
+            )
+          );
+        }
+
+        if (latest.type === 'override') {
+          setLimits(prev =>
+            prev.map((item: any) =>
+              matchesLimitPackage(item, latest.packageName) ? { ...item, is_blocked: false } : item
+            )
+          );
+        }
+      });
+
+      // Pull latest backend snapshot when history updates (block/override).
+      fetchActivity();
+    });
+
+    return () => {
+      unsubTick();
+      unsubBlocked();
+      unsubHistory();
+    };
+  }, [user?.uid, matchesLimitPackage]);
 
   const onRefresh = () => {
     setRefreshing(true);

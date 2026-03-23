@@ -12,4 +12,8 @@ export const API = {
   Override: '/api/limits/override',
   GetLimits: '/api/limits/:user_id/:device_id',
   DeleteLimit: '/api/limits/:limit_id',
+
+  // Devices
+  RegisterDevice: '/api/devices/register',
+  GetDevices: '/api/devices/:user_id',
 };

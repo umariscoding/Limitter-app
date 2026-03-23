@@ -16,6 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
 import { BaseButton, TextInput, Toast } from '../../components';
 import { Shield } from 'lucide-react-native';
+import { getPlanOverrideLimit, normalizePlan } from '../services/planRules';
 
 interface LoginScreenProps {
   onLogin?: (email: string, pass: string) => void;
@@ -67,12 +68,16 @@ const LoginScreen: React.FC<LoginScreenProps> = ({
 
       // ✅ Save user data to context
       const userData = response.data || response;
+      const normalizedPlan = normalizePlan(userData.plan);
       loginUser({
         uid: userData.uid,
         email: userData.email,
         name: userData.name || 'User',
-        plan: userData.plan || 'free',
-        overrides_left: userData.overrides_left || 3,
+        plan: normalizedPlan,
+        overrides_left:
+          typeof userData.overrides_left === 'number'
+            ? userData.overrides_left
+            : getPlanOverrideLimit(normalizedPlan),
         idToken: userData.idToken,
       });
 

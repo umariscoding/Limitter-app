@@ -39,14 +39,19 @@ import {
   overrideLabels
 } from '../data/appData';
 import { useUser } from '../context/UserContext';
-import { useOverrideAPI } from '../services/limitService';
+import { getLimitsAPI, useOverrideAPI } from '../services/limitService';
+import { grantTemporaryOverrideAccess } from '../services/appBlockerService';
+import { addLimitHistoryEntry, incrementOverrideCount } from '../services/limitHistoryService';
+import { resolveCurrentDeviceId } from '../services/currentDeviceService';
+import { computeNextOverrides } from '../services/planRules';
 
 export default function ConfirmOverrideScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user, updateUser } = useUser();
   const limitId = route?.params?.limitId;
-  const deviceId = 'device_001';
+  const packageName = route?.params?.packageName;
+  const appNameFromRoute = route?.params?.appName;
   
   // Use the requested logic but can fallback safely
   const currentPlan = (userProfile.plan || "Pro") as keyof typeof overrideTierLogic;
@@ -85,29 +90,81 @@ export default function ConfirmOverrideScreen() {
       return;
     }
 
-    if (!limitId) {
-      Alert.alert('Error', 'Missing limit id for override');
+    if ((user?.overrides_left ?? 0) <= 0) {
+      navigation.navigate('SubscriptionPlansScreen', {
+        fromBlockingOverride: true,
+        packageName,
+        appName: appNameFromRoute,
+      });
       return;
     }
 
     setIsLoading(true);
     try {
-      const response = await useOverrideAPI(user.uid, deviceId, limitId);
+      const resolvedDeviceId = await resolveCurrentDeviceId(user.uid);
+      if (!resolvedDeviceId) {
+        Alert.alert('Error', 'Unable to resolve your device. Please try again.');
+        return;
+      }
+
+      let resolvedLimitId = limitId;
+
+      if (!resolvedLimitId && packageName) {
+        const limitsResponse = await getLimitsAPI(user.uid, resolvedDeviceId);
+        const list = Array.isArray(limitsResponse?.data) ? limitsResponse.data : [];
+        const matching = list
+          .filter((item: any) => item?.app_name === packageName)
+          .sort(
+            (a: any, b: any) =>
+              new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+          )[0];
+
+        resolvedLimitId = matching?.id;
+      }
+
+      if (!resolvedLimitId) {
+        Alert.alert('Error', 'Unable to resolve limit for override');
+        return;
+      }
+
+      const response = await useOverrideAPI(user.uid, resolvedDeviceId, resolvedLimitId);
 
       if (!response?.success) {
         Alert.alert('Error', response?.message || 'Override failed');
         return;
       }
 
-      const remaining = response?.data?.overrides_left;
-      if (typeof remaining === 'number') {
-        updateUser({ overrides_left: remaining });
+      const remainingAfterUse = computeNextOverrides(
+        user?.plan,
+        user?.overrides_left,
+        response?.data?.overrides_left
+      );
+      updateUser({ overrides_left: remainingAfterUse });
+
+      if (packageName) {
+        await grantTemporaryOverrideAccess(packageName, appNameFromRoute || packageName, 5);
       }
+
+      await incrementOverrideCount();
+      await addLimitHistoryEntry({
+        appName: appNameFromRoute || packageName || 'Unknown App',
+        packageName: packageName || 'unknown.package',
+        timestamp: Date.now(),
+        type: 'override',
+        overrideUsed: true,
+      });
 
       Alert.alert(
         overrideLabels.alertUnlockedTitle,
         response?.data?.message || 'Override applied successfully',
-        [{ text: 'OK', onPress: () => navigation.goBack() }]
+        [{
+          text: 'OK',
+          onPress: () =>
+            navigation.navigate('DashboardScreen', {
+              refreshAt: Date.now(),
+              justOverriddenPackage: packageName || null,
+            }),
+        }]
       );
     } catch (error) {
       console.error('Override error:', error);

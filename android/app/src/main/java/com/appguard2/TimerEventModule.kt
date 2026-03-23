@@ -23,29 +23,57 @@ class TimerEventModule(private val reactContext: ReactApplicationContext) :
         if (receiver != null) return
         receiver = object : BroadcastReceiver() {
             override fun onReceive(context: Context?, intent: Intent?) {
-                if (intent?.action != "com.appguard2.TIMER_TICK") return
-                val packageName = intent.getStringExtra("package") ?: ""
-                val appName = intent.getStringExtra("appName") ?: ""
-                val remaining = intent.getIntExtra("remaining", 0)
-                val isBlocked = intent.getBooleanExtra("isBlocked", false)
+                when (intent?.action) {
+                    "com.appguard2.TIMER_TICK" -> {
+                        val packageName = intent.getStringExtra("package") ?: ""
+                        val appName = intent.getStringExtra("appName") ?: ""
+                        val remaining = intent.getIntExtra("remaining", 0)
+                        val isBlocked = intent.getBooleanExtra("isBlocked", false)
+                        val status = intent.getStringExtra("status") ?: "waiting"
+                        val blockedAt = intent.getLongExtra("blockedAt", 0L)
 
-                val params = com.facebook.react.bridge.Arguments.createMap().apply {
-                    putString("package", packageName)
-                    putString("appName", appName)
-                    putInt("remaining", remaining)
-                    putBoolean("isBlocked", isBlocked)
-                }
-                try {
-                    reactContext
-                        .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
-                        .emit("TIMER_TICK", params)
-                } catch (e: Exception) {
-                    Log.e(TAG, "emit error: ${e.message}")
+                        val params = com.facebook.react.bridge.Arguments.createMap().apply {
+                            putString("package", packageName)
+                            putString("appName", appName)
+                            putInt("remaining", remaining)
+                            putBoolean("isBlocked", isBlocked)
+                            putString("status", status)
+                            putDouble("blockedAt", blockedAt.toDouble())
+                        }
+                        try {
+                            reactContext
+                                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                                .emit("TIMER_TICK", params)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "emit TIMER_TICK error: ${e.message}")
+                        }
+                    }
+                    "com.appguard2.TIMER_BLOCKED" -> {
+                        val packageName = intent.getStringExtra("package") ?: ""
+                        val appName = intent.getStringExtra("appName") ?: ""
+                        val blockedAt = intent.getLongExtra("blockedAt", 0L)
+
+                        val params = com.facebook.react.bridge.Arguments.createMap().apply {
+                            putString("package", packageName)
+                            putString("appName", appName)
+                            putDouble("blockedAt", blockedAt.toDouble())
+                        }
+                        try {
+                            reactContext
+                                .getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                                .emit("TIMER_BLOCKED", params)
+                        } catch (e: Exception) {
+                            Log.e(TAG, "emit TIMER_BLOCKED error: ${e.message}")
+                        }
+                    }
                 }
             }
         }
 
-        val filter = IntentFilter("com.appguard2.TIMER_TICK")
+        val filter = IntentFilter().apply {
+            addAction("com.appguard2.TIMER_TICK")
+            addAction("com.appguard2.TIMER_BLOCKED")
+        }
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.TIRAMISU) {
             reactContext.registerReceiver(receiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {

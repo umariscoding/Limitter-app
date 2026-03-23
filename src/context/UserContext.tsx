@@ -4,7 +4,7 @@ export interface User {
   uid: string;
   email: string;
   name: string;
-  plan: 'free' | 'medium' | 'pro';
+  plan: 'free' | 'medium' | 'pro' | 'elite';
   overrides_left: number;
   idToken?: string;
 }

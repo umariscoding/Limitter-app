@@ -10,7 +10,9 @@ import {
   Switch,
   Keyboard,
   Platform,
-  StatusBar
+  StatusBar,
+  ActivityIndicator,
+  RefreshControl,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { 
@@ -36,17 +38,21 @@ import {
 
 import { 
   planDetails, 
-  devices as appDevices, 
   usageControls, 
   featureToggles,
   controlLabels,
   dashboardLabels
 } from '../data/appData';
+import { useUser } from '../context/UserContext';
+import { getDevicesAPI } from '../services/deviceService';
+import { Device as BackendDevice } from '../interface/Device';
+import { resolveCurrentDeviceId } from '../services/currentDeviceService';
+import { normalizePlan } from '../services/planRules';
 
 type PlanTier = 'Free' | 'Pro' | 'Elite';
 type DeviceType = 'phone' | 'tablet' | 'laptop' | 'desktop';
 
-interface Device {
+interface DisplayDevice {
   id: string;
   name: string;
   type: DeviceType;
@@ -58,9 +64,18 @@ interface Device {
 export default function ControlPlansScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
+  const { user, logout } = useUser();
+
+  const planLabelMap: Record<'free' | 'pro' | 'elite', PlanTier> = {
+    free: 'Free',
+    pro: 'Pro',
+    elite: 'Elite',
+  };
 
   // Mock Data
-  const [currentPlan, setCurrentPlan] = useState<PlanTier>(planDetails.currentPlan as PlanTier);
+  const [currentPlan, setCurrentPlan] = useState<PlanTier>(
+    planLabelMap[normalizePlan(user?.plan)]
+  );
 
   // Handle Plan Sync from SubscriptionPlansScreen
   useEffect(() => {
@@ -68,20 +83,93 @@ export default function ControlPlansScreen() {
       setCurrentPlan(route.params.activePlan);
     }
   }, [route.params?.activePlan]);
-  
-  const devicesUsed = planDetails.deviceSlotsUsed;
-  const devicesTotal = planDetails.deviceSlotsTotal;
 
-  const [managedDevices] = useState<Device[]>(appDevices as Device[]);
+  useEffect(() => {
+    setCurrentPlan(planLabelMap[normalizePlan(user?.plan)]);
+  }, [user?.plan]);
+  
+  const devicesTotal = planDetails.deviceSlotsTotal;
+  const [managedDevices, setManagedDevices] = useState<DisplayDevice[]>([]);
+  const [loadingDevices, setLoadingDevices] = useState(true);
+  const [refreshingDevices, setRefreshingDevices] = useState(false);
+  const [currentDeviceId, setCurrentDeviceId] = useState<string>('');
 
   // Usage Controls State
   const [safeBrowsing, setSafeBrowsing] = useState(featureToggles.find(f => f.key === 'safeBrowsing')?.defaultValue ?? true);
   const [smartOverride, setSmartOverride] = useState(featureToggles.find(f => f.key === 'smartOverride')?.defaultValue ?? true);
 
   // Derived Values
-  const progressPercentage = (devicesUsed / devicesTotal) * 100;
+  const devicesUsed = managedDevices.length;
+  const progressPercentage = devicesTotal > 0 ? (devicesUsed / devicesTotal) * 100 : 0;
   const slotsRemaining = devicesTotal - devicesUsed;
   const isTopPlan = currentPlan === 'Elite';
+
+  const mapDeviceType = (deviceOS: string): DeviceType => {
+    const os = deviceOS.toLowerCase();
+    if (os.includes('ios') || os.includes('android')) return 'phone';
+    if (os.includes('ipad') || os.includes('tablet')) return 'tablet';
+    if (os.includes('mac') || os.includes('windows') || os.includes('linux')) return 'laptop';
+    return 'desktop';
+  };
+
+  const mapDeviceIcon = (type: DeviceType) => {
+    if (type === 'phone') return 'smartphone';
+    if (type === 'tablet') return 'tablet';
+    if (type === 'laptop') return 'laptop';
+    return 'monitor';
+  };
+
+  const mapApiDeviceToDisplay = (device: BackendDevice): DisplayDevice => {
+    const type = mapDeviceType(device.device_os || 'unknown');
+    const lastActive = Number(device.last_active || 0);
+    const isRecentlyActive = Date.now() - lastActive < 5 * 60 * 1000;
+
+    return {
+      id: device.id,
+      name: device.device_name,
+      type,
+      model: device.device_os,
+      status: isRecentlyActive ? 'Active' : 'Idle',
+      icon: mapDeviceIcon(type),
+    };
+  };
+
+  const loadDevices = async () => {
+    if (!user?.uid) {
+      setLoadingDevices(false);
+      setRefreshingDevices(false);
+      return;
+    }
+
+    try {
+      const resolvedId = currentDeviceId || await resolveCurrentDeviceId(user.uid);
+      if (resolvedId && resolvedId !== currentDeviceId) {
+        setCurrentDeviceId(resolvedId);
+      }
+
+      const response = await getDevicesAPI(user.uid);
+      const list = Array.isArray(response?.data) ? response.data : [];
+      const sorted = [...list].sort(
+        (a, b) => Number(b.last_active || 0) - Number(a.last_active || 0)
+      );
+      setManagedDevices(sorted.map(mapApiDeviceToDisplay));
+    } catch (error) {
+      console.error('Failed to load devices:', error);
+      setManagedDevices([]);
+    } finally {
+      setLoadingDevices(false);
+      setRefreshingDevices(false);
+    }
+  };
+
+  useEffect(() => {
+    const syncDevices = async () => {
+      setLoadingDevices(true);
+      await loadDevices();
+    };
+
+    syncDevices();
+  }, [user?.uid]);
 
   const getDeviceIcon = (iconName: string, color = "#64748B") => {
     switch(iconName) {
@@ -100,7 +188,11 @@ export default function ControlPlansScreen() {
         text: controlLabels.signOut, 
         style: "destructive", 
         onPress: () => {
-          navigation.navigate('Login'); 
+          logout();
+          navigation.reset({
+            index: 0,
+            routes: [{ name: 'Login' }],
+          });
         } 
       }
     ]);
@@ -117,7 +209,19 @@ export default function ControlPlansScreen() {
         <View style={styles.headerSpacer} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={styles.scrollContent}
+        showsVerticalScrollIndicator={false}
+        refreshControl={
+          <RefreshControl
+            refreshing={refreshingDevices}
+            onRefresh={() => {
+              setRefreshingDevices(true);
+              loadDevices();
+            }}
+          />
+        }
+      >
         
         <View style={styles.planCard}>
           <View style={styles.planCardHeader}>
@@ -162,7 +266,16 @@ export default function ControlPlansScreen() {
           <Text style={styles.sectionSubtitle}>{controlLabels.managedDevicesSubtitle}</Text>
         </View>
 
-        {managedDevices.map(device => (
+        {loadingDevices ? (
+          <View style={styles.devicesLoadingWrap}>
+            <ActivityIndicator size="small" color="#4F46E5" />
+            <Text style={styles.devicesLoadingText}>Loading devices...</Text>
+          </View>
+        ) : managedDevices.length === 0 ? (
+          <View style={styles.emptyDeviceWrap}>
+            <Text style={styles.emptyDeviceText}>No devices registered yet</Text>
+          </View>
+        ) : managedDevices.map(device => (
           <TouchableOpacity key={device.id} style={styles.deviceCard} onPress={() => Alert.alert(device.name)}>
             <View style={styles.deviceIconWrapper}>
               {getDeviceIcon(device.icon)}
@@ -192,7 +305,13 @@ export default function ControlPlansScreen() {
           <TouchableOpacity 
             key={control.id} 
             style={styles.row} 
-            onPress={() => Alert.alert(control.title)}
+            onPress={() => {
+              if (control.icon === 'clock') {
+                navigation.navigate('DailyLimitsGraphScreen');
+                return;
+              }
+              Alert.alert(control.title);
+            }}
           >
             <View style={styles.rowIconBox}>
               {control.icon === 'clock' ? <Clock size={20} color="#4F46E5" /> : <Calendar size={20} color="#4F46E5" />}
@@ -317,6 +436,33 @@ const styles = StyleSheet.create({
 
   addBtn: { flexDirection: 'row', padding: 16, borderStyle: 'dashed', borderWidth: 2, borderColor: '#CBD5E1', borderRadius: 12, alignItems: 'center', marginTop: 4, marginBottom: 24, justifyContent: 'center' },
   addBtnText: { fontWeight: '600', color: '#64748B' },
+  devicesLoadingWrap: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 16,
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  devicesLoadingText: {
+    marginTop: 8,
+    color: '#64748B',
+    fontSize: 13,
+  },
+  emptyDeviceWrap: {
+    backgroundColor: '#FFFFFF',
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    borderRadius: 12,
+    padding: 16,
+    marginBottom: 10,
+  },
+  emptyDeviceText: {
+    color: '#64748B',
+    fontSize: 13,
+    textAlign: 'center',
+  },
 
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
   toggleRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },

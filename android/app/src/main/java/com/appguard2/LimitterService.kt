@@ -34,7 +34,8 @@ data class AppTimer(
     var endTimeMillis: Long = 0,
     var isStarted: Boolean = false,
     var isBlocked: Boolean = false,
-    var timerType: String = "duration" // "duration" or "clock"
+    var timerType: String = "duration", // "duration" or "clock"
+    var blockedAtMillis: Long = 0
 )
 
 class LimitterService : Service() {
@@ -80,9 +81,19 @@ class LimitterService : Service() {
                 putExtra("remaining", remaining)
                 putExtra("isBlocked", timer.isBlocked)
                 putExtra("status", status)
+                putExtra("blockedAt", timer.blockedAtMillis)
             }
             sendBroadcast(intent)
         }
+    }
+
+    private fun emitBlockedEvent(packageName: String, appName: String, blockedAtMillis: Long) {
+        val blockedIntent = Intent("com.appguard2.TIMER_BLOCKED").apply {
+            putExtra("package", packageName)
+            putExtra("appName", appName)
+            putExtra("blockedAt", blockedAtMillis)
+        }
+        sendBroadcast(blockedIntent)
     }
 
     override fun onCreate() {
@@ -191,8 +202,10 @@ class LimitterService : Service() {
                 val timer = appTimers[pkg]
                 if (timer != null && timer.isStarted && !timer.isBlocked) {
                     timer.isBlocked = true
+                    timer.blockedAtMillis = System.currentTimeMillis()
                     appTimers[pkg] = timer
                     saveState()
+                    emitBlockedEvent(pkg, name, timer.blockedAtMillis)
                     
                     // IMMEDIATELY block — user opened this app so they're on it
                     forceCloseApp(pkg)
@@ -207,10 +220,12 @@ class LimitterService : Service() {
                 val name = intent?.getStringExtra("appName") ?: pkg
                 
                 if (pkg != null) {
-                    appTimers[pkg] = AppTimer(pkg, name ?: pkg, 0, System.currentTimeMillis(), true, true)
+                    val now = System.currentTimeMillis()
+                    appTimers[pkg] = AppTimer(pkg, name ?: pkg, 0, now, true, true, "duration", now)
                     isRunning = true
                     saveState()
                     startBackgroundTasks()
+                    emitBlockedEvent(pkg, name ?: pkg, now)
                     
                     val currentApp = getForegroundApp()
                     if (currentApp == pkg) {
@@ -249,8 +264,10 @@ class LimitterService : Service() {
                     // 2. Check expiry (only if started)
                     if (timer.isStarted && !timer.isBlocked && now >= timer.endTimeMillis) {
                         timer.isBlocked = true
+                        timer.blockedAtMillis = now
                         appTimers[pkg] = timer
                         stateChanged = true
+                        emitBlockedEvent(pkg, timer.appName, timer.blockedAtMillis)
                         Log.d(TAG, "🔔 EXPIRED (monitor): ${timer.appName}")
                     }
 
@@ -404,8 +421,10 @@ class LimitterService : Service() {
                         // 2. Check Timer Expiry (only if started)
                         if (timer.isStarted && !timer.isBlocked && now >= timer.endTimeMillis) {
                             timer.isBlocked = true
+                            timer.blockedAtMillis = now
                             appTimers[pkg] = timer
                             stateChanged = true
+                            emitBlockedEvent(pkg, timer.appName, timer.blockedAtMillis)
                             Log.d(TAG, "🔔 EXPIRED: ${timer.appName}")
                         }
 
@@ -498,21 +517,22 @@ class LimitterService : Service() {
 
             val root = LinearLayout(this).apply {
                 orientation = LinearLayout.VERTICAL
-                setBackgroundColor(Color.parseColor("#0f0c29"))
+                setBackgroundColor(Color.parseColor("#FFFFFF"))
                 gravity = Gravity.CENTER
                 setPadding(80, 80, 80, 80)
                 isClickable = true
             }
 
             root.addView(TextView(this).apply {
-                text = "🚫"
-                textSize = 80f
+                text = "●"
+                setTextColor(Color.parseColor("#16A34A"))
+                textSize = 72f
                 gravity = Gravity.CENTER
             })
 
             root.addView(TextView(this).apply {
-                text = "Time's Up!"
-                setTextColor(Color.parseColor("#ef4444"))
+                text = "Time's Up"
+                setTextColor(Color.parseColor("#14532D"))
                 textSize = 34f
                 setTypeface(null, android.graphics.Typeface.BOLD)
                 gravity = Gravity.CENTER
@@ -520,34 +540,31 @@ class LimitterService : Service() {
             })
 
             root.addView(TextView(this).apply {
-                text = "$appName is blocked.\nTake a break! 💪"
-                setTextColor(Color.parseColor("#c4b5fd"))
-                textSize = 17f
+                text = "$appName is now blocked until you confirm an override."
+                setTextColor(Color.parseColor("#166534"))
+                textSize = 16f
                 gravity = Gravity.CENTER
                 setPadding(0, 0, 0, 60)
             })
 
             root.addView(Button(this).apply {
-                text = "🏠 Go Home"
-                setBackgroundColor(Color.parseColor("#7c3aed"))
+                text = "Override"
+                setBackgroundColor(Color.parseColor("#16A34A"))
                 setTextColor(Color.WHITE)
                 textSize = 18f
                 setPadding(80, 40, 80, 40)
                 setOnClickListener {
-                    // Remove overlay
+                    // Keep timer state blocked; route user to in-app override confirmation.
                     removeBlockingOverlay(packageName)
-                    // Clear this app's timer so it can be opened freely again
-                    appTimers.remove(packageName)
-                    cancelTimerAlarm(packageName)
-                    saveState()
-                    Log.d(TAG, "🏠 Go Home: $packageName unblocked")
-                    // Open App Guard
+
                     try {
-                        val intent = packageManager.getLaunchIntentForPackage("com.appguard2")
-                        if (intent != null) {
-                            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
-                            startActivity(intent)
+                        val deepLink = android.net.Uri.parse(
+                            "appguard2://override?package=$packageName&appName=${android.net.Uri.encode(appName)}"
+                        )
+                        val intent = Intent(Intent.ACTION_VIEW, deepLink).apply {
+                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
                         }
+                        startActivity(intent)
                     } catch (_: Exception) {}
                 }
             })

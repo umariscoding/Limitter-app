@@ -2,6 +2,7 @@
 import { NativeModules } from 'react-native';
 
 const { AppListModule } = NativeModules;
+const { LimitterModule } = NativeModules;
 
 export interface InstalledApp {
   packageName: string;
@@ -16,15 +17,38 @@ export interface InstalledApp {
 
 export const getInstalledApps = async (): Promise<InstalledApp[]> => {
   try {
-    if (!AppListModule) {
-      console.warn('⚠️ AppListModule not available - ensure native bridge is linked');
-      return [];
+    if (AppListModule?.getInstalledApps) {
+      const apps = await AppListModule.getInstalledApps();
+      const normalized = (apps || []).map((app: any) => ({
+        appName: app.appName || app.name || '',
+        packageName: app.packageName || app.package || '',
+      }));
+
+      const validApps = normalized.filter(
+        (app: InstalledApp) => app.appName.length > 0 && app.packageName.length > 0
+      );
+
+      console.log('✅ Installed apps fetched via AppListModule:', validApps.length);
+      return validApps;
     }
 
-    const apps = await AppListModule.getInstalledApps();
-    console.log('✅ Installed apps fetched:', apps?.length || 0);
-    
-    return apps || [];
+    if (LimitterModule?.getInstalledApps) {
+      const apps = await LimitterModule.getInstalledApps();
+      const normalized = (apps || []).map((app: any) => ({
+        appName: app.appName || app.name || '',
+        packageName: app.packageName || app.package || '',
+      }));
+
+      const validApps = normalized.filter(
+        (app: InstalledApp) => app.appName.length > 0 && app.packageName.length > 0
+      );
+
+      console.log('✅ Installed apps fetched via LimitterModule:', validApps.length);
+      return validApps;
+    }
+
+    console.warn('⚠️ No installed-app native module available');
+    return [];
   } catch (error) {
     console.error('❌ Failed to get installed apps:', error);
     return [];

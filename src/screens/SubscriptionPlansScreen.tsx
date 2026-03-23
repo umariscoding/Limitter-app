@@ -11,16 +11,22 @@ import {
   ActivityIndicator,
   Keyboard,
   Platform,
+  Modal,
 } from 'react-native';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import { ChevronLeft, Check, X, Smartphone, Plus, Minus, ShieldCheck, Lock } from 'lucide-react-native';
 import { 
   subscriptionPlans, 
   addonPricing, 
   trustSignals, 
-  planDetails,
   subscriptionLabels
 } from '../data/appData';
+import { useUser } from '../context/UserContext';
+import { resolveCurrentDeviceId } from '../services/currentDeviceService';
+import { getLimitsAPI, useOverrideAPI } from '../services/limitService';
+import { grantTemporaryOverrideAccess } from '../services/appBlockerService';
+import { addLimitHistoryEntry, incrementOverrideCount } from '../services/limitHistoryService';
+import { computeNextOverrides, getPlanOverrideLimit, normalizePlan } from '../services/planRules';
 
 // Memoized feature item for max performance
 const FeatureItem = React.memo(({ feature }: { feature: { text: string; enabled: boolean } }) => (
@@ -43,41 +49,213 @@ const FeatureItem = React.memo(({ feature }: { feature: { text: string; enabled:
 
 export default function SubscriptionPlansScreen() {
   const navigation = useNavigation<any>();
-  const [selectedPlanId, setSelectedPlanId] = useState('2'); // Default to Pro ID
+  const route = useRoute<any>();
+  const { user, updateUser } = useUser();
+
+  const currentUserPlan = normalizePlan(user?.plan);
+  const defaultSelectedPlanId =
+    currentUserPlan === 'elite' ? '3' : currentUserPlan === 'pro' ? '2' : '1';
+
+  const [selectedPlanId, setSelectedPlanId] = useState(defaultSelectedPlanId);
   const [extraDevices, setExtraDevices] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
+  const [showOverrideChoice, setShowOverrideChoice] = useState(false);
+
+  const blockingPackage = route?.params?.packageName as string | undefined;
+  const blockingAppName = route?.params?.appName as string | undefined;
+  const fromBlockingOverride = Boolean(route?.params?.fromBlockingOverride && blockingPackage);
+
+  React.useEffect(() => {
+    if (fromBlockingOverride) {
+      setShowOverrideChoice(true);
+    }
+  }, [fromBlockingOverride]);
 
   const selectedPlan = subscriptionPlans.find(p => p.id === selectedPlanId) || subscriptionPlans[1];
   const extraDevicesCost = extraDevices * addonPricing.extraDevicePricePerUnit;
   const totalMonthly = selectedPlan.price + extraDevicesCost;
 
+  const currentPlanLabel =
+    currentUserPlan === 'elite' ? 'Elite' : currentUserPlan === 'pro' ? 'Pro' : 'Free';
+
   const currentIndex = subscriptionPlans.findIndex(
-    p => p.name === planDetails.currentPlan
+    p => p.name === currentPlanLabel
   );
   const nextPlan = subscriptionPlans[currentIndex + 1];
   const upgradeLabel = nextPlan 
     ? subscriptionLabels.upgradePrefix + nextPlan.name 
     : subscriptionLabels.topPlanBadge;
 
+  const mapPlanIdToUserPlan = (planId: string): 'free' | 'pro' | 'elite' => {
+    if (planId === '3') return 'elite';
+    if (planId === '2') return 'pro';
+    return 'free';
+  };
+
   const handleConfirmPay = () => {
     Keyboard.dismiss();
     setIsProcessing(true);
     setTimeout(() => {
       setIsProcessing(false);
+
+      const newPlan = mapPlanIdToUserPlan(selectedPlanId);
+      const updatedOverrides = getPlanOverrideLimit(newPlan);
+      updateUser({ plan: newPlan, overrides_left: updatedOverrides });
+
       Alert.alert(
         subscriptionLabels.alertActivatedTitle,
         `${subscriptionLabels.alertActivatedMsg}${selectedPlan.name} plan.`,
         [{ 
           text: subscriptionLabels.btnDashboard, 
-          onPress: () => navigation.navigate('ControlPlansScreen', { activePlan: selectedPlan.name })
+          onPress: () =>
+            navigation.navigate('DashboardScreen', {
+              planUpdatedAt: Date.now(),
+            })
         }]
       );
     }, 1500); 
   };
 
+  const handleBlockingOverrideAction = async (mode: 'override' | 'spend' | 'plan') => {
+    if (!user?.uid || !blockingPackage) {
+      Alert.alert('Error', 'Missing user or app context for override.');
+      return;
+    }
+
+    if (mode === 'plan') {
+      setShowOverrideChoice(false);
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      const resolvedDeviceId = await resolveCurrentDeviceId(user.uid);
+      if (!resolvedDeviceId) {
+        Alert.alert('Error', 'Unable to resolve your device.');
+        return;
+      }
+
+      const limitsResponse = await getLimitsAPI(user.uid, resolvedDeviceId);
+      const list = Array.isArray(limitsResponse?.data) ? limitsResponse.data : [];
+      const matching = list
+        .filter((item: any) => item?.app_name === blockingPackage)
+        .sort(
+          (a: any, b: any) =>
+            new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        )[0];
+
+      const limitId = matching?.id;
+      if (!limitId) {
+        Alert.alert('Error', 'Unable to find active limit for this app.');
+        return;
+      }
+
+      let remainingAfterUse = user?.overrides_left ?? 0;
+
+      if (mode === 'override') {
+        const overrideResponse = await useOverrideAPI(user.uid, resolvedDeviceId, limitId);
+        if (!overrideResponse?.success) {
+          Alert.alert('Error', overrideResponse?.message || 'Override failed.');
+          return;
+        }
+
+        remainingAfterUse = computeNextOverrides(
+          user?.plan,
+          user?.overrides_left,
+          overrideResponse?.data?.overrides_left
+        );
+        updateUser({ overrides_left: remainingAfterUse });
+      }
+
+      await grantTemporaryOverrideAccess(blockingPackage, blockingAppName || blockingPackage, 5);
+      if (mode === 'override') {
+        await incrementOverrideCount();
+      }
+      await addLimitHistoryEntry({
+        appName: blockingAppName || blockingPackage,
+        packageName: blockingPackage,
+        timestamp: Date.now(),
+        type: 'override',
+        overrideUsed: mode === 'override',
+      });
+
+      setShowOverrideChoice(false);
+      Alert.alert(
+        'Override Activated',
+        mode === 'spend'
+          ? 'You spent $1.99 and app access is now temporarily unlocked.'
+          : `Override used successfully. Remaining overrides: ${remainingAfterUse}`,
+        [
+          {
+            text: 'OK',
+            onPress: () =>
+              navigation.navigate('DashboardScreen', {
+                refreshAt: Date.now(),
+                justOverriddenPackage: blockingPackage,
+              }),
+          },
+        ]
+      );
+    } catch (error) {
+      console.error('Blocking override action failed:', error);
+      Alert.alert('Error', 'Failed to process override action.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
   return (
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
+
+      <Modal
+        visible={showOverrideChoice}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowOverrideChoice(false)}
+      >
+        <View style={styles.overrideModalOverlay}>
+          <View style={styles.overrideModalCard}>
+            <Text style={styles.overrideModalTitle}>App Blocked</Text>
+            <Text style={styles.overrideModalSubTitle}>{blockingAppName || 'Selected app'} reached its daily limit.</Text>
+            <Text style={styles.overrideModalBody}>Spend $1.99 or buy an override plan to continue.</Text>
+
+            <TouchableOpacity
+              style={[styles.overrideModalBtn, styles.overrideSpendBtn, isProcessing && styles.payButtonDisabled]}
+              disabled={isProcessing}
+              onPress={() => handleBlockingOverrideAction('spend')}
+            >
+              <Text style={styles.overrideModalBtnText}>Spend $1.99</Text>
+            </TouchableOpacity>
+
+              {(user?.overrides_left ?? 0) > 0 ? (
+                <TouchableOpacity
+                  style={[styles.overrideModalBtn, styles.overridePlanBtn, isProcessing && styles.payButtonDisabled]}
+                  disabled={isProcessing}
+                  onPress={() => handleBlockingOverrideAction('override')}
+                >
+                  <Text style={styles.overrideModalBtnText}>Use 1 Override ({user?.overrides_left})</Text>
+                </TouchableOpacity>
+              ) : (
+                <TouchableOpacity
+                  style={[styles.overrideModalBtn, styles.overridePlanBtn, isProcessing && styles.payButtonDisabled]}
+                  disabled={isProcessing}
+                  onPress={() => handleBlockingOverrideAction('plan')}
+                >
+                  <Text style={styles.overrideModalBtnText}>Buy a Plan</Text>
+                </TouchableOpacity>
+              )}
+
+            <TouchableOpacity
+              style={[styles.overrideModalBtn, styles.overrideCloseBtn]}
+              disabled={isProcessing}
+              onPress={() => setShowOverrideChoice(false)}
+            >
+              <Text style={styles.overrideCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
       
       {/* HEADER */}
       <View style={styles.header}>
@@ -502,5 +680,55 @@ const styles = StyleSheet.create({
     fontSize: 20,
     fontWeight: 'bold',
     marginLeft: 4,
+  },
+  overrideModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(15, 23, 42, 0.45)',
+    justifyContent: 'center',
+    paddingHorizontal: 20,
+  },
+  overrideModalCard: {
+    backgroundColor: '#FFFFFF',
+    borderRadius: 16,
+    padding: 18,
+  },
+  overrideModalTitle: {
+    fontSize: 20,
+    fontWeight: '800',
+    color: '#0F172A',
+    marginBottom: 6,
+  },
+  overrideModalSubTitle: {
+    fontSize: 14,
+    color: '#334155',
+    marginBottom: 8,
+  },
+  overrideModalBody: {
+    fontSize: 13,
+    color: '#64748B',
+    marginBottom: 14,
+  },
+  overrideModalBtn: {
+    borderRadius: 10,
+    paddingVertical: 12,
+    alignItems: 'center',
+    marginTop: 8,
+  },
+  overrideSpendBtn: {
+    backgroundColor: '#0EA5E9',
+  },
+  overridePlanBtn: {
+    backgroundColor: '#16A34A',
+  },
+  overrideCloseBtn: {
+    backgroundColor: '#E2E8F0',
+  },
+  overrideModalBtnText: {
+    color: '#FFFFFF',
+    fontWeight: '700',
+  },
+  overrideCloseBtnText: {
+    color: '#334155',
+    fontWeight: '700',
   },
 });

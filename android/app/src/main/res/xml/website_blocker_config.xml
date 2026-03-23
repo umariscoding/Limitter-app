@@ -5,4 +5,4 @@
     android:accessibilityFlags="flagRetrieveInteractiveWindows|flagReportViewIds"
     android:canRetrieveWindowContent="true"
     android:description="@string/accessibility_service_description"
-    android:packageNames="com.android.chrome,com.microsoft.emmx" />
+    android:packageNames="com.android.chrome,com.microsoft.emmx,org.mozilla.firefox,com.brave.browser,com.sec.android.app.sbrowser,com.opera.browser" />

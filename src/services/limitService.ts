@@ -2,6 +2,32 @@ import { BASE_URL, API } from '../config/config';
 
 // ===== LIMIT API CALLS =====
 
+const buildJsonHeaders = () => {
+  const headers: Record<string, string> = {
+    'Content-Type': 'application/json',
+  };
+
+  // Avoid ngrok browser interstitial HTML responses that break response.json().
+  if (BASE_URL.includes('ngrok')) {
+    headers['ngrok-skip-browser-warning'] = 'true';
+  }
+
+  return headers;
+};
+
+const parseJsonSafely = async (response: Response) => {
+  const raw = await response.text();
+
+  try {
+    return raw ? JSON.parse(raw) : {};
+  } catch {
+    if (!response.ok) {
+      throw new Error(`HTTP ${response.status}: ${raw?.slice(0, 160) || 'Invalid response from server'}`);
+    }
+    throw new Error('Server did not return valid JSON');
+  }
+};
+
 export const createLimitAPI = async (
   user_id: string,
   device_id: string,
@@ -12,7 +38,7 @@ export const createLimitAPI = async (
   try {
     const response = await fetch(`${BASE_URL}${API.CreateLimit}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildJsonHeaders(),
       body: JSON.stringify({
         user_id,
         device_id,
@@ -22,7 +48,7 @@ export const createLimitAPI = async (
       }),
     });
 
-    const data = await response.json();
+    const data = await parseJsonSafely(response);
     console.log('✅ Create Limit API Response:', data);
     return data;
   } catch (error) {
@@ -35,14 +61,14 @@ export const updateUsageAPI = async (limit_id: string, minutes_to_add: number) =
   try {
     const response = await fetch(`${BASE_URL}${API.UpdateUsage}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildJsonHeaders(),
       body: JSON.stringify({
         limit_id,
         minutes_to_add,
       }),
     });
 
-    const data = await response.json();
+    const data = await parseJsonSafely(response);
     console.log('✅ Update Usage API Response:', data);
     return data;
   } catch (error) {
@@ -59,7 +85,7 @@ export const useOverrideAPI = async (
   try {
     const response = await fetch(`${BASE_URL}${API.Override}`, {
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
+      headers: buildJsonHeaders(),
       body: JSON.stringify({
         user_id,
         device_id,
@@ -67,7 +93,7 @@ export const useOverrideAPI = async (
       }),
     });
 
-    const data = await response.json();
+    const data = await parseJsonSafely(response);
     console.log('✅ Override API Response:', data);
     return data;
   } catch (error) {
@@ -78,15 +104,19 @@ export const useOverrideAPI = async (
 
 export const getLimitsAPI = async (user_id: string, device_id: string) => {
   try {
+    const endpoint = `${BASE_URL}${API.GetLimits}`
+      .replace(':user_id', encodeURIComponent(user_id))
+      .replace(':device_id', encodeURIComponent(device_id));
+
     const response = await fetch(
-      `${BASE_URL}${API.GetLimits}`.replace(':user_id', user_id).replace(':device_id', device_id),
+      endpoint,
       {
         method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildJsonHeaders(),
       }
     );
 
-    const data = await response.json();
+    const data = await parseJsonSafely(response);
     console.log('✅ Get Limits API Response:', data);
     return data;
   } catch (error) {
@@ -98,14 +128,14 @@ export const getLimitsAPI = async (user_id: string, device_id: string) => {
 export const deleteLimitAPI = async (limit_id: string) => {
   try {
     const response = await fetch(
-      `${BASE_URL}${API.DeleteLimit}`.replace(':limit_id', limit_id),
+      `${BASE_URL}${API.DeleteLimit}`.replace(':limit_id', encodeURIComponent(limit_id)),
       {
         method: 'DELETE',
-        headers: { 'Content-Type': 'application/json' },
+        headers: buildJsonHeaders(),
       }
     );
 
-    const data = await response.json();
+    const data = await parseJsonSafely(response);
     console.log('✅ Delete Limit API Response:', data);
     return data;
   } catch (error) {

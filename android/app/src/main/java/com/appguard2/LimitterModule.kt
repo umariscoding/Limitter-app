@@ -19,6 +19,7 @@ import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.ReadableType
 
 import android.app.AppOpsManager
+import android.content.ComponentName
 import android.content.Context
 import android.content.pm.ApplicationInfo
 import android.content.pm.PackageManager
@@ -360,6 +361,39 @@ class LimitterModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
         }
     }
 
+    private fun sanitizeWebsiteDomain(raw: String): String {
+        val trimmed = raw.trim().lowercase(Locale.US)
+        if (trimmed.isBlank()) return ""
+
+        val withScheme = if (trimmed.startsWith("http://") || trimmed.startsWith("https://")) {
+            trimmed
+        } else {
+            "https://$trimmed"
+        }
+
+        val host = try {
+            Uri.parse(withScheme).host ?: ""
+        } catch (_: Exception) {
+            ""
+        }
+
+        return host.removePrefix("www.").trim()
+    }
+
+    private fun isWebsiteAccessibilityEnabled(): Boolean {
+        val expected = ComponentName(reactApplicationContext, WebsiteBlockerService::class.java)
+            .flattenToString()
+
+        val enabled = Settings.Secure.getString(
+            reactApplicationContext.contentResolver,
+            Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES
+        ) ?: return false
+
+        return enabled.split(':').any { service ->
+            service.equals(expected, ignoreCase = true)
+        }
+    }
+
     private fun showToast(message: String) {
         mainHandler.post {
             Toast.makeText(reactApplicationContext, message, Toast.LENGTH_SHORT).show()
@@ -428,6 +462,103 @@ class LimitterModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
         } catch (e: Exception) {
             Log.e("LimitterModule", "Clock timer failed: ${e.message}")
             promise.reject("CLOCK_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun startWebsiteTimer(payload: ReadableMap, promise: Promise) {
+        val context = reactApplicationContext
+        try {
+            val checkContext = reactApplicationContext.currentActivity ?: context
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                if (!Settings.canDrawOverlays(checkContext)) {
+                    val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
+                    intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                    context.startActivity(intent)
+                    promise.resolve("PERMISSION_OVERLAY_REQUIRED")
+                    return
+                }
+            }
+
+            if (!isWebsiteAccessibilityEnabled()) {
+                val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+                context.startActivity(intent)
+                promise.resolve("PERMISSION_ACCESSIBILITY_REQUIRED")
+                return
+            }
+
+            val rawUrl = payload.getString("websiteUrl") ?: ""
+            val domain = sanitizeWebsiteDomain(rawUrl)
+            if (domain.isBlank()) {
+                promise.reject("WEBSITE_TIMER_ERROR", "Invalid website URL")
+                return
+            }
+
+            val mode = if (payload.hasKey("blockAtTimestampMs")) "clock" else "duration"
+            val durationSeconds = if (payload.hasKey("durationSeconds")) {
+                getIntLikeValue(payload, "durationSeconds").coerceAtLeast(1)
+            } else {
+                60
+            }
+            val blockAtTimestampMs = if (payload.hasKey("blockAtTimestampMs")) {
+                when (payload.getType("blockAtTimestampMs")) {
+                    ReadableType.Number -> payload.getDouble("blockAtTimestampMs").toLong().coerceAtLeast(1L)
+                    ReadableType.String -> payload.getString("blockAtTimestampMs")?.toLongOrNull()?.coerceAtLeast(1L) ?: 0L
+                    else -> 0L
+                }
+            } else {
+                0L
+            }
+
+            if (mode == "clock" && blockAtTimestampMs <= 0L) {
+                promise.reject("WEBSITE_TIMER_ERROR", "Invalid clock target")
+                return
+            }
+
+            val prefs = context.getSharedPreferences("WebsiteBlockerPrefs", Context.MODE_PRIVATE)
+            prefs.edit()
+                .putString("target_domain", domain)
+                .putString("timer_mode", mode)
+                .putInt("max_duration_seconds", durationSeconds)
+                .putLong("block_at_timestamp_ms", blockAtTimestampMs)
+                .putLong("consumed_ms", 0L)
+                .putLong("active_since_ms", 0L)
+                .putBoolean("website_blocked", false)
+                .apply()
+
+            Log.d("LimitterModule", "Website timer configured for $domain mode=$mode")
+            promise.resolve("WEBSITE_TIMER_STARTED")
+        } catch (e: Exception) {
+            Log.e("LimitterModule", "Website timer failed: ${e.message}")
+            promise.reject("WEBSITE_TIMER_ERROR", e.message)
+        }
+    }
+
+    @ReactMethod
+    fun getWebsiteBlockerStatus(promise: Promise) {
+        try {
+            val checkContext = reactApplicationContext.currentActivity ?: reactApplicationContext
+            val overlayEnabled = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+                Settings.canDrawOverlays(checkContext)
+            } else {
+                true
+            }
+
+            val accessibilityEnabled = isWebsiteAccessibilityEnabled()
+            val prefs = reactApplicationContext.getSharedPreferences("WebsiteBlockerPrefs", Context.MODE_PRIVATE)
+            val targetDomain = prefs.getString("target_domain", "") ?: ""
+
+            val result = Arguments.createMap().apply {
+                putBoolean("overlayEnabled", overlayEnabled)
+                putBoolean("accessibilityEnabled", accessibilityEnabled)
+                putBoolean("ready", overlayEnabled && accessibilityEnabled)
+                putString("targetDomain", targetDomain)
+            }
+
+            promise.resolve(result)
+        } catch (e: Exception) {
+            promise.reject("WEBSITE_STATUS_ERROR", e.message)
         }
     }
 }

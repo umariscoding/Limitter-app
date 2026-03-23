@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Platform, StatusBar } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { overrideLogs, overrideLogLabels, dashboardLabels } from '../data/appData';
+import { overrideLogLabels, dashboardLabels } from '../data/appData';
+import { getLimitHistory, LimitHistoryEntry, subscribeLimitHistory } from '../services/limitHistoryService';
 import { 
   Home, 
   BarChart2, 
@@ -11,6 +12,21 @@ import {
 
 export default function OverrideLogsScreen() {
   const navigation = useNavigation<any>();
+  const [history, setHistory] = React.useState<LimitHistoryEntry[]>([]);
+
+  React.useEffect(() => {
+    const load = async () => {
+      const data = await getLimitHistory();
+      setHistory(data);
+    };
+
+    void load();
+    const unsub = subscribeLimitHistory(() => {
+      void load();
+    });
+
+    return () => unsub();
+  }, []);
 
 
   return (
@@ -26,18 +42,18 @@ export default function OverrideLogsScreen() {
 
       {/* Content */}
       <ScrollView contentContainerStyle={styles.scrollContent}>
-        {overrideLogs.length === 0 ? (
+        {history.length === 0 ? (
           <View style={styles.emptyState}>
             <Text style={styles.emptyStateText}>{overrideLogLabels.emptyState}</Text>
           </View>
         ) : (
-          overrideLogs.map((log) => (
+          history.map((log) => (
             <View key={log.id} style={styles.logCard}>
               <View style={styles.logHeader}>
-                <Text style={styles.appName}>{log.app}</Text>
-                <Text style={styles.deviceBadge}>{log.device}</Text>
+                <Text style={styles.appName}>{log.appName}</Text>
+                <Text style={styles.deviceBadge}>{log.overrideUsed ? 'Override Used' : 'Blocked'}</Text>
               </View>
-              <Text style={styles.logDate}>{log.dateTime}</Text>
+              <Text style={styles.logDate}>{new Date(log.timestamp).toLocaleString()}</Text>
             </View>
           ))
         )}

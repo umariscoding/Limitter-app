@@ -18,10 +18,9 @@ import {
 
 const { LimitterModule, TimerEventModule } = NativeModules;
 
-import { startCategoryService } from './src/services/categoryService';
+import { startCategoryService } from '../services/categoryService';
 import { NavigationContainer } from '@react-navigation/native';
-import AuthNavigator from './src/navigation/AuthNavigator';
-import MainNavigator from './src/navigation/MainNavigator';
+import MainNavigator from '../navigation/MainNavigator';
 type AppInfo = {
   name: string;
   package: string;
@@ -345,7 +344,7 @@ function App(): React.JSX.Element {
   if (!showMainApp) {
     return (
       <NavigationContainer>
-        <AuthNavigator onLoginSuccess={() => setShowMainApp(true)} />
+        <MainNavigator />
       </NavigationContainer>
     );
   }

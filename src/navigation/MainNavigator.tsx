@@ -14,6 +14,7 @@ import {
   SubscriptionPlansScreen,
   AnalyticsScreen,
   ConfirmOverrideScreen,
+  DailyLimitsGraphScreen,
 } from '../screens';
 
 const Stack = createNativeStackNavigator();
@@ -41,6 +42,7 @@ const MainNavigator = () => {
         options={{ animation: 'none' }}
       />
       <Stack.Screen name="ConfirmOverrideScreen" component={ConfirmOverrideScreen} />
+      <Stack.Screen name="DailyLimitsGraphScreen" component={DailyLimitsGraphScreen} />
     </Stack.Navigator>
   );
 };
