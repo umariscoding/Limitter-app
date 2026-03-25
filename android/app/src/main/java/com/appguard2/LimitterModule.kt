@@ -7,86 +7,25 @@ import android.os.Build
 import android.provider.Settings
 import com.facebook.react.bridge.ReactApplicationContext
 import com.facebook.react.bridge.ReactContextBaseJavaModule
-import android.content.pm.ServiceInfo
 import android.widget.Toast
 import com.facebook.react.bridge.Arguments
 import com.facebook.react.bridge.WritableMap
 import com.facebook.react.bridge.ReactMethod
 import com.facebook.react.bridge.Promise
 import com.facebook.react.bridge.ReadableMap
-import com.facebook.react.bridge.ReadableArray
-import com.facebook.react.bridge.WritableArray
 import com.facebook.react.bridge.ReadableType
 
 import android.app.AppOpsManager
 import android.content.ComponentName
 import android.content.Context
 import android.content.pm.ApplicationInfo
-import android.content.pm.PackageManager
 import android.os.Process
-import android.os.Handler
-import android.os.Looper
 import java.util.Locale
 
 class LimitterModule(reactContext: ReactApplicationContext) : ReactContextBaseJavaModule(reactContext) {
 
-    private val mainHandler = Handler(Looper.getMainLooper())
-
     override fun getName(): String {
         return "LimitterModule"
-    }
-
-    @ReactMethod
-    fun logError(message: String) {
-        try {
-            val file = java.io.File(reactApplicationContext.getExternalFilesDir(null), "limitter_error.txt")
-            file.writeText(message)
-        } catch (e: Exception) {
-            Log.e("LimitterModule", "Failed to write log", e)
-        }
-    }
-
-    @ReactMethod
-    fun getInstalledApps(promise: Promise) {
-        try {
-            val pm = reactApplicationContext.packageManager
-            val mainIntent = Intent(Intent.ACTION_MAIN, null)
-            mainIntent.addCategory(Intent.CATEGORY_LAUNCHER)
-            
-            val resolveInfos = pm.queryIntentActivities(mainIntent, 0)
-            val appList: WritableArray = Arguments.createArray()
-            val seenPackages = HashSet<String>()
-
-            for (info in resolveInfos) {
-                val packageName = info.activityInfo.packageName
-                if (packageName == reactApplicationContext.packageName) continue
-                if (seenPackages.contains(packageName)) continue
-                
-                val appMap: WritableMap = Arguments.createMap()
-                val appLabel = info.loadLabel(pm).toString()
-                
-                appMap.putString("name", appLabel)
-                appMap.putString("package", packageName)
-                appList.pushMap(appMap)
-                seenPackages.add(packageName)
-            }
-            Log.d("LimitterModule", "Found ${appList.size()} apps via queryIntentActivities")
-            promise.resolve(appList)
-        } catch (e: Exception) {
-            Log.e("LimitterModule", "Error fetching apps: ${e.message}")
-            promise.reject("ERROR_APPS", e.message)
-        }
-    }
-
-    @ReactMethod
-    fun onAppSelected(packageName: String, promise: Promise) {
-        try {
-            val appName = resolveAppName(packageName)
-            showToast("$appName Selected")
-            promise.resolve(appName)
-        } catch (e: Exception) {
-            promise.reject("ERROR_APP_SELECT", e.message)
-        }
     }
 
     @ReactMethod
@@ -123,13 +62,6 @@ class LimitterModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             context.startActivity(intent)
         }
-    }
-
-    @ReactMethod
-    fun openAccessibilitySettings() {
-        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
-        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-        reactApplicationContext.startActivity(intent)
     }
 
     /** System App info screen for this package (helps users verify install / OEM permission shortcuts). */
@@ -169,35 +101,6 @@ class LimitterModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
     }
 
     @ReactMethod
-    fun requestPermissions(promise: Promise) {
-        // Kept for backwards compatibility
-        checkAndRequestPermissions(promise)
-    }
-
-    @ReactMethod
-    fun checkAndRequestPermissions(promise: Promise) {
-        val context = reactApplicationContext
-        val checkContext = reactApplicationContext.currentActivity ?: context
-        var allGranted = true
-
-        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-            if (!Settings.canDrawOverlays(checkContext)) {
-                allGranted = false
-                val intent = Intent(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${context.packageName}"))
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-            }
-            if (!hasUsageStatsPermission()) {
-                allGranted = false
-                val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                context.startActivity(intent)
-            }
-        }
-        promise.resolve(allGranted)
-    }
-
-    @ReactMethod
     fun getActiveTimers(promise: Promise) {
         try {
             val timers = LimitterService.getActiveTimers()
@@ -216,6 +119,7 @@ class LimitterModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
                     else -> timer.durationSeconds
                 }
                 map.putInt("remainingSeconds", remaining)
+                map.putInt("liveTimerUsageBudgetSeconds", timer.durationSeconds)
                 val status = when {
                     timer.isBlocked -> "blocked"
                     timer.isStarted -> "active"
@@ -231,28 +135,10 @@ class LimitterModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
     }
 
     @ReactMethod
-    fun showNotification(message: String, promise: Promise) {
-        try {
-            val intent = Intent(reactApplicationContext, LimitterService::class.java).apply {
-                putExtra("command", "NOTIFICATION")
-                putExtra("message", message)
-            }
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                reactApplicationContext.startForegroundService(intent)
-            } else {
-                reactApplicationContext.startService(intent)
-            }
-            promise.resolve(true)
-        } catch (e: Exception) {
-            promise.reject("ERROR_NOTIF", e.message)
-        }
-    }
-
-    @ReactMethod
     fun sendCommand(command: String, payload: ReadableMap?, promise: Promise) {
         val context = reactApplicationContext
         try {
-            if (command == "START_TIMERS" || command == "START" || command == "OVERRIDE") {
+            if (command == "START_TIMERS") {
                 val checkContext = reactApplicationContext.currentActivity ?: context
                 if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
                     if (!Settings.canDrawOverlays(checkContext)) {
@@ -325,16 +211,6 @@ class LimitterModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
                         }
                     }
 
-                    if (command == "START" || command == "OVERRIDE") {
-                        val durationSeconds = convertToSeconds(payload)
-                        normalizedPayload["duration"] = durationSeconds.toString()
-
-                        val selectedPackage = normalizedPayload["package"].orEmpty()
-                        if (selectedPackage.isNotBlank() && normalizedPayload["appName"].isNullOrBlank()) {
-                            normalizedPayload["appName"] = resolveAppName(selectedPackage)
-                        }
-                    }
-
                     val intent = Intent(context, LimitterService::class.java).apply {
                         putExtra("command", command)
                         if (normalizedPayload.isNotEmpty()) {
@@ -379,30 +255,6 @@ class LimitterModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
         }
 
         return false
-    }
-
-    private fun convertToSeconds(payload: ReadableMap?): Int {
-        if (payload == null) return 60
-
-        val rawDuration = when {
-            payload.hasKey("duration") -> getIntLikeValue(payload, "duration")
-            payload.hasKey("timeValue") -> getIntLikeValue(payload, "timeValue")
-            payload.hasKey("value") -> getIntLikeValue(payload, "value")
-            else -> 60
-        }
-
-        val unit = when {
-            payload.hasKey("timeUnit") -> payload.getString("timeUnit")
-            payload.hasKey("unit") -> payload.getString("unit")
-            else -> "seconds"
-        }?.lowercase(Locale.US) ?: "seconds"
-
-        val safeDuration = if (rawDuration > 0) rawDuration else 60
-        return when (unit) {
-            "h", "hr", "hrs", "hour", "hours" -> safeDuration * 3600
-            "m", "min", "mins", "minute", "minutes" -> safeDuration * 60
-            else -> safeDuration
-        }
     }
 
     private fun getIntLikeValue(map: ReadableMap, key: String): Int {
@@ -453,12 +305,6 @@ class LimitterModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
 
         return enabled.split(':').any { service ->
             service.equals(expected, ignoreCase = true)
-        }
-    }
-
-    private fun showToast(message: String) {
-        mainHandler.post {
-            Toast.makeText(reactApplicationContext, message, Toast.LENGTH_SHORT).show()
         }
     }
 

@@ -3,6 +3,8 @@
  * Single source of truth for how API data → UI data.
  */
 
+import type { NativeTimerState } from '../native/appBlockerService';
+
 export interface UIPolicy {
   id: string;
   app_name: string;
@@ -87,31 +89,108 @@ export function formatRemainingTime(minutes: number): string {
   return `${formatUsageTime(minutes)} left`;
 }
 
-/**
- * Merge local + server usage: take max(local, server) per policy.
- * This is the "most restrictive" rule — prevents bypass via offline.
- */
-export function mergeUsage(
-  policies: UIPolicy[],
-  localUsage: Record<string, number>, // policyId → usedSeconds
-): UIPolicy[] {
-  return policies.map(p => {
-    const localSec = localUsage[p.id] || 0;
-    const serverSec = p.time_used_minutes * 60;
-    const maxUsedSec = Math.max(localSec, serverSec);
-    const usedMinutes = maxUsedSec / 60;
-    const limitMin = Number(p.max_time_minutes) || 0;
-    const maxSeconds = limitMin * 60;
-    const isBlocked = maxSeconds > 0 && maxUsedSec >= maxSeconds;
+export function getPolicyPackageKey(item: any): string {
+  return String(item?.app_name || item?.package_name || item?.packageName || '')
+    .trim()
+    .toLowerCase();
+}
 
-    let status: 'active' | 'inactive' | 'blocked' = 'inactive';
-    if (isBlocked) status = 'blocked';
-    else if (usedMinutes > 0) status = 'active';
+export function resolvePolicyBlockedState(item: any): boolean {
+  if (typeof item?.is_blocked === 'boolean') return item.is_blocked;
+
+  const rawStatus = String(item?.status_text || item?.status || '')
+    .trim()
+    .toLowerCase();
+  if (rawStatus.includes('block')) return true;
+  if (rawStatus.includes('active') || rawStatus.includes('running') || rawStatus.includes('unblocked')) {
+    return false;
+  }
+
+  const blockedUntil = Number(item?.blocked_until_timestamp || 0);
+  if (blockedUntil > Date.now()) return true;
+
+  const maxMinutes = Number(item?.max_time_minutes || 0);
+  const usedMinutes = Number(item?.time_used_minutes || 0);
+  if (maxMinutes <= 0) return false;
+  return usedMinutes >= maxMinutes;
+}
+
+export function normalizeUiPolicy(item: UIPolicy): UIPolicy {
+  return {
+    ...item,
+    is_blocked: resolvePolicyBlockedState(item),
+  };
+}
+
+/** Apply native timer blocked state on top of normalized policies. */
+export function mergeBlockedOverlaysIntoPolicies(
+  normalizedPolicies: UIPolicy[],
+  nativeBlockedPackages: Set<string>,
+): UIPolicy[] {
+  return normalizedPolicies.map(item => {
+    const key = getPolicyPackageKey(item);
+    if (nativeBlockedPackages.has(key)) {
+      return { ...item, is_blocked: true };
+    }
+    return item;
+  });
+}
+
+export type NativeTimerForLiveTimerUsageMerge = Pick<
+  NativeTimerState,
+  'package' | 'remainingSeconds' | 'liveTimerUsageBudgetSeconds' | 'status'
+>;
+
+/**
+ * Add in-flight live timer usage consumption (liveTimerUsageBudget − remaining) to API usage for app limits.
+ */
+export function mergeLiveTimerUsageIntoPolicies(
+  policies: UIPolicy[],
+  timers: NativeTimerForLiveTimerUsageMerge[],
+): UIPolicy[] {
+  const byPkg = new Map<string, NativeTimerForLiveTimerUsageMerge>();
+  timers.forEach(t => {
+    const k = String(t.package || '')
+      .trim()
+      .toLowerCase();
+    if (k) byPkg.set(k, t);
+  });
+
+  return policies.map(item => {
+    if (item.target_type !== 'app') return item;
+    const key = getPolicyPackageKey(item);
+    const timer = byPkg.get(key);
+    if (!timer) return item;
+
+    const budget = Math.max(0, Number(timer.liveTimerUsageBudgetSeconds) || 0);
+    const remaining = Math.max(0, Number(timer.remainingSeconds) || 0);
+    const liveTimerUsageSec = Math.max(0, Math.min(budget, budget - remaining));
+
+    const used = Number(item.time_used_minutes) || 0;
+    const mergedUsed = used + liveTimerUsageSec / 60;
+    const maxMin = Number(item.max_time_minutes) || 0;
+
+    console.log('[LiveTimerUsage]', {
+      package: key,
+      status: timer.status,
+      apiUsedMinutes: used,
+      liveTimerUsageBudgetSeconds: budget,
+      liveTimerRemainingSeconds: remaining,
+      liveTimerUsageSeconds: liveTimerUsageSec,
+      mergedUsedMinutes: mergedUsed,
+      maxLimitMinutes: maxMin,
+    });
+    let is_blocked = item.is_blocked;
+    let status = item.status;
+    if (maxMin > 0 && mergedUsed >= maxMin) {
+      is_blocked = true;
+      status = 'blocked';
+    }
 
     return {
-      ...p,
-      time_used_minutes: usedMinutes,
-      is_blocked: isBlocked,
+      ...item,
+      time_used_minutes: mergedUsed,
+      is_blocked,
       status,
     };
   });

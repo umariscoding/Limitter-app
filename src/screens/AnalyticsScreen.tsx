@@ -6,9 +6,8 @@ import { useUser } from '../context/UserContext';
 import { useUsageContext } from '../context/UsageContext';
 import { WeeklyUsageGraph } from '../components/WeeklyUsageGraph';
 import { getPoliciesAPI } from '../services/policyService';
+import { resolveCurrentDeviceId } from '../native/currentDeviceService';
 import { getNativeBlockedPackages } from '../native/appBlockerService';
-import { getLimitHistory } from '../utils/limitHistoryService';
-
 interface BreakdownItem {
   id: string;
   name: string;
@@ -29,7 +28,7 @@ const formatMinutes = (mins: number) => {
 export default function AnalyticsScreen() {
   const navigation = useNavigation<any>();
   const { user } = useUser();
-  const { weeklyUsage, isLoadingWeekly, weeklyError, currentDeviceId, setWeeklyUsage, setIsLoadingWeekly, setWeeklyError } = useUsageContext();
+  const { weeklyUsage, isLoadingWeekly, weeklyError } = useUsageContext();
   const [breakdown, setBreakdown] = React.useState<BreakdownItem[]>([]);
 
   const getLimitPackageKey = React.useCallback((item: any) => {
@@ -39,7 +38,13 @@ export default function AnalyticsScreen() {
   }, []);
 
   const fetchBreakdown = React.useCallback(async () => {
-    if (!user?.uid || !currentDeviceId) {
+    if (!user?.uid) {
+      setBreakdown([]);
+      return;
+    }
+
+    const deviceId = await resolveCurrentDeviceId(user.uid);
+    if (!deviceId) {
       setBreakdown([]);
       return;
     }
@@ -62,22 +67,6 @@ export default function AnalyticsScreen() {
           is_blocked: state.isExhaustedToday || false,
           created_at: p.createdAt?._seconds ? p.createdAt._seconds * 1000 : Date.now(),
         };
-      });
-
-      const history = await getLimitHistory();
-      const latestHistoryByPackage = new Map<string, { type: 'blocked' | 'override'; timestamp: number }>();
-      history.forEach(entry => {
-        const key = String(entry.packageName || '').trim().toLowerCase();
-        if (!key) return;
-
-        const current = latestHistoryByPackage.get(key);
-        const ts = Number(entry.timestamp || 0);
-        if (!current || ts > current.timestamp) {
-          latestHistoryByPackage.set(key, {
-            type: entry.type,
-            timestamp: ts,
-          });
-        }
       });
 
       const nativeBlockedPackages = await getNativeBlockedPackages();
@@ -104,17 +93,7 @@ export default function AnalyticsScreen() {
           const blockedByUntil = blockedUntil > Date.now();
           const blockedByNative = packageKey ? nativeBlockedPackages.has(packageKey) : false;
 
-          const latest = packageKey ? latestHistoryByPackage.get(packageKey) : undefined;
-          const blockedByHistory = latest?.type === 'blocked';
-          const overriddenByHistory = latest?.type === 'override';
-
-          // Final status priority:
-          // 1) Native blocked / blocked-until / timer reached => blocked
-          // 2) Latest override only unblocks when none of the hard block states above are true
-          let resolvedBlocked = isBlocked || blockedByUsage || blockedByUntil || blockedByNative || blockedByHistory;
-          if (overriddenByHistory && !blockedByUsage && !blockedByUntil && !blockedByNative) {
-            resolvedBlocked = false;
-          }
+          let resolvedBlocked = isBlocked || blockedByUsage || blockedByUntil || blockedByNative;
 
           // Recent timer logic: prefer when timer/limit was created.
           const timerSetAt = Math.max(
@@ -156,7 +135,7 @@ export default function AnalyticsScreen() {
       console.error('❌ Analytics breakdown fetch failed:', error);
       setBreakdown([]);
     }
-  }, [user?.uid, currentDeviceId]);
+  }, [user?.uid]);
 
   React.useEffect(() => {
     void fetchBreakdown();

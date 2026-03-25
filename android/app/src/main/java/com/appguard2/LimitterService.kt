@@ -5,11 +5,8 @@ import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager
 import android.content.Context
 import android.content.Intent
-import android.app.AlarmManager
-import android.app.PendingIntent
 import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
-import android.os.SystemClock
 import android.graphics.Color
 import android.graphics.PixelFormat
 import android.os.*
@@ -19,14 +16,9 @@ import android.view.WindowManager
 import android.widget.Button
 import android.widget.LinearLayout
 import android.widget.TextView
-import android.widget.Toast
 import androidx.core.app.NotificationCompat
 import java.util.concurrent.ConcurrentHashMap
-import java.util.concurrent.Executors
-import java.util.concurrent.ScheduledExecutorService
-import java.util.concurrent.TimeUnit
 
-// Data class to represent a single app timer
 data class AppTimer(
     val packageName: String,
     val appName: String,
@@ -34,32 +26,30 @@ data class AppTimer(
     var endTimeMillis: Long = 0,
     var isStarted: Boolean = false,
     var isBlocked: Boolean = false,
-    var timerType: String = "duration", // "duration" or "clock"
-    var blockedAtMillis: Long = 0
+    var timerType: String = "duration",
+    var blockedAtMillis: Long = 0,
 )
 
 class LimitterService : Service() {
     companion object {
         var instance: LimitterService? = null
             private set
-            
-        fun getActiveTimers(): Map<String, AppTimer> {
-            return instance?.appTimers ?: emptyMap()
-        }
+
+        fun getActiveTimers(): Map<String, AppTimer> = instance?.appTimers ?: emptyMap()
     }
 
     private var windowManager: WindowManager? = null
-    private var overlayViews: MutableMap<String, android.view.View?> = mutableMapOf()
+    private val overlayViews: MutableMap<String, android.view.View?> = mutableMapOf()
     private val mainHandler = Handler(Looper.getMainLooper())
     private val TAG = "LimitterService"
-
     private val appTimers = ConcurrentHashMap<String, AppTimer>()
     @Volatile private var isRunning = false
     private var lastBroadcastTime = 0L
     private var wakeLock: PowerManager.WakeLock? = null
     private var workerThread: HandlerThread? = null
     private var workerHandler: Handler? = null
-    
+    private var monitorRunnable: Runnable? = null
+
     private val PREFS_NAME = "LimitterServicePrefs"
     private val KEY_RUNNING = "isRunning"
 
@@ -68,32 +58,34 @@ class LimitterService : Service() {
             val remaining = if (timer.isStarted) {
                 ((timer.endTimeMillis - System.currentTimeMillis()) / 1000).toInt().coerceAtLeast(0)
             } else {
-                timer.durationSeconds // Not started yet, show full duration
+                timer.durationSeconds
             }
             val status = when {
                 timer.isBlocked -> "blocked"
                 timer.isStarted -> "active"
                 else -> "waiting"
             }
-            val intent = Intent("com.appguard2.TIMER_TICK").apply {
-                putExtra("package", pkg)
-                putExtra("appName", timer.appName)
-                putExtra("remaining", remaining)
-                putExtra("isBlocked", timer.isBlocked)
-                putExtra("status", status)
-                putExtra("blockedAt", timer.blockedAtMillis)
-            }
-            sendBroadcast(intent)
+            sendBroadcast(
+                Intent("com.appguard2.TIMER_TICK").apply {
+                    putExtra("package", pkg)
+                    putExtra("appName", timer.appName)
+                    putExtra("remaining", remaining)
+                    putExtra("isBlocked", timer.isBlocked)
+                    putExtra("status", status)
+                    putExtra("blockedAt", timer.blockedAtMillis)
+                },
+            )
         }
     }
 
     private fun emitBlockedEvent(packageName: String, appName: String, blockedAtMillis: Long) {
-        val blockedIntent = Intent("com.appguard2.TIMER_BLOCKED").apply {
-            putExtra("package", packageName)
-            putExtra("appName", appName)
-            putExtra("blockedAt", blockedAtMillis)
-        }
-        sendBroadcast(blockedIntent)
+        sendBroadcast(
+            Intent("com.appguard2.TIMER_BLOCKED").apply {
+                putExtra("package", packageName)
+                putExtra("appName", appName)
+                putExtra("blockedAt", blockedAtMillis)
+            },
+        )
     }
 
     override fun onCreate() {
@@ -107,7 +99,7 @@ class LimitterService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         val command = intent?.getStringExtra("command")
-        Log.d(TAG, "📱 Command: $command")
+        Log.d(TAG, "Command: $command")
 
         when (command) {
             "START_TIMERS", "START" -> {
@@ -118,48 +110,38 @@ class LimitterService : Service() {
                     @Suppress("DEPRECATION")
                     intent?.getSerializableExtra("apps") as? ArrayList<HashMap<String, String>>
                 }
-                
+
                 val payload = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
                     intent?.getSerializableExtra("payload", HashMap::class.java) as? HashMap<String, String>
                 } else {
                     @Suppress("DEPRECATION")
                     intent?.getSerializableExtra("payload") as? HashMap<String, String>
                 }
-                
-                // ========== DURATION TIMER (ORIGINAL — UNTOUCHED) ==========
-                // Timer is WAITING — countdown starts when user opens this app
+
                 if (apps != null) {
                     for (app in apps) {
                         val pkg = app["package"] ?: continue
                         val name = app["appName"] ?: pkg
                         val duration = (app["duration"] ?: "60").toIntOrNull() ?: 60
-                        
                         removeBlockingOverlay(pkg)
-                        
-                        // Timer is WAITING — countdown starts when user opens this app
                         appTimers[pkg] = AppTimer(pkg, name, duration, 0, false, false, "duration")
-                        Log.d(TAG, "✅ Timer Waiting: $name ($duration s) — starts on app open")
+                        Log.d(TAG, "Timer waiting: $name (${duration}s)")
                     }
                 } else if (payload != null) {
                     val pkg = payload["package"] ?: return START_STICKY
                     val name = payload["appName"] ?: pkg
                     val duration = (payload["duration"] ?: "60").toIntOrNull() ?: 60
-                    
                     removeBlockingOverlay(pkg)
-                    
-                    // Timer is WAITING — countdown starts when user opens this app
                     appTimers[pkg] = AppTimer(pkg, name, duration, 0, false, false, "duration")
-                    Log.d(TAG, "✅ Timer Waiting: $name ($duration s) — starts on app open")
+                    Log.d(TAG, "Timer waiting: $name (${duration}s)")
                 }
-                
+
                 isRunning = true
                 saveState()
-                scheduleMonitoringAlarm()
+                scheduleNextMonitorTick()
                 startBackgroundTasks()
             }
 
-            // ========== CLOCK TIMER (NEW — COMPLETELY SEPARATE) ==========
-            // This is an absolute-time timer. The block fires at a specific clock time.
             "START_CLOCK_TIMER" -> {
                 @Suppress("UNCHECKED_CAST")
                 val clockApps = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
@@ -175,30 +157,25 @@ class LimitterService : Service() {
                         val name = app["appName"] ?: pkg
                         val hour = (app["hour"] ?: "0").toIntOrNull() ?: 0
                         val minute = (app["minute"] ?: "0").toIntOrNull() ?: 0
-
                         removeBlockingOverlay(pkg)
-
-                        // Calculate the absolute block time
                         val endTime = calculateClockEndTime(hour, minute)
-
-                        // Clock timer is STARTED immediately — it counts against the clock
                         appTimers[pkg] = AppTimer(pkg, name, 0, endTime, true, false, "clock")
                         scheduleTimerAlarm(pkg, name, endTime)
-                        Log.d(TAG, "🕐 Clock Timer Started: $name — blocks at $endTime (hour=$hour, min=$minute)")
+                        Log.d(TAG, "Clock timer: $name at $endTime")
                     }
                 }
 
                 isRunning = true
                 saveState()
-                scheduleMonitoringAlarm()
+                scheduleNextMonitorTick()
                 startBackgroundTasks()
             }
 
             "EXPIRE" -> {
                 val pkg = intent?.getStringExtra("package") ?: return START_STICKY
                 val name = intent?.getStringExtra("appName") ?: pkg
-                Log.d(TAG, "⏰ EXPIRE fired for $pkg")
-                
+                Log.d(TAG, "EXPIRE: $pkg")
+
                 val timer = appTimers[pkg]
                 if (timer != null && timer.isStarted && !timer.isBlocked) {
                     timer.isBlocked = true
@@ -206,19 +183,24 @@ class LimitterService : Service() {
                     appTimers[pkg] = timer
                     saveState()
                     emitBlockedEvent(pkg, name, timer.blockedAtMillis)
-                    
-                    // IMMEDIATELY block — user opened this app so they're on it
                     forceCloseApp(pkg)
                     mainHandler.post { showBlockingOverlay(pkg, name) }
-                    Log.d(TAG, "⛔ BLOCKED: $name — timer reached 0")
+                    Log.d(TAG, "Blocked: $name")
                 }
                 scheduleNextMonitorTick()
             }
 
             "BLOCK_APP" -> {
-                val pkg = intent?.getStringExtra("package")
-                val name = intent?.getStringExtra("appName") ?: pkg
-                
+                @Suppress("UNCHECKED_CAST")
+                val payload = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                    intent?.getSerializableExtra("payload", HashMap::class.java) as? HashMap<String, String>
+                } else {
+                    @Suppress("DEPRECATION")
+                    intent?.getSerializableExtra("payload") as? HashMap<String, String>
+                }
+                val pkg = intent?.getStringExtra("package") ?: payload?.get("package")
+                val name = intent?.getStringExtra("appName") ?: payload?.get("appName") ?: pkg
+
                 if (pkg != null) {
                     val now = System.currentTimeMillis()
                     appTimers[pkg] = AppTimer(pkg, name ?: pkg, 0, now, true, true, "duration", now)
@@ -226,7 +208,7 @@ class LimitterService : Service() {
                     saveState()
                     startBackgroundTasks()
                     emitBlockedEvent(pkg, name ?: pkg, now)
-                    
+
                     val currentApp = getForegroundApp()
                     if (currentApp == pkg) {
                         forceCloseApp(pkg)
@@ -236,21 +218,19 @@ class LimitterService : Service() {
             }
 
             "STOP" -> {
-                Log.d(TAG, "⏹ STOP command received")
+                Log.d(TAG, "STOP")
                 isRunning = false
                 clearState()
                 stopProcesses()
                 stopSelf()
             }
+
             "MONITOR_TICK" -> {
-                // Exact alarm chain: each tick schedules the next
                 val now = System.currentTimeMillis()
                 var stateChanged = false
-                var hasWork = false
                 val currentApp = getForegroundApp()
 
                 appTimers.forEach { (pkg, timer) ->
-                    // 1. User opened a WAITING app — start countdown
                     if (!timer.isStarted && !timer.isBlocked && currentApp == pkg) {
                         val endTime = now + (timer.durationSeconds * 1000L)
                         timer.endTimeMillis = endTime
@@ -258,20 +238,18 @@ class LimitterService : Service() {
                         appTimers[pkg] = timer
                         stateChanged = true
                         scheduleTimerAlarm(pkg, timer.appName, endTime)
-                        Log.d(TAG, "▶️ TIMER STARTED (monitor): ${timer.appName}")
+                        Log.d(TAG, "Timer started (alarm monitor): ${timer.appName}")
                     }
 
-                    // 2. Check expiry (only if started)
                     if (timer.isStarted && !timer.isBlocked && now >= timer.endTimeMillis) {
                         timer.isBlocked = true
                         timer.blockedAtMillis = now
                         appTimers[pkg] = timer
                         stateChanged = true
                         emitBlockedEvent(pkg, timer.appName, timer.blockedAtMillis)
-                        Log.d(TAG, "🔔 EXPIRED (monitor): ${timer.appName}")
+                        Log.d(TAG, "Expired (alarm monitor): ${timer.appName}")
                     }
 
-                    // 3. Enforce block
                     if (timer.isBlocked && currentApp == pkg) {
                         forceCloseApp(pkg)
                         mainHandler.post {
@@ -282,25 +260,21 @@ class LimitterService : Service() {
                     } else if (timer.isBlocked && currentApp != null && currentApp != pkg && overlayViews[pkg] != null && !isLauncher(currentApp)) {
                         mainHandler.post { removeBlockingOverlay(pkg) }
                     }
-
-                    // Track if there's still work to do
-                    if (!timer.isBlocked) hasWork = true
-                    if (timer.isBlocked) hasWork = true // need to monitor blocked apps too
                 }
+
                 if (stateChanged) saveState()
 
-                // Schedule next tick if we have work
-                if (isRunning && hasWork) {
+                if (isRunning && appTimers.isNotEmpty()) {
                     scheduleNextMonitorTick()
                 }
             }
 
             "HEARTBEAT" -> {
                 if (isRunning && monitorRunnable == null) {
-                    Log.d(TAG, "💓 Heartbeat: Monitor dead, restarting")
+                    Log.d(TAG, "Heartbeat: restarting monitor")
                     startBackgroundTasks()
                 } else if (isRunning) {
-                    Log.d(TAG, "💓 Heartbeat: Monitor alive")
+                    Log.d(TAG, "Heartbeat: ok")
                 }
             }
         }
@@ -310,57 +284,41 @@ class LimitterService : Service() {
     private fun scheduleTimerAlarm(packageName: String, appName: String, endTimeMillis: Long) {
         try {
             val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(this, AlarmReceiver::class.java).apply {
-                putExtra("command", "EXPIRE")
-                putExtra("package", packageName)
-                putExtra("appName", appName)
-            }
-            val requestCode = packageName.hashCode()
-            val pendingIntent = PendingIntent.getBroadcast(this, requestCode, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            
-            // setExactAndAllowWhileIdle wakes device even in Doze mode
+            val pi = PendingIntent.getBroadcast(
+                this,
+                packageName.hashCode(),
+                Intent(this, AlarmReceiver::class.java).apply {
+                    putExtra("command", "EXPIRE")
+                    putExtra("package", packageName)
+                    putExtra("appName", appName)
+                },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, endTimeMillis, pendingIntent)
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, endTimeMillis, pi)
             } else {
-                alarmManager.setExact(AlarmManager.RTC_WAKEUP, endTimeMillis, pendingIntent)
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, endTimeMillis, pi)
             }
-            Log.d(TAG, "⏰ Exact Alarm (Broadcast) set for $packageName at $endTimeMillis")
+            Log.d(TAG, "Expire alarm set: $packageName @ $endTimeMillis")
         } catch (e: Exception) {
             Log.e(TAG, "Alarm schedule failed: ${e.message}")
         }
     }
 
-    private fun cancelTimerAlarm(packageName: String) {
-        try {
-            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(this, AlarmReceiver::class.java)
-            val requestCode = packageName.hashCode()
-            val pendingIntent = PendingIntent.getBroadcast(this, requestCode, intent, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
-            pendingIntent?.let { alarmManager.cancel(it) }
-        } catch (e: Exception) {
-            Log.e(TAG, "Alarm cancel failed: ${e.message}")
-        }
-    }
-
-    private fun scheduleMonitoringAlarm() {
-        scheduleNextMonitorTick()
-    }
-
-    // Exact alarm chain: each tick schedules the next one
-    // This bypasses Android's 60-second minimum for setRepeating
     private fun scheduleNextMonitorTick() {
         try {
             val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(this, AlarmReceiver::class.java).apply {
-                putExtra("command", "MONITOR_TICK")
-            }
-            val pendingIntent = PendingIntent.getBroadcast(this, 8888, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            
-            val triggerAt = System.currentTimeMillis() + 3000 // 3 seconds
+            val pi = PendingIntent.getBroadcast(
+                this,
+                8888,
+                Intent(this, AlarmReceiver::class.java).apply { putExtra("command", "MONITOR_TICK") },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            val triggerAt = System.currentTimeMillis() + 3000L
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
-                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                alarmManager.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, triggerAt, pi)
             } else {
-                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pendingIntent)
+                alarmManager.setExact(AlarmManager.RTC_WAKEUP, triggerAt, pi)
             }
         } catch (e: Exception) {
             Log.e(TAG, "Monitor tick schedule failed: ${e.message}")
@@ -369,45 +327,40 @@ class LimitterService : Service() {
 
     private fun cancelMonitoringAlarm() {
         try {
-            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(this, AlarmReceiver::class.java)
-            val pendingIntent = PendingIntent.getBroadcast(this, 8888, intent, PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE)
-            pendingIntent?.let { alarmManager.cancel(it) }
-        } catch (e: Exception) {}
+            val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val pi = PendingIntent.getBroadcast(
+                this,
+                8888,
+                Intent(this, AlarmReceiver::class.java),
+                PendingIntent.FLAG_NO_CREATE or PendingIntent.FLAG_IMMUTABLE,
+            )
+            pi?.let { am.cancel(it) }
+        } catch (_: Exception) {}
     }
 
-    private var monitorRunnable: Runnable? = null
-
     private fun startBackgroundTasks() {
-        // Stop old worker if running
         monitorRunnable?.let { workerHandler?.removeCallbacks(it) }
         workerThread?.quitSafely()
-        
-        // Create a DEDICATED thread for monitoring — NOT the main thread
-        // This is critical because React Native uses the main thread heavily
-        // and Android can throttle the main thread when the app is in background
+
         workerThread = HandlerThread("AppGuardWorker", Thread.MAX_PRIORITY).also { it.start() }
         workerHandler = Handler(workerThread!!.looper)
-        
-        Log.d(TAG, "🚀 Dedicated worker thread started")
-        
+        Log.d(TAG, "Worker thread started")
+
         monitorRunnable = object : Runnable {
             override fun run() {
                 if (!isRunning) return
-                
+
                 try {
                     val now = System.currentTimeMillis()
                     var stateChanged = false
-                    var currentApp: String? = null
-                    
-                    try {
-                        currentApp = getForegroundApp()
+                    val currentApp = try {
+                        getForegroundApp()
                     } catch (e: Exception) {
-                        Log.e(TAG, "getForegroundApp error: ${e.message}")
+                        Log.e(TAG, "getForegroundApp: ${e.message}")
+                        null
                     }
 
                     appTimers.forEach { (pkg, timer) ->
-                        // 1. User opened a WAITING app — START the countdown now
                         if (!timer.isStarted && !timer.isBlocked && currentApp == pkg) {
                             val endTime = System.currentTimeMillis() + (timer.durationSeconds * 1000L)
                             timer.endTimeMillis = endTime
@@ -415,20 +368,18 @@ class LimitterService : Service() {
                             appTimers[pkg] = timer
                             stateChanged = true
                             scheduleTimerAlarm(pkg, timer.appName, endTime)
-                            Log.d(TAG, "▶️ TIMER STARTED: ${timer.appName} — ${timer.durationSeconds}s countdown")
+                            Log.d(TAG, "Timer started: ${timer.appName} (${timer.durationSeconds}s)")
                         }
 
-                        // 2. Check Timer Expiry (only if started)
                         if (timer.isStarted && !timer.isBlocked && now >= timer.endTimeMillis) {
                             timer.isBlocked = true
                             timer.blockedAtMillis = now
                             appTimers[pkg] = timer
                             stateChanged = true
                             emitBlockedEvent(pkg, timer.appName, timer.blockedAtMillis)
-                            Log.d(TAG, "🔔 EXPIRED: ${timer.appName}")
+                            Log.d(TAG, "Expired: ${timer.appName}")
                         }
 
-                        // 3. Enforce Block (overlay/UI must run on main thread)
                         if (timer.isBlocked) {
                             if (currentApp == pkg) {
                                 forceCloseApp(pkg)
@@ -445,7 +396,6 @@ class LimitterService : Service() {
 
                     if (stateChanged) saveState()
 
-                    // Broadcast updates every 1 second
                     if (now - lastBroadcastTime >= 1000) {
                         broadcastTick()
                         mainHandler.post { updateNotification() }
@@ -454,26 +404,32 @@ class LimitterService : Service() {
                 } catch (e: Exception) {
                     Log.e(TAG, "Monitor loop error: ${e.message}")
                 }
-                
-                // ALWAYS re-schedule on the worker thread
+
                 if (isRunning) {
                     workerHandler?.postDelayed(this, 1000)
                 }
             }
         }
-        
+
         workerHandler?.post(monitorRunnable!!)
         setupHeartbeat()
     }
 
     private fun setupHeartbeat() {
         try {
-            val alarmManager = getSystemService(Context.ALARM_SERVICE) as AlarmManager
-            val intent = Intent(this, LimitterService::class.java).apply { putExtra("command", "HEARTBEAT") }
-            val pendingIntent = PendingIntent.getService(this, 999, intent, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            
-            // Alarm every 1 minute to keep service alive
-            alarmManager.setRepeating(AlarmManager.ELAPSED_REALTIME_WAKEUP, SystemClock.elapsedRealtime() + 60000, 60000, pendingIntent)
+            val am = getSystemService(Context.ALARM_SERVICE) as AlarmManager
+            val pi = PendingIntent.getService(
+                this,
+                999,
+                Intent(this, LimitterService::class.java).apply { putExtra("command", "HEARTBEAT") },
+                PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
+            )
+            am.setRepeating(
+                AlarmManager.ELAPSED_REALTIME_WAKEUP,
+                SystemClock.elapsedRealtime() + 60000,
+                60000,
+                pi,
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Heartbeat setup failed: ${e.message}")
         }
@@ -484,14 +440,16 @@ class LimitterService : Service() {
             val activityManager = getSystemService(Context.ACTIVITY_SERVICE) as ActivityManager
             val killMethod = ActivityManager::class.java.getMethod("forceStopPackage", String::class.java)
             killMethod.invoke(activityManager, packageName)
-            Log.d(TAG, "🛑 Force closed: $packageName")
-            
-            startActivity(Intent(Intent.ACTION_MAIN).apply {
-                addCategory(Intent.CATEGORY_HOME)
-                flags = Intent.FLAG_ACTIVITY_NEW_TASK
-            })
+            Log.d(TAG, "Force closed: $packageName")
+
+            startActivity(
+                Intent(Intent.ACTION_MAIN).apply {
+                    addCategory(Intent.CATEGORY_HOME)
+                    flags = Intent.FLAG_ACTIVITY_NEW_TASK
+                },
+            )
         } catch (e: Exception) {
-            Log.e(TAG, "Failed to force close: ${e.message}")
+            Log.e(TAG, "Force close failed: ${e.message}")
         }
     }
 
@@ -505,14 +463,16 @@ class LimitterService : Service() {
             val params = WindowManager.LayoutParams(
                 WindowManager.LayoutParams.MATCH_PARENT,
                 WindowManager.LayoutParams.MATCH_PARENT,
-                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
                     WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
-                else
-                    @Suppress("DEPRECATION") WindowManager.LayoutParams.TYPE_PHONE,
+                } else {
+                    @Suppress("DEPRECATION")
+                    WindowManager.LayoutParams.TYPE_PHONE
+                },
                 WindowManager.LayoutParams.FLAG_LAYOUT_IN_SCREEN or
-                WindowManager.LayoutParams.FLAG_FULLSCREEN or
-                WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
-                PixelFormat.TRANSLUCENT
+                    WindowManager.LayoutParams.FLAG_FULLSCREEN or
+                    WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON,
+                PixelFormat.TRANSLUCENT,
             )
 
             val root = LinearLayout(this).apply {
@@ -523,55 +483,64 @@ class LimitterService : Service() {
                 isClickable = true
             }
 
-            root.addView(TextView(this).apply {
-                text = "●"
-                setTextColor(Color.parseColor("#16A34A"))
-                textSize = 72f
-                gravity = Gravity.CENTER
-            })
+            root.addView(
+                TextView(this).apply {
+                    text = "●"
+                    setTextColor(Color.parseColor("#16A34A"))
+                    textSize = 72f
+                    gravity = Gravity.CENTER
+                },
+            )
 
-            root.addView(TextView(this).apply {
-                text = "Time's Up"
-                setTextColor(Color.parseColor("#14532D"))
-                textSize = 34f
-                setTypeface(null, android.graphics.Typeface.BOLD)
-                gravity = Gravity.CENTER
-                setPadding(0, 20, 0, 20)
-            })
+            root.addView(
+                TextView(this).apply {
+                    text = "Time's Up"
+                    setTextColor(Color.parseColor("#14532D"))
+                    textSize = 34f
+                    setTypeface(null, android.graphics.Typeface.BOLD)
+                    gravity = Gravity.CENTER
+                    setPadding(0, 20, 0, 20)
+                },
+            )
 
-            root.addView(TextView(this).apply {
-                text = "$appName is now blocked until you confirm an override."
-                setTextColor(Color.parseColor("#166534"))
-                textSize = 16f
-                gravity = Gravity.CENTER
-                setPadding(0, 0, 0, 60)
-            })
+            root.addView(
+                TextView(this).apply {
+                    text = "$appName is now blocked until you confirm an override."
+                    setTextColor(Color.parseColor("#166534"))
+                    textSize = 16f
+                    gravity = Gravity.CENTER
+                    setPadding(0, 0, 0, 60)
+                },
+            )
 
-            root.addView(Button(this).apply {
-                text = "Override"
-                setBackgroundColor(Color.parseColor("#16A34A"))
-                setTextColor(Color.WHITE)
-                textSize = 18f
-                setPadding(80, 40, 80, 40)
-                setOnClickListener {
-                    // Keep timer state blocked; route user to in-app override confirmation.
-                    removeBlockingOverlay(packageName)
-
-                    try {
-                        val deepLink = android.net.Uri.parse(
-                            "appguard2://override?package=$packageName&appName=${android.net.Uri.encode(appName)}"
-                        )
-                        val intent = Intent(Intent.ACTION_VIEW, deepLink).apply {
-                            flags = Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP
-                        }
-                        startActivity(intent)
-                    } catch (_: Exception) {}
-                }
-            })
+            root.addView(
+                Button(this).apply {
+                    text = "Override"
+                    setBackgroundColor(Color.parseColor("#16A34A"))
+                    setTextColor(Color.WHITE)
+                    textSize = 18f
+                    setPadding(80, 40, 80, 40)
+                    setOnClickListener {
+                        removeBlockingOverlay(packageName)
+                        try {
+                            val deepLink = android.net.Uri.parse(
+                                "appguard2://override?package=$packageName&appName=${android.net.Uri.encode(appName)}",
+                            )
+                            startActivity(
+                                Intent(Intent.ACTION_VIEW, deepLink).apply {
+                                    flags = Intent.FLAG_ACTIVITY_NEW_TASK or
+                                        Intent.FLAG_ACTIVITY_CLEAR_TOP or
+                                        Intent.FLAG_ACTIVITY_SINGLE_TOP
+                                },
+                            )
+                        } catch (_: Exception) {}
+                    }
+                },
+            )
 
             windowManager?.addView(root, params)
             overlayViews[packageName] = root
-            Log.d(TAG, "✅ Overlay shown: $appName")
+            Log.d(TAG, "Overlay shown: $appName")
         } catch (e: Exception) {
             Log.e(TAG, "Overlay error: ${e.message}")
             overlayViews.remove(packageName)
@@ -589,11 +558,12 @@ class LimitterService : Service() {
 
     private fun removeAllOverlays() {
         overlayViews.forEach { (_, view) ->
-            try { view?.let { windowManager?.removeView(it) } } catch (_: Exception) {}
+            try {
+                view?.let { windowManager?.removeView(it) }
+            } catch (_: Exception) {}
         }
         overlayViews.clear()
     }
-
 
     private fun isLauncher(packageName: String?): Boolean {
         if (packageName == null) return false
@@ -635,7 +605,7 @@ class LimitterService : Service() {
         try {
             val prefs = getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
             val packages = appTimers.keys.toList()
-            
+
             prefs.edit().apply {
                 putStringSet("packages", packages.toSet())
                 putBoolean(KEY_RUNNING, isRunning)
@@ -668,9 +638,17 @@ class LimitterService : Service() {
                 val isStarted = prefs.getBoolean("started_$pkg", false)
                 val isBlocked = prefs.getBoolean("blocked_$pkg", false)
                 val type = prefs.getString("type_$pkg", "duration") ?: "duration"
-                
+
                 if (duration > 0 || endTime > 0) {
-                    appTimers[pkg] = AppTimer(pkg, name, if (duration > 0) duration else 60, endTime, isStarted, isBlocked, type)
+                    appTimers[pkg] = AppTimer(
+                        pkg,
+                        name,
+                        if (duration > 0) duration else 60,
+                        endTime,
+                        isStarted,
+                        isBlocked,
+                        type,
+                    )
                     if (isStarted && !isBlocked && endTime > System.currentTimeMillis()) {
                         scheduleTimerAlarm(pkg, name, endTime)
                     }
@@ -679,7 +657,7 @@ class LimitterService : Service() {
 
             if (appTimers.isNotEmpty() && prefs.getBoolean(KEY_RUNNING, false)) {
                 isRunning = true
-                scheduleMonitoringAlarm()
+                scheduleNextMonitorTick()
                 startBackgroundTasks()
             }
         } catch (e: Exception) {
@@ -692,7 +670,7 @@ class LimitterService : Service() {
             val channel = NotificationChannel(
                 "LimitterChannel",
                 "AppGuard Timer",
-                NotificationManager.IMPORTANCE_DEFAULT
+                NotificationManager.IMPORTANCE_DEFAULT,
             )
             channel.setShowBadge(true)
             getSystemService(NotificationManager::class.java)?.createNotificationChannel(channel)
@@ -752,8 +730,8 @@ class LimitterService : Service() {
     }
 
     override fun onBind(intent: Intent?): IBinder? = null
+
     override fun onDestroy() {
-        // Only stop processes, don't clear state so system can restart us
         stopProcesses()
         if (instance == this) instance = null
         super.onDestroy()
@@ -763,19 +741,23 @@ class LimitterService : Service() {
         if (isRunning && appTimers.isNotEmpty()) {
             saveState()
         }
-        
+
         try {
-            val intent = Intent(this, LimitterService::class.java)
-            val pendingIntent = PendingIntent.getService(
-                this, 1, intent,
-                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE
+            val pi = PendingIntent.getService(
+                this,
+                1,
+                Intent(this, LimitterService::class.java),
+                PendingIntent.FLAG_ONE_SHOT or PendingIntent.FLAG_IMMUTABLE,
             )
-            (getSystemService(Context.ALARM_SERVICE) as AlarmManager)
-                .set(AlarmManager.ELAPSED_REALTIME, SystemClock.elapsedRealtime() + 1000, pendingIntent)
+            (getSystemService(Context.ALARM_SERVICE) as AlarmManager).set(
+                AlarmManager.ELAPSED_REALTIME,
+                SystemClock.elapsedRealtime() + 1000,
+                pi,
+            )
         } catch (e: Exception) {
             Log.e(TAG, "Restart error: ${e.message}")
         }
-        
+
         super.onTaskRemoved(rootIntent)
     }
 

@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, Platform, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
-import { signOut } from '../services/firebaseAuthService';
+import { signOut } from '../auth/firebaseAuthService';
 import { dashboardLabels } from '../data/appData';
 import { Home, BarChart2, Settings as SettingsIcon } from 'lucide-react-native';
 

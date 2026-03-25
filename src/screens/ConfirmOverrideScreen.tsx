@@ -41,8 +41,7 @@ import {
 import { useUser } from '../context/UserContext';
 import { getPoliciesAPI } from '../services/policyService';
 import { grantTemporaryOverrideAccess } from '../native/appBlockerService';
-import { addLimitHistoryEntry, incrementOverrideCount } from '../utils/limitHistoryService';
-import { resolveCurrentDeviceId } from '../services/currentDeviceService';
+import { resolveCurrentDeviceId } from '../native/currentDeviceService';
 import { computeNextOverrides } from '../utils/planRules';
 
 export default function ConfirmOverrideScreen() {
@@ -142,15 +141,6 @@ export default function ConfirmOverrideScreen() {
       if (packageName) {
         await grantTemporaryOverrideAccess(packageName, appNameFromRoute || packageName, 5);
       }
-
-      await incrementOverrideCount();
-      await addLimitHistoryEntry({
-        appName: appNameFromRoute || packageName || 'Unknown App',
-        packageName: packageName || 'unknown.package',
-        timestamp: Date.now(),
-        type: 'override',
-        overrideUsed: true,
-      });
 
       Alert.alert(
         overrideLabels.alertUnlockedTitle,

@@ -10,7 +10,6 @@ class LimitterPackage : ReactPackage {
         return listOf(
             LimitterModule(reactContext),
             TimerEventModule(reactContext),
-            CategoryTrackerModule(reactContext),
             AppListModule(reactContext)
         )
     }

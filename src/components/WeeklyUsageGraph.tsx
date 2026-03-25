@@ -48,12 +48,12 @@ function WeeklyUsageGraphImpl({
       const item = source[idx];
       if (!item) return fallback;
 
-      const minutes = Number(item?.minutes ?? 0);
+      const minutes = Number(item.totalMinutes ?? 0);
       return {
-        key: String(item?.key || fallback.key),
-        label: String(item?.label || fallback.label),
-        fullLabel: String(item?.fullLabel || fallback.fullLabel),
-        date: String(item?.date || fallback.date),
+        key: String(item.dateKey || fallback.key),
+        label: String(item.label || fallback.label),
+        fullLabel: String(item.label || fallback.fullLabel),
+        date: String(item.dateKey || fallback.date),
         minutes: Number.isFinite(minutes) ? Math.max(0, minutes) : 0,
       };
     });

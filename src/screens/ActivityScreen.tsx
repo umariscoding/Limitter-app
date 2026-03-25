@@ -13,13 +13,8 @@ import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
 import { getPoliciesAPI } from '../services/policyService';
 import { getNativeBlockedPackages } from '../native/appBlockerService';
-import { getLimitHistory, subscribeLimitHistory } from '../utils/limitHistoryService';
-import {
-  startTimerRealtimeTracking,
-  subscribeTimerBlocked,
-  subscribeTimerTicks,
-} from '../native/timerRealtimeService';
-import { resolveCurrentDeviceId } from '../services/currentDeviceService';
+import { subscribeTimerBlocked, subscribeTimerTicks } from '../native/timerRealtimeService';
+import { resolveCurrentDeviceId } from '../native/currentDeviceService';
 
 export default function ActivityScreen() {
   const navigation = useNavigation<any>();
@@ -121,39 +116,12 @@ export default function ActivityScreen() {
         (a: any, b: any) => b.created_at - a.created_at
       );
       const normalizedList = sortedList.map(normalizeLimit);
-      const history = await getLimitHistory();
-      const latestHistoryByPackage = new Map<string, { type: 'blocked' | 'override'; timestamp: number }>();
-
-      history.forEach(entry => {
-        const key = String(entry.packageName || '').trim().toLowerCase();
-        if (!key) return;
-
-        const current = latestHistoryByPackage.get(key);
-        if (!current || Number(entry.timestamp || 0) > current.timestamp) {
-          latestHistoryByPackage.set(key, {
-            type: entry.type,
-            timestamp: Number(entry.timestamp || 0),
-          });
-        }
-      });
-
       const nativeBlockedPackages = await getNativeBlockedPackages();
 
       const reconciledList = normalizedList.map((item: any) => {
         const key = getLimitPackageKey(item);
-        const latest = latestHistoryByPackage.get(key);
-
         if (nativeBlockedPackages.has(key)) {
           return { ...item, is_blocked: true };
-        }
-
-        if (!latest) return item;
-
-        if (latest.type === 'blocked') {
-          return { ...item, is_blocked: true };
-        }
-        if (latest.type === 'override') {
-          return { ...item, is_blocked: false };
         }
         return item;
       });
@@ -178,8 +146,6 @@ export default function ActivityScreen() {
   );
 
   React.useEffect(() => {
-    startTimerRealtimeTracking();
-
     const unsubTick = subscribeTimerTicks(event => {
       if (!event?.package) return;
 
@@ -212,36 +178,9 @@ export default function ActivityScreen() {
       );
     });
 
-    const unsubHistory = subscribeLimitHistory(() => {
-      getLimitHistory().then(history => {
-        const latest = history[0];
-        if (!latest?.packageName) return;
-
-        if (latest.type === 'blocked') {
-          setLimits(prev =>
-            prev.map((item: any) =>
-              matchesLimitPackage(item, latest.packageName) ? { ...item, is_blocked: true } : item
-            )
-          );
-        }
-
-        if (latest.type === 'override') {
-          setLimits(prev =>
-            prev.map((item: any) =>
-              matchesLimitPackage(item, latest.packageName) ? { ...item, is_blocked: false } : item
-            )
-          );
-        }
-      });
-
-      // Pull latest backend snapshot when history updates (block/override).
-      fetchActivity();
-    });
-
     return () => {
       unsubTick();
       unsubBlocked();
-      unsubHistory();
     };
   }, [user?.uid, matchesLimitPackage]);
 

@@ -12,7 +12,7 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { useNavigation } from "@react-navigation/native";
 import { useUser } from "../context/UserContext";
-import { signIn } from "../services/firebaseAuthService";
+import { signIn } from "../auth/firebaseAuthService";
 import { BaseButton, TextInput, Toast } from "../../components";
 import { Shield } from "lucide-react-native";
 

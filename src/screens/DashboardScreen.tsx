@@ -15,7 +15,11 @@ import {
   FlatList,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
+import {
+  useNavigation,
+  useFocusEffect,
+  useRoute,
+} from '@react-navigation/native';
 import {
   Home,
   BarChart2,
@@ -28,12 +32,10 @@ import {
   Shield,
 } from 'lucide-react-native';
 import { useUser } from '../context/UserContext';
-import { createPolicyAPI, getPoliciesAPI, archivePolicyAPI } from '../services/policyService';
+import { createPolicyAPI, getPoliciesAPI } from '../services/policyService';
 import { Toast } from '../../components';
 import { getInstalledApps, InstalledApp } from '../native/appListService';
 import {
-  getNativeBlockedPackages,
-  getNativeTimerStates,
   getWebsiteBlockerStatus,
   startAppBlockerService,
   startAppClockTimer,
@@ -41,24 +43,26 @@ import {
   startWebsiteTimer,
   updateBlockedApps,
 } from '../native/appBlockerService';
-import {
-  startTimerRealtimeTracking,
-  subscribeTimerBlocked,
-  subscribeTimerTicks,
-} from '../native/timerRealtimeService';
-import { resolveCurrentDeviceId } from '../services/currentDeviceService';
-import { getLimitHistory, subscribeLimitHistory } from '../utils/limitHistoryService';
-import { addUsageToBuffer } from '../services/usageTrackingService';
-import { useUsageContext } from '../context/UsageContext';
+import { resolveCurrentDeviceId } from '../native/currentDeviceService';
 import { requestRequiredPermissions } from '../native/permissionsService';
-import { mapPolicyToUI, mergeUsage, formatUsageTime, formatLimitTime } from '../utils/policyMapper';
-import { setLocalUsageForPolicy, getAllLocalUsageToday } from '../services/localUsageStore';
+import {
+  getPolicyPackageKey,
+  formatUsageTime,
+  formatLimitTime,
+} from '../utils/policyMapper';
+import {
+  calculateTotalSecondsFromInputs,
+  clockTargetTimestampMs,
+  filterInstalledApps,
+  formatTotalUsageFromLimits,
+  hydratePoliciesForUi,
+  toHour24,
+} from '../helpers/helper';
 
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user } = useUser();
-  const { currentDeviceId } = useUsageContext();
 
   const [limits, setLimits] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,19 +72,28 @@ export default function DashboardScreen() {
   const [deviceId, setDeviceId] = useState<string>('');
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [createAppName, setCreateAppName] = useState('');
-  const [selectedInstalledApp, setSelectedInstalledApp] = useState<InstalledApp | null>(null);
+  const [selectedInstalledApp, setSelectedInstalledApp] =
+    useState<InstalledApp | null>(null);
   const [appSearch, setAppSearch] = useState('');
   const [createCategory, setCreateCategory] = useState('');
   const [createWebsiteUrl, setCreateWebsiteUrl] = useState('');
-  const [installedAppsList, setInstalledAppsList] = useState<InstalledApp[]>([]);
+  const [installedAppsList, setInstalledAppsList] = useState<InstalledApp[]>(
+    [],
+  );
   const [loadingApps, setLoadingApps] = useState(false);
-  const [targetType, setTargetType] = useState<'app' | 'category' | 'website'>('app');
-  const [timerType, setTimerType] = useState<'combined' | 'single' | 'clock'>('combined');
+  const [targetType, setTargetType] = useState<'app' | 'category' | 'website'>(
+    'app',
+  );
+  const [timerType, setTimerType] = useState<'combined' | 'single' | 'clock'>(
+    'combined',
+  );
   const [hours, setHours] = useState('');
   const [minutes, setMinutes] = useState('');
   const [seconds, setSeconds] = useState('');
   const [singleTimerValue, setSingleTimerValue] = useState('');
-  const [singleTimerUnit, setSingleTimerUnit] = useState<'seconds' | 'minutes' | 'hours'>('minutes');
+  const [singleTimerUnit, setSingleTimerUnit] = useState<
+    'seconds' | 'minutes' | 'hours'
+  >('minutes');
   const [clockHour, setClockHour] = useState('12');
   const [clockMinute, setClockMinute] = useState('00');
   const [clockPeriod, setClockPeriod] = useState<'AM' | 'PM'>('PM');
@@ -91,217 +104,15 @@ export default function DashboardScreen() {
     ready: boolean;
   } | null>(null);
 
-  const getLimitPackageKey = React.useCallback((item: any) => {
-    return String(item?.app_name || item?.package_name || item?.packageName || '')
-      .trim()
-      .toLowerCase();
-  }, []);
-
   const matchesLimitPackage = React.useCallback(
     (item: any, packageName?: string) => {
       if (!packageName) return false;
-      return getLimitPackageKey(item) === String(packageName).trim().toLowerCase();
+      return (
+        getPolicyPackageKey(item) === String(packageName).trim().toLowerCase()
+      );
     },
-    [getLimitPackageKey]
+    [],
   );
-
-  const resolveBlockedState = React.useCallback((item: any) => {
-    if (typeof item?.is_blocked === 'boolean') return item.is_blocked;
-
-    const rawStatus = String(item?.status_text || item?.status || '')
-      .trim()
-      .toLowerCase();
-    if (rawStatus.includes('block')) return true;
-    if (rawStatus.includes('active') || rawStatus.includes('running') || rawStatus.includes('unblocked')) {
-      return false;
-    }
-
-    const blockedUntil = Number(item?.blocked_until_timestamp || 0);
-    if (blockedUntil > Date.now()) return true;
-
-    const maxMinutes = Number(item?.max_time_minutes || 0);
-    const usedMinutes = Number(item?.time_used_minutes || 0);
-    if (maxMinutes <= 0) return false;
-    return usedMinutes >= maxMinutes;
-  }, []);
-
-  const normalizeLimit = React.useCallback(
-    (item: any) => ({
-      ...item,
-      is_blocked: resolveBlockedState(item),
-    }),
-    [resolveBlockedState]
-  );
-
-  React.useEffect(() => {
-    startTimerRealtimeTracking();
-
-    // Track last recorded usage minutes per app to avoid duplicate recording
-    const lastRecordedMinutes = new Map<string, number>();
-
-    // Track local elapsed seconds per package (independent of native remaining)
-    const localElapsed = new Map<string, number>();
-
-    const unsubscribeTick = subscribeTimerTicks(event => {
-      if (!event?.package) return;
-      const pkg = String(event.package).trim().toLowerCase();
-
-      console.log('[TIMER_TICK]', JSON.stringify({
-        package: event.package,
-        remaining: event.remaining,
-        isBlocked: event.isBlocked,
-        status: event.status,
-      }));
-
-      // Track local elapsed: increment by 1 second each tick
-      const prevElapsed = localElapsed.get(pkg) || 0;
-      const newElapsed = prevElapsed + 1;
-      localElapsed.set(pkg, newElapsed);
-
-      setLimits(prev =>
-        prev.map((item: any) => {
-          if (!matchesLimitPackage(item, event.package)) return item;
-
-          const maxMinutes = Number(item.max_time_minutes || 0);
-          const maxSeconds = maxMinutes * 60;
-
-          // Use BOTH: native remaining AND local elapsed, pick the more restrictive
-          const nativeRemaining = Number(event.remaining || 0);
-          const localUsedSeconds = newElapsed;
-          const nativeUsedSeconds =
-            maxSeconds > 0 ? Math.max(0, maxSeconds - nativeRemaining) : 0;
-
-          // Take the higher usage (more restrictive) = min(remaining)
-          const usedSeconds = Math.max(nativeUsedSeconds, localUsedSeconds);
-          const newUsedMinutes = maxSeconds > 0 ? usedSeconds / 60 : 0;
-
-          const eventBlocked =
-            typeof event.isBlocked === 'boolean'
-              ? event.isBlocked
-              : String(event.status || '').toLowerCase() === 'blocked';
-          const isBlocked =
-            eventBlocked || (maxSeconds > 0 && usedSeconds >= maxSeconds);
-
-          // Record usage to backend buffer every 3 seconds
-          const lastRecordedSec = lastRecordedMinutes.get(pkg) || 0;
-          if (usedSeconds >= lastRecordedSec + 3 && user?.uid && deviceId) {
-            const secondsToAdd = Math.floor(usedSeconds) - lastRecordedSec;
-            const policyId = item.id;
-            if (policyId && secondsToAdd > 0) {
-              addUsageToBuffer(policyId, deviceId, secondsToAdd).catch(err =>
-                console.error('[UsageTracking] Buffer error:', err)
-              );
-            }
-            lastRecordedMinutes.set(pkg, Math.floor(usedSeconds));
-          }
-
-          return {
-            ...item,
-            time_used_minutes: newUsedMinutes,
-            is_blocked: isBlocked,
-            status: isBlocked ? 'blocked' : newUsedMinutes > 0 ? 'active' : item.status,
-          };
-        })
-      );
-    });
-
-    const unsubscribeBlocked = subscribeTimerBlocked(event => {
-      if (!event?.package) return;
-      setLimits(prev =>
-        prev.map((item: any) =>
-          matchesLimitPackage(item, event.package) ? { ...item, is_blocked: true } : item
-        )
-      );
-    });
-
-    // Fallback: check native timer states periodically to catch usage even without ticks
-    const pollInterval = setInterval(async () => {
-      try {
-        const timerStates = await getNativeTimerStates();
-        if (!Array.isArray(timerStates) || timerStates.length === 0) return;
-
-        setLimits(prev =>
-          prev.map((item: any) => {
-            const itemKey = String(item.app_name || '').trim().toLowerCase();
-            const timer = timerStates.find((t: any) =>
-              String(t.package || '').trim().toLowerCase() === itemKey
-            );
-            if (!timer) return item;
-
-            const maxSeconds = Number(item.max_time_minutes || 0) * 60;
-            const remainingSec = Number(timer.remainingSeconds || 0);
-            const statusLower = String(timer.status || '').toLowerCase();
-            const usedSeconds =
-              maxSeconds > 0 ? Math.max(0, maxSeconds - remainingSec) : 0;
-            const usedMinutes = usedSeconds / 60;
-            const isBlocked =
-              statusLower === 'blocked' ||
-              (statusLower !== 'waiting' && maxSeconds > 0 && remainingSec <= 0);
-
-            // Persist to AsyncStorage (works offline)
-            if (usedSeconds > 0 && item.id) {
-              setLocalUsageForPolicy(item.id, usedSeconds).catch(() => {});
-            }
-
-            // Buffer to API sync every 3 seconds
-            if (usedSeconds > 0 && item.id && deviceId) {
-              const lastSec = lastRecordedMinutes.get(itemKey) || 0;
-              if (usedSeconds >= lastSec + 3) {
-                addUsageToBuffer(item.id, deviceId, Math.floor(usedSeconds) - lastSec).catch(() => {});
-                lastRecordedMinutes.set(itemKey, Math.floor(usedSeconds));
-              }
-            }
-
-            return {
-              ...item,
-              time_used_minutes: usedMinutes,
-              is_blocked: isBlocked,
-              status: isBlocked ? 'blocked' : usedMinutes > 0 ? 'active' : item.status,
-            };
-          })
-        );
-      } catch {}
-    }, 1000);
-
-    return () => {
-      unsubscribeTick();
-      unsubscribeBlocked();
-      clearInterval(pollInterval);
-    };
-  }, [matchesLimitPackage, user?.uid, deviceId]);
-
-  React.useEffect(() => {
-    const unsubscribe = subscribeLimitHistory(() => {
-      if (!user?.uid || !deviceId) return;
-
-      // Pull latest state from backend and optimistically reflect override state immediately.
-      fetchLimits();
-
-      getLimitHistory().then(history => {
-        const latest = history[0];
-        if (!latest?.packageName) return;
-
-        if (latest.type === 'override') {
-          setLimits(prev =>
-            prev.map((item: any) =>
-              matchesLimitPackage(item, latest.packageName) ? { ...item, is_blocked: false } : item
-            )
-          );
-          return;
-        }
-
-        if (latest.type === 'blocked') {
-          setLimits(prev =>
-            prev.map((item: any) =>
-              matchesLimitPackage(item, latest.packageName) ? { ...item, is_blocked: true } : item
-            )
-          );
-        }
-      });
-    });
-
-    return () => unsubscribe();
-  }, [user?.uid, deviceId, matchesLimitPackage]);
 
   // Request Android permissions on first mount
   useEffect(() => {
@@ -321,14 +132,13 @@ export default function DashboardScreen() {
     loadCurrentDevice();
   }, [user?.uid]);
 
-  // ✅ Load installed apps when modal opens
   React.useEffect(() => {
     if (showCreateModal && installedAppsList.length === 0) {
       loadInstalledApps();
     }
   }, [showCreateModal]);
 
-  const refreshWebsiteStatus = React.useCallback(async () => {
+  const refreshWebsiteStatus = async () => {
     setWebsiteStatusLoading(true);
     try {
       const status = await getWebsiteBlockerStatus();
@@ -340,13 +150,13 @@ export default function DashboardScreen() {
     } finally {
       setWebsiteStatusLoading(false);
     }
-  }, []);
+  };
 
   React.useEffect(() => {
     if (showCreateModal && targetType === 'website') {
       void refreshWebsiteStatus();
     }
-  }, [showCreateModal, targetType, refreshWebsiteStatus]);
+  }, [showCreateModal, targetType]);
 
   const loadInstalledApps = async () => {
     setLoadingApps(true);
@@ -363,23 +173,19 @@ export default function DashboardScreen() {
   };
 
   // ✅ Search apps as user types
-  const filteredApps = React.useMemo(() => {
-    if (!appSearch) return installedAppsList.slice(0, 30);
-    return installedAppsList
-      .filter(
-        app =>
-          app.appName.toLowerCase().includes(appSearch.toLowerCase()) ||
-          app.packageName.toLowerCase().includes(appSearch.toLowerCase())
-      )
-      .slice(0, 30);
-  }, [appSearch, installedAppsList]);
+  const filteredApps = React.useMemo(
+    () => filterInstalledApps(installedAppsList, appSearch),
+    [appSearch, installedAppsList],
+  );
 
-  const categories = ['Social Media', 'Video Streaming', 'Gaming', 'Productivity', 'Education'];
+  const categories = [
+    'Social Media',
+    'Video Streaming',
+    'Gaming',
+    'Productivity',
+    'Education',
+  ];
 
-  // ✅ Shared mapper — same logic as PoliciesScreen
-  const policyToLimit = mapPolicyToUI;
-
-  // ✅ Fetch limits (policies) from backend
   const fetchLimits = async () => {
     if (!user?.uid) {
       console.log('⚠️ No user UID available');
@@ -396,94 +202,41 @@ export default function DashboardScreen() {
 
     try {
       const policiesResult = await getPoliciesAPI();
-      const policiesData = Array.isArray(policiesResult) ? policiesResult : [];
+      const reconciledLimits = await hydratePoliciesForUi(policiesResult);
+      setLimits(reconciledLimits);
+      console.log('✅ Fetched limits (sorted):', reconciledLimits);
 
-      if (policiesData) {
+      const blockedAppsList = reconciledLimits
+        .filter((l: any) => l.is_blocked && l.app_name)
+        .map((l: any) => ({
+          package_name: l.app_name || l.package_name || l.packageName,
+          app_name: l.app_name || l.package_name || l.packageName,
+          blocked_until_timestamp: l.blocked_until_timestamp,
+        }));
 
-        const mappedLimits = policiesData.map(policyToLimit);
+      if (blockedAppsList.length > 0) {
+        await startAppBlockerService(blockedAppsList);
+      }
+      updateBlockedApps(blockedAppsList);
 
-        // Merge local usage (AsyncStorage) with server usage — max() wins
-        const localUsage = await getAllLocalUsageToday();
-        const mergedLimits = mergeUsage(mappedLimits, localUsage);
-
-        const sortedLimits = mergedLimits
-          .sort((a: any, b: any) => b.created_at - a.created_at);
-
-        const normalizedLimits = sortedLimits.map(normalizeLimit);
-        const history = await getLimitHistory();
-
-        // Only consider today's history entries for blocked/override state
-        const todayStart = new Date();
-        todayStart.setHours(0, 0, 0, 0);
-        const todayMs = todayStart.getTime();
-
-        const latestHistoryByPackage = new Map<string, { type: 'blocked' | 'override'; timestamp: number }>();
-        history.forEach(entry => {
-          const key = String(entry.packageName || '').trim().toLowerCase();
-          if (!key) return;
-          const ts = Number(entry.timestamp || 0);
-          if (ts < todayMs) return; // Skip entries from previous days
-
-          const current = latestHistoryByPackage.get(key);
-          if (!current || ts > current.timestamp) {
-            latestHistoryByPackage.set(key, { type: entry.type, timestamp: ts });
-          }
-        });
-
-        const nativeBlockedPackages = await getNativeBlockedPackages();
-
-        // API data is the primary source of truth.
-        // Local history and native state are overlays for real-time responsiveness.
-        const reconciledLimits = normalizedLimits.map((item: any) => {
-          const key = getLimitPackageKey(item);
-
-          // Native blocker says it's blocked → trust it (real-time)
-          if (nativeBlockedPackages.has(key)) {
-            return { ...item, is_blocked: true };
-          }
-
-          // Today's local history
-          const latest = latestHistoryByPackage.get(key);
-          if (!latest) return item;
-
-          if (latest.type === 'blocked') {
-            return { ...item, is_blocked: true };
-          }
-          if (latest.type === 'override') {
-            return { ...item, is_blocked: false };
-          }
-          return item;
-        });
-        setLimits(reconciledLimits);
-        console.log('✅ Fetched limits (sorted):', reconciledLimits);
-
-        // ✅ Start AppBlocker with current blocked apps
-        const blockedAppsList = reconciledLimits
-          .filter((l: any) => l.is_blocked && l.app_name)
-          .map((l: any) => ({
-            package_name: l.app_name || l.package_name || l.packageName,
-            app_name: l.app_name || l.package_name || l.packageName,
-            blocked_until_timestamp: l.blocked_until_timestamp,
-          }));
-
-        if (blockedAppsList.length > 0) {
-          await startAppBlockerService(blockedAppsList);
-        }
-        updateBlockedApps(blockedAppsList);
-
-        // ✅ Start native timers for all active (non-blocked) app policies
-        for (const limit of reconciledLimits) {
-          if (limit.is_blocked) continue;
-          if (limit.target_type !== 'app') continue;
-          const pkg = limit.app_name || limit.package_name || limit.packageName;
-          if (!pkg) continue;
-          const remainingSeconds = Math.max(0, (limit.max_time_minutes - (limit.time_used_minutes || 0)) * 60);
-          if (remainingSeconds <= 0) continue;
-          try {
-            await startAppUsageTimer(pkg, limit.target_label || pkg, remainingSeconds);
-          } catch (err) {
-            console.warn(`Failed to start timer for ${pkg}:`, err);
-          }
+      for (const limit of reconciledLimits) {
+        if (limit.is_blocked) continue;
+        if (limit.target_type !== 'app') continue;
+        const pkg = limit.app_name || limit.package_name || limit.packageName;
+        if (!pkg) continue;
+        const remainingSeconds = Math.max(
+          0,
+          (limit.max_time_minutes - (limit.time_used_minutes || 0)) * 60,
+        );
+        if (remainingSeconds <= 0) continue;
+        try {
+          await startAppUsageTimer(
+            pkg,
+            limit.target_label || pkg,
+            remainingSeconds,
+          );
+        } catch (err) {
+          console.warn(`Failed to start timer for ${pkg}:`, err);
         }
       }
     } catch (error) {
@@ -495,86 +248,50 @@ export default function DashboardScreen() {
     }
   };
 
-  // ✅ Total usage from View Activity data (sum of all apps)
-  const formatTotalUsageFromActivity = React.useCallback(() => {
-    const totalMinutes = limits.reduce((sum: number, item: any) => {
-      return sum + Math.max(0, Number(item?.time_used_minutes ?? item?.used_minutes ?? 0));
-    }, 0);
+  const totalUsageText = React.useMemo(
+    () => formatTotalUsageFromLimits(limits),
+    [limits],
+  );
 
-    const hours = Math.floor(totalMinutes / 60);
-    const mins = totalMinutes % 60;
-    const formatted = `${hours}h ${mins}m`;
-
-    console.log('📊 [Dashboard] Total usage from activity limits:', {
-      totalMinutes,
-      appsCount: limits.length,
-      formatted,
-    });
-
-    return formatted;
-  }, [limits]);
-
-  // ✅ Load data on screen focus
   useFocusEffect(
     React.useCallback(() => {
       if (!deviceId) return;
 
-      const overriddenPackage = route?.params?.justOverriddenPackage as string | undefined;
+      const overriddenPackage = route?.params?.justOverriddenPackage as
+        | string
+        | undefined;
       if (overriddenPackage) {
         setLimits(prev =>
           prev.map((item: any) =>
-            matchesLimitPackage(item, overriddenPackage) ? { ...item, is_blocked: false } : item
-          )
+            matchesLimitPackage(item, overriddenPackage)
+              ? { ...item, is_blocked: false }
+              : item,
+          ),
         );
       }
 
       setLoading(true);
       fetchLimits();
-    }, [user?.uid, deviceId, route?.params?.refreshAt, matchesLimitPackage])
+    }, [user?.uid, deviceId, route?.params?.refreshAt, matchesLimitPackage]),
   );
-
-  // Note: Total usage is now managed by UsageContext with automatic polling
 
   const onRefresh = () => {
     setRefreshing(true);
     fetchLimits();
   };
 
-  const calculateTotalSeconds = () => {
-    if (timerType === 'clock') {
-      const hour12 = Math.max(1, Math.min(12, Number(clockHour || '12')));
-      const minute = Math.max(0, Math.min(59, Number(clockMinute || '0')));
-      let hour24 = hour12 % 12;
-      if (clockPeriod === 'PM') {
-        hour24 += 12;
-      }
-
-      const now = new Date();
-      const target = new Date(now);
-      target.setHours(hour24, minute, 0, 0);
-      if (target.getTime() <= now.getTime()) {
-        target.setDate(target.getDate() + 1);
-      }
-
-      return Math.ceil((target.getTime() - now.getTime()) / 1000);
-    }
-
-    if (timerType === 'combined') {
-      const h = Number(hours || '0');
-      const m = Number(minutes || '0');
-      const s = Number(seconds || '0');
-      return h * 3600 + m * 60 + s;
-    }
-
-    const val = Number(singleTimerValue || '0');
-    if (singleTimerUnit === 'hours') {
-      return val * 3600;
-    }
-    if (singleTimerUnit === 'minutes') {
-      return val * 60;
-    }
-    return val;
-  };
+  const calculateTotalSeconds = () =>
+    calculateTotalSecondsFromInputs({
+      timerType,
+      hours,
+      minutes,
+      seconds,
+      singleTimerValue,
+      singleTimerUnit,
+      clockHour,
+      clockMinute,
+      clockPeriod,
+    });
 
   const handleCreateLimit = async () => {
     if (!user?.uid) {
@@ -583,7 +300,10 @@ export default function DashboardScreen() {
     }
 
     if (!deviceId) {
-      Alert.alert('Error', 'Device not ready yet. Please try again in a moment.');
+      Alert.alert(
+        'Error',
+        'Device not ready yet. Please try again in a moment.',
+      );
       return;
     }
 
@@ -595,7 +315,10 @@ export default function DashboardScreen() {
 
     if (targetType === 'app') {
       if (!selectedInstalledApp || !appName) {
-        Alert.alert('Validation', 'Please select an app from your installed apps list');
+        Alert.alert(
+          'Validation',
+          'Please select an app from your installed apps list',
+        );
         return;
       }
     } else if (targetType === 'category') {
@@ -617,10 +340,18 @@ export default function DashboardScreen() {
 
     setLoading(true);
     try {
-      const targetKey = targetType === 'app' ? appName : targetType === 'website' ? websiteUrl : category;
-      const targetLabel = targetType === 'app'
-        ? (selectedInstalledApp?.appName || appName)
-        : targetType === 'website' ? websiteUrl : category;
+      const targetKey =
+        targetType === 'app'
+          ? appName
+          : targetType === 'website'
+          ? websiteUrl
+          : category;
+      const targetLabel =
+        targetType === 'app'
+          ? selectedInstalledApp?.appName || appName
+          : targetType === 'website'
+          ? websiteUrl
+          : category;
 
       const response = await createPolicyAPI({
         type: targetType,
@@ -633,30 +364,24 @@ export default function DashboardScreen() {
 
       if (response) {
         if (targetType === 'app' && selectedInstalledApp) {
-          const timerStartResult = timerType === 'clock'
-            ? await startAppClockTimer(
-                selectedInstalledApp.packageName,
-                selectedInstalledApp.appName,
-                (() => {
-                  const hour12 = Math.max(1, Math.min(12, Number(clockHour || '12')));
-                  let hour24 = hour12 % 12;
-                  if (clockPeriod === 'PM') {
-                    hour24 += 12;
-                  }
-                  return hour24;
-                })(),
-                Math.max(0, Math.min(59, Number(clockMinute || '0')))
-              )
-            : await startAppUsageTimer(
-                selectedInstalledApp.packageName,
-                selectedInstalledApp.appName,
-                totalSeconds
-              );
+          const timerStartResult =
+            timerType === 'clock'
+              ? await startAppClockTimer(
+                  selectedInstalledApp.packageName,
+                  selectedInstalledApp.appName,
+                  toHour24(clockHour, clockPeriod),
+                  Math.max(0, Math.min(59, Number(clockMinute || '0'))),
+                )
+              : await startAppUsageTimer(
+                  selectedInstalledApp.packageName,
+                  selectedInstalledApp.appName,
+                  totalSeconds,
+                );
 
           if (!timerStartResult.success) {
             Alert.alert(
               'Permission Required',
-              'Enable Display over other apps and Usage access for Limitter. Open Settings → Apps → Special app access → Usage access, then turn on Limitter (package com.appguard2)—not under Accessibility.'
+              'Enable Display over other apps and Usage access for Limitter. Open Settings → Apps → Special app access → Usage access, then turn on Limitter (package com.appguard2)—not under Accessibility.',
             );
           }
         }
@@ -667,34 +392,24 @@ export default function DashboardScreen() {
             durationSeconds: timerType === 'clock' ? undefined : totalSeconds,
             blockAtTimestampMs:
               timerType === 'clock'
-                ? (() => {
-                    const hour12 = Math.max(1, Math.min(12, Number(clockHour || '12')));
-                    const minute = Math.max(0, Math.min(59, Number(clockMinute || '0')));
-                    let hour24 = hour12 % 12;
-                    if (clockPeriod === 'PM') {
-                      hour24 += 12;
-                    }
-
-                    const now = new Date();
-                    const target = new Date(now);
-                    target.setHours(hour24, minute, 0, 0);
-                    if (target.getTime() <= now.getTime()) {
-                      target.setDate(target.getDate() + 1);
-                    }
-                    return target.getTime();
-                  })()
+                ? clockTargetTimestampMs(clockHour, clockMinute, clockPeriod)
                 : undefined,
           });
 
           if (!timerStartResult.success) {
             Alert.alert(
               'Permission Required',
-              'Enable Display over other apps and Limitter’s accessibility service (Settings → Accessibility → Downloaded apps) for website blocking.'
+              'Enable Display over other apps and Limitter’s accessibility service (Settings → Accessibility → Downloaded apps) for website blocking.',
             );
           }
         }
 
-        const label = targetType === 'app' ? appName : targetType === 'category' ? category : websiteUrl;
+        const label =
+          targetType === 'app'
+            ? appName
+            : targetType === 'category'
+            ? category
+            : websiteUrl;
         setToastMessage(`Limit created for ${label}`);
         setShowToast(true);
         setShowCreateModal(false);
@@ -722,11 +437,6 @@ export default function DashboardScreen() {
     } finally {
       setLoading(false);
     }
-  };
-
-  // Simulate usage - disabled until Phase 4 (Usage API) is implemented
-  const handleSimulateUsage = async (_limitId: string) => {
-    Alert.alert('Info', 'Usage simulation will be available after Phase 4 implementation.');
   };
 
   if (loading && !refreshing) {
@@ -762,17 +472,37 @@ export default function DashboardScreen() {
             <Text style={styles.modalSubTitle}>Target Type</Text>
             <View style={styles.selectorRow}>
               <TouchableOpacity
-                style={[styles.selectorBtn, targetType === 'app' && styles.selectorBtnActive]}
+                style={[
+                  styles.selectorBtn,
+                  targetType === 'app' && styles.selectorBtnActive,
+                ]}
                 onPress={() => setTargetType('app')}
               >
-                <Text style={[styles.selectorBtnText, targetType === 'app' && styles.selectorBtnTextActive]}>App</Text>
+                <Text
+                  style={[
+                    styles.selectorBtnText,
+                    targetType === 'app' && styles.selectorBtnTextActive,
+                  ]}
+                >
+                  App
+                </Text>
               </TouchableOpacity>
               {/* Category hidden for v1 — will be enabled later */}
               <TouchableOpacity
-                style={[styles.selectorBtn, targetType === 'website' && styles.selectorBtnActive]}
+                style={[
+                  styles.selectorBtn,
+                  targetType === 'website' && styles.selectorBtnActive,
+                ]}
                 onPress={() => setTargetType('website')}
               >
-                <Text style={[styles.selectorBtnText, targetType === 'website' && styles.selectorBtnTextActive]}>Website</Text>
+                <Text
+                  style={[
+                    styles.selectorBtnText,
+                    targetType === 'website' && styles.selectorBtnTextActive,
+                  ]}
+                >
+                  Website
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -789,7 +519,10 @@ export default function DashboardScreen() {
                   style={styles.modalInput}
                   placeholderTextColor="#94A3B8"
                 />
-                <Text style={styles.availableAppsText}>Showing {filteredApps.length} of {installedAppsList.length} installed apps</Text>
+                <Text style={styles.availableAppsText}>
+                  Showing {filteredApps.length} of {installedAppsList.length}{' '}
+                  installed apps
+                </Text>
                 <FlatList
                   data={filteredApps}
                   keyExtractor={item => item.packageName}
@@ -805,12 +538,22 @@ export default function DashboardScreen() {
                       }}
                     >
                       <Text style={styles.suggestionText}>{app.appName}</Text>
-                      <Text style={styles.suggestionSubtext}>{app.packageName}</Text>
+                      <Text style={styles.suggestionSubtext}>
+                        {app.packageName}
+                      </Text>
                     </TouchableOpacity>
                   )}
-                  ListHeaderComponent={loadingApps ? <Text style={styles.loadingAppsText}>Loading apps...</Text> : null}
+                  ListHeaderComponent={
+                    loadingApps ? (
+                      <Text style={styles.loadingAppsText}>
+                        Loading apps...
+                      </Text>
+                    ) : null
+                  }
                   ListEmptyComponent={
-                    !loadingApps ? <Text style={styles.emptyAppsText}>No apps found</Text> : null
+                    !loadingApps ? (
+                      <Text style={styles.emptyAppsText}>No apps found</Text>
+                    ) : null
                   }
                 />
               </>
@@ -819,10 +562,18 @@ export default function DashboardScreen() {
                 {categories.map(cat => (
                   <TouchableOpacity
                     key={cat}
-                    style={[styles.categoryChip, createCategory === cat && styles.categoryChipActive]}
+                    style={[
+                      styles.categoryChip,
+                      createCategory === cat && styles.categoryChipActive,
+                    ]}
                     onPress={() => setCreateCategory(cat)}
                   >
-                    <Text style={[styles.categoryChipText, createCategory === cat && styles.categoryChipTextActive]}>
+                    <Text
+                      style={[
+                        styles.categoryChipText,
+                        createCategory === cat && styles.categoryChipTextActive,
+                      ]}
+                    >
                       {cat}
                     </Text>
                   </TouchableOpacity>
@@ -842,7 +593,9 @@ export default function DashboardScreen() {
 
                 <View style={styles.websiteStatusCard}>
                   <View style={styles.websiteStatusHeader}>
-                    <Text style={styles.websiteStatusTitle}>Website Service Status</Text>
+                    <Text style={styles.websiteStatusTitle}>
+                      Website Service Status
+                    </Text>
                     <TouchableOpacity
                       style={styles.websiteStatusRefreshBtn}
                       onPress={() => {
@@ -861,7 +614,9 @@ export default function DashboardScreen() {
                     <Text
                       style={[
                         styles.websiteStatusValue,
-                        websiteStatus?.overlayEnabled ? styles.websiteStatusOk : styles.websiteStatusError,
+                        websiteStatus?.overlayEnabled
+                          ? styles.websiteStatusOk
+                          : styles.websiteStatusError,
                       ]}
                     >
                       {websiteStatus?.overlayEnabled ? 'Enabled' : 'Missing'}
@@ -873,17 +628,23 @@ export default function DashboardScreen() {
                     <Text
                       style={[
                         styles.websiteStatusValue,
-                        websiteStatus?.accessibilityEnabled ? styles.websiteStatusOk : styles.websiteStatusError,
+                        websiteStatus?.accessibilityEnabled
+                          ? styles.websiteStatusOk
+                          : styles.websiteStatusError,
                       ]}
                     >
-                      {websiteStatus?.accessibilityEnabled ? 'Enabled' : 'Missing'}
+                      {websiteStatus?.accessibilityEnabled
+                        ? 'Enabled'
+                        : 'Missing'}
                     </Text>
                   </View>
 
                   <Text
                     style={[
                       styles.websiteReadyText,
-                      websiteStatus?.ready ? styles.websiteStatusOk : styles.websiteStatusError,
+                      websiteStatus?.ready
+                        ? styles.websiteStatusOk
+                        : styles.websiteStatusError,
                     ]}
                   >
                     {websiteStatus?.ready
@@ -897,22 +658,52 @@ export default function DashboardScreen() {
             <Text style={styles.modalSubTitle}>Timer Type</Text>
             <View style={styles.selectorRow}>
               <TouchableOpacity
-                style={[styles.selectorBtn, timerType === 'combined' && styles.selectorBtnActive]}
+                style={[
+                  styles.selectorBtn,
+                  timerType === 'combined' && styles.selectorBtnActive,
+                ]}
                 onPress={() => setTimerType('combined')}
               >
-                <Text style={[styles.selectorBtnText, timerType === 'combined' && styles.selectorBtnTextActive]}>H:M:S</Text>
+                <Text
+                  style={[
+                    styles.selectorBtnText,
+                    timerType === 'combined' && styles.selectorBtnTextActive,
+                  ]}
+                >
+                  H:M:S
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.selectorBtn, timerType === 'single' && styles.selectorBtnActive]}
+                style={[
+                  styles.selectorBtn,
+                  timerType === 'single' && styles.selectorBtnActive,
+                ]}
                 onPress={() => setTimerType('single')}
               >
-                <Text style={[styles.selectorBtnText, timerType === 'single' && styles.selectorBtnTextActive]}>Single Unit</Text>
+                <Text
+                  style={[
+                    styles.selectorBtnText,
+                    timerType === 'single' && styles.selectorBtnTextActive,
+                  ]}
+                >
+                  Single Unit
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
-                style={[styles.selectorBtn, timerType === 'clock' && styles.selectorBtnActive]}
+                style={[
+                  styles.selectorBtn,
+                  timerType === 'clock' && styles.selectorBtnActive,
+                ]}
                 onPress={() => setTimerType('clock')}
               >
-                <Text style={[styles.selectorBtnText, timerType === 'clock' && styles.selectorBtnTextActive]}>Exact Time</Text>
+                <Text
+                  style={[
+                    styles.selectorBtnText,
+                    timerType === 'clock' && styles.selectorBtnTextActive,
+                  ]}
+                >
+                  Exact Time
+                </Text>
               </TouchableOpacity>
             </View>
 
@@ -960,10 +751,19 @@ export default function DashboardScreen() {
                   {(['seconds', 'minutes', 'hours'] as const).map(unit => (
                     <TouchableOpacity
                       key={unit}
-                      style={[styles.selectorBtn, singleTimerUnit === unit && styles.selectorBtnActive]}
+                      style={[
+                        styles.selectorBtn,
+                        singleTimerUnit === unit && styles.selectorBtnActive,
+                      ]}
                       onPress={() => setSingleTimerUnit(unit)}
                     >
-                      <Text style={[styles.selectorBtnText, singleTimerUnit === unit && styles.selectorBtnTextActive]}>
+                      <Text
+                        style={[
+                          styles.selectorBtnText,
+                          singleTimerUnit === unit &&
+                            styles.selectorBtnTextActive,
+                        ]}
+                      >
                         {unit}
                       </Text>
                     </TouchableOpacity>
@@ -996,10 +796,19 @@ export default function DashboardScreen() {
                   {(['AM', 'PM'] as const).map(period => (
                     <TouchableOpacity
                       key={period}
-                      style={[styles.selectorBtn, clockPeriod === period && styles.selectorBtnActive]}
+                      style={[
+                        styles.selectorBtn,
+                        clockPeriod === period && styles.selectorBtnActive,
+                      ]}
                       onPress={() => setClockPeriod(period)}
                     >
-                      <Text style={[styles.selectorBtnText, clockPeriod === period && styles.selectorBtnTextActive]}>
+                      <Text
+                        style={[
+                          styles.selectorBtnText,
+                          clockPeriod === period &&
+                            styles.selectorBtnTextActive,
+                        ]}
+                      >
                         {period}
                       </Text>
                     </TouchableOpacity>
@@ -1011,10 +820,10 @@ export default function DashboardScreen() {
             <View style={styles.readonlyTargetBox}>
               <Text style={styles.readonlyTargetText}>
                 {targetType === 'app'
-                  ? (createAppName || 'No app selected')
+                  ? createAppName || 'No app selected'
                   : targetType === 'category'
-                    ? (createCategory || 'No category selected')
-                    : (createWebsiteUrl || 'No website selected')}
+                  ? createCategory || 'No category selected'
+                  : createWebsiteUrl || 'No website selected'}
               </Text>
             </View>
             <View style={styles.modalActions}>
@@ -1037,7 +846,9 @@ export default function DashboardScreen() {
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
       >
         {/* ===== HEADER ===== */}
         <View style={styles.header}>
@@ -1045,23 +856,20 @@ export default function DashboardScreen() {
             <Text style={styles.logoText}>Limitter</Text>
             <Text style={styles.subtitle}>Welcome, {user?.name || 'User'}</Text>
           </View>
-           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-             <TouchableOpacity
-               style={styles.settingsBtn}
-               onPress={() => fetchLimits()}
-             >
-               <RefreshCw
-                 size={22}
-                 color="#4F46E5"
-               />
-             </TouchableOpacity>
-             <TouchableOpacity
-               style={styles.settingsBtn}
-               onPress={() => navigation.navigate('SettingsScreen')}
-             >
-               <SettingsIcon size={24} color="#4F46E5" />
-             </TouchableOpacity>
-           </View>
+          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+            <TouchableOpacity
+              style={styles.settingsBtn}
+              onPress={() => fetchLimits()}
+            >
+              <RefreshCw size={22} color="#4F46E5" />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={styles.settingsBtn}
+              onPress={() => navigation.navigate('SettingsScreen')}
+            >
+              <SettingsIcon size={24} color="#4F46E5" />
+            </TouchableOpacity>
+          </View>
         </View>
 
         {/* ===== USER STATS ===== */}
@@ -1072,7 +880,9 @@ export default function DashboardScreen() {
             onPress={() => navigation.navigate('SubscriptionPlansScreen')}
           >
             <Text style={styles.statLabel}>Plan</Text>
-            <Text style={styles.statValue}>{user?.plan?.toUpperCase() || 'FREE'}</Text>
+            <Text style={styles.statValue}>
+              {user?.plan?.toUpperCase() || 'FREE'}
+            </Text>
           </TouchableOpacity>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Overrides</Text>
@@ -1080,7 +890,9 @@ export default function DashboardScreen() {
           </View>
           <View style={styles.statCard}>
             <Text style={styles.statLabel}>Total Usage</Text>
-            <Text style={styles.statValue}>{loading ? 'Loading...' : formatTotalUsageFromActivity()}</Text>
+            <Text style={styles.statValue}>
+              {loading ? 'Loading...' : totalUsageText}
+            </Text>
           </View>
         </View>
 
@@ -1097,7 +909,10 @@ export default function DashboardScreen() {
             <View style={styles.emptyState}>
               <AlertCircle size={48} color="#94A3B8" />
               <Text style={styles.emptyText}>No limits yet</Text>
-              <TouchableOpacity style={styles.createBtn} onPress={() => setShowCreateModal(true)}>
+              <TouchableOpacity
+                style={styles.createBtn}
+                onPress={() => setShowCreateModal(true)}
+              >
                 <Text style={styles.createBtnText}>Create First Limit</Text>
               </TouchableOpacity>
             </View>
@@ -1111,10 +926,16 @@ export default function DashboardScreen() {
               {limits.slice(0, 5).map((limit: any) => (
                 <View key={limit.id} style={styles.limitCard}>
                   <View style={styles.limitInfo}>
-                    <Text style={styles.limitName}>{limit.target_label || limit.app_name || limit.category || 'App'}</Text>
+                    <Text style={styles.limitName}>
+                      {limit.target_label ||
+                        limit.app_name ||
+                        limit.category ||
+                        'App'}
+                    </Text>
                     <View style={styles.limitStats}>
                       <Text style={styles.limitStat}>
-                        {formatUsageTime(limit.time_used_minutes || 0)} / {formatLimitTime(limit.max_time_minutes)}
+                        {formatUsageTime(limit.time_used_minutes || 0)} /{' '}
+                        {formatLimitTime(limit.max_time_minutes)}
                       </Text>
                       <View
                         style={[
@@ -1122,19 +943,25 @@ export default function DashboardScreen() {
                           limit.is_blocked
                             ? styles.statusBlocked
                             : (limit.time_used_minutes || 0) > 0
-                              ? styles.statusActive
-                              : styles.statusTracking,
+                            ? styles.statusActive
+                            : styles.statusTracking,
                         ]}
                       >
-                        <Text style={[
-                          styles.statusText,
-                          limit.is_blocked
-                            ? styles.statusBlockedText
-                            : (limit.time_used_minutes || 0) > 0
+                        <Text
+                          style={[
+                            styles.statusText,
+                            limit.is_blocked
+                              ? styles.statusBlockedText
+                              : (limit.time_used_minutes || 0) > 0
                               ? styles.statusActiveText
                               : styles.statusTrackingText,
-                        ]}>
-                          {limit.is_blocked ? 'BLOCKED' : (limit.time_used_minutes || 0) > 0 ? 'ACTIVE' : 'TRACKING'}
+                          ]}
+                        >
+                          {limit.is_blocked
+                            ? 'BLOCKED'
+                            : (limit.time_used_minutes || 0) > 0
+                            ? 'ACTIVE'
+                            : 'TRACKING'}
                         </Text>
                       </View>
                     </View>
@@ -1144,7 +971,13 @@ export default function DashboardScreen() {
                     <View
                       style={[
                         styles.progressBar,
-                        { width: `${Math.min((limit.time_used_minutes / limit.max_time_minutes) * 100, 100)}%` },
+                        {
+                          width: `${Math.min(
+                            (limit.time_used_minutes / limit.max_time_minutes) *
+                              100,
+                            100,
+                          )}%`,
+                        },
                         limit.is_blocked && styles.progressBarBlocked,
                       ]}
                     />
@@ -1155,37 +988,44 @@ export default function DashboardScreen() {
                       if ((user?.overrides_left ?? 0) <= 0) {
                         navigation.navigate('SubscriptionPlansScreen', {
                           fromBlockingOverride: true,
-                          packageName: limit.app_name || limit.package_name || limit.packageName,
-                          appName: limit.app_name || limit.package_name || limit.packageName,
+                          packageName:
+                            limit.app_name ||
+                            limit.package_name ||
+                            limit.packageName,
+                          appName:
+                            limit.app_name ||
+                            limit.package_name ||
+                            limit.packageName,
                         });
                         return;
                       }
 
                       navigation.navigate('ConfirmOverrideScreen', {
                         limitId: limit.id,
-                        packageName: limit.app_name || limit.package_name || limit.packageName,
-                        appName: limit.app_name || limit.package_name || limit.packageName,
+                        packageName:
+                          limit.app_name ||
+                          limit.package_name ||
+                          limit.packageName,
+                        appName:
+                          limit.app_name ||
+                          limit.package_name ||
+                          limit.packageName,
                       });
                     }}
                     style={styles.overrideBtn}
                   >
                     <Text style={styles.overrideBtnText}>Use Override</Text>
                   </TouchableOpacity>
-
-                  {__DEV__ && (
-                    <TouchableOpacity
-                      onPress={() => handleSimulateUsage(limit.id)}
-                      style={styles.simulateBtn}
-                    >
-                      <Text style={styles.simulateBtnText}>Simulate +5 min</Text>
-                    </TouchableOpacity>
-                  )}
                 </View>
               ))}
               {limits.length > 5 && (
-                <TouchableOpacity style={styles.moreItemsNote} onPress={() => navigation.navigate('PoliciesScreen')}>
+                <TouchableOpacity
+                  style={styles.moreItemsNote}
+                  onPress={() => navigation.navigate('PoliciesScreen')}
+                >
                   <Text style={styles.moreItemsText}>
-                    +{limits.length - 5} more limit{limits.length - 5 > 1 ? 's' : ''} • Tap to manage all
+                    +{limits.length - 5} more limit
+                    {limits.length - 5 > 1 ? 's' : ''} • Tap to manage all
                   </Text>
                 </TouchableOpacity>
               )}
@@ -1196,7 +1036,10 @@ export default function DashboardScreen() {
         {/* ===== QUICK ACTIONS ===== */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
-          <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('PoliciesScreen')}>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('PoliciesScreen')}
+          >
             <Shield size={24} color="#10B981" />
             <View style={styles.actionContent}>
               <Text style={styles.actionTitle}>My Limits</Text>
@@ -1204,7 +1047,10 @@ export default function DashboardScreen() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('ActivityScreen')}>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('ActivityScreen')}
+          >
             <BarChart2 size={24} color="#4F46E5" />
             <View style={styles.actionContent}>
               <Text style={styles.actionTitle}>View Activity</Text>
@@ -1212,11 +1058,16 @@ export default function DashboardScreen() {
             </View>
           </TouchableOpacity>
 
-          <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('AnalyticsScreen')}>
+          <TouchableOpacity
+            style={styles.actionCard}
+            onPress={() => navigation.navigate('AnalyticsScreen')}
+          >
             <Clock size={24} color="#4F46E5" />
             <View style={styles.actionContent}>
               <Text style={styles.actionTitle}>7-Day Analytics</Text>
-              <Text style={styles.actionDesc}>View Monday-Sunday usage graph</Text>
+              <Text style={styles.actionDesc}>
+                View Monday-Sunday usage graph
+              </Text>
             </View>
           </TouchableOpacity>
 
@@ -1250,15 +1101,24 @@ export default function DashboardScreen() {
           <Home size={22} color="#4F46E5" />
           <Text style={styles.navLabel}>Home</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('PoliciesScreen')}>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => navigation.navigate('PoliciesScreen')}
+        >
           <Shield size={22} color="#94A3B8" />
           <Text style={[styles.navLabel, styles.inactiveLabel]}>Limits</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('AnalyticsScreen')}>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => navigation.navigate('AnalyticsScreen')}
+        >
           <BarChart2 size={22} color="#94A3B8" />
           <Text style={[styles.navLabel, styles.inactiveLabel]}>Analytics</Text>
         </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('SettingsScreen')}>
+        <TouchableOpacity
+          style={styles.navItem}
+          onPress={() => navigation.navigate('SettingsScreen')}
+        >
           <SettingsIcon size={22} color="#94A3B8" />
           <Text style={[styles.navLabel, styles.inactiveLabel]}>Settings</Text>
         </TouchableOpacity>
@@ -1516,16 +1376,42 @@ const styles = StyleSheet.create({
   centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
   loadingText: { marginTop: 12, color: '#64748B', fontSize: 14 },
   scrollContent: { paddingBottom: 100 },
-  header: { backgroundColor: '#FFFFFF', padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  header: {
+    backgroundColor: '#FFFFFF',
+    padding: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    borderBottomWidth: 1,
+    borderBottomColor: '#F1F5F9',
+  },
   logoText: { fontSize: 28, fontWeight: '800', color: '#0F172A' },
   subtitle: { fontSize: 12, color: '#64748B', marginTop: 2 },
   settingsBtn: { padding: 8 },
   statsContainer: { flexDirection: 'row', padding: 20, gap: 12 },
-  statCard: { flex: 1, backgroundColor: '#FFFFFF', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center' },
+  statCard: {
+    flex: 1,
+    backgroundColor: '#FFFFFF',
+    padding: 12,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+    alignItems: 'center',
+  },
   statLabel: { fontSize: 11, color: '#94A3B8', fontWeight: '600' },
-  statValue: { fontSize: 18, fontWeight: '700', color: '#0F172A', marginTop: 4 },
+  statValue: {
+    fontSize: 18,
+    fontWeight: '700',
+    color: '#0F172A',
+    marginTop: 4,
+  },
   section: { padding: 20 },
-  sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 16,
+  },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
   limitsScrollWrap: {
     maxHeight: 320,
@@ -1546,14 +1432,42 @@ const styles = StyleSheet.create({
     fontSize: 13,
     fontWeight: '600',
   },
-  emptyState: { alignItems: 'center', paddingVertical: 40, backgroundColor: '#FFFFFF', borderRadius: 12 },
-  emptyText: { marginTop: 12, color: '#64748B', fontSize: 14, fontWeight: '500' },
-  createBtn: { marginTop: 16, backgroundColor: '#4F46E5', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
+  emptyState: {
+    alignItems: 'center',
+    paddingVertical: 40,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+  },
+  emptyText: {
+    marginTop: 12,
+    color: '#64748B',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  createBtn: {
+    marginTop: 16,
+    backgroundColor: '#4F46E5',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
   createBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
-  limitCard: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0' },
+  limitCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 16,
+    borderRadius: 12,
+    marginBottom: 12,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
   limitInfo: { marginBottom: 12 },
   limitName: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
-  limitStats: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginTop: 8 },
+  limitStats: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginTop: 8,
+  },
   limitStat: { fontSize: 13, color: '#64748B', fontWeight: '500' },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
   statusActive: { backgroundColor: '#DCFCE7' },
@@ -1563,18 +1477,48 @@ const styles = StyleSheet.create({
   statusActiveText: { color: '#166534' },
   statusTrackingText: { color: '#64748B' },
   statusBlockedText: { color: '#991B1B' },
-  progressContainer: { height: 8, backgroundColor: '#E2E8F0', borderRadius: 4, overflow: 'hidden', marginBottom: 12 },
+  progressContainer: {
+    height: 8,
+    backgroundColor: '#E2E8F0',
+    borderRadius: 4,
+    overflow: 'hidden',
+    marginBottom: 12,
+  },
   progressBar: { height: '100%', backgroundColor: '#10B981', borderRadius: 4 },
   progressBarBlocked: { backgroundColor: '#EF4444' },
-  overrideBtn: { backgroundColor: '#F59E0B', paddingVertical: 10, borderRadius: 8, alignItems: 'center' },
+  overrideBtn: {
+    backgroundColor: '#F59E0B',
+    paddingVertical: 10,
+    borderRadius: 8,
+    alignItems: 'center',
+  },
   overrideBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
-  simulateBtn: { backgroundColor: '#0EA5E9', paddingVertical: 10, borderRadius: 8, alignItems: 'center', marginTop: 8 },
-  simulateBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 13 },
-  actionCard: { backgroundColor: '#FFFFFF', padding: 14, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
+  actionCard: {
+    backgroundColor: '#FFFFFF',
+    padding: 14,
+    borderRadius: 12,
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 10,
+    borderWidth: 1,
+    borderColor: '#E2E8F0',
+  },
   actionContent: { marginLeft: 12, flex: 1 },
   actionTitle: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
   actionDesc: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
-  bottomNav: { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingVertical: 12, paddingHorizontal: 24, borderTopWidth: 1, borderTopColor: '#E2E8F0', justifyContent: 'space-around', position: 'absolute', bottom: 0, left: 0, right: 0 },
+  bottomNav: {
+    flexDirection: 'row',
+    backgroundColor: '#FFFFFF',
+    paddingVertical: 12,
+    paddingHorizontal: 24,
+    borderTopWidth: 1,
+    borderTopColor: '#E2E8F0',
+    justifyContent: 'space-around',
+    position: 'absolute',
+    bottom: 0,
+    left: 0,
+    right: 0,
+  },
   navItem: { alignItems: 'center', justifyContent: 'center' },
   navLabel: { fontSize: 11, fontWeight: '600', color: '#4F46E5', marginTop: 4 },
   inactiveLabel: { color: '#94A3B8' },

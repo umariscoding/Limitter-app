@@ -13,7 +13,7 @@ import {
 import { BaseButton, TextInput, Toast } from "../../components";
 import { Shield } from "lucide-react-native";
 import { useNavigation } from "@react-navigation/native";
-import { signUp } from "../services/firebaseAuthService";
+import { signUp } from "../auth/firebaseAuthService";
 
 const SignupScreen: React.FC = () => {
   const navigation = useNavigation<any>();

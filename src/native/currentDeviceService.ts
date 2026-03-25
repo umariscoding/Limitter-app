@@ -1,7 +1,7 @@
 import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
-import { getDevicesAPI, registerDeviceAPI } from "./deviceService";
-import { getOrCreateInstallationId } from "./firebaseAuthService";
+import { getDevicesAPI, registerDeviceAPI } from "../services/deviceService";
+import { getOrCreateInstallationId } from "../auth/firebaseAuthService";
 
 const CURRENT_DEVICE_KEY = "@limitter_current_device_id";
 

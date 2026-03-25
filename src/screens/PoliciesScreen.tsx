@@ -16,7 +16,7 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
-import { getPoliciesAPI, updatePolicyAPI, archivePolicyAPI } from '../services/policyService';
+import { updatePolicyAPI, archivePolicyAPI, getPoliciesAPI } from '../services/policyService';
 import {
   Home,
   BarChart2,
@@ -31,13 +31,12 @@ import {
   AlertTriangle,
 } from 'lucide-react-native';
 import {
-  startTimerRealtimeTracking,
-  subscribeTimerTicks,
-  subscribeTimerBlocked,
-} from '../native/timerRealtimeService';
-import { getNativeTimerStates } from '../native/appBlockerService';
-import { mapPolicyToUI, mergeUsage, formatUsageTime, formatLimitTime, formatRemainingTime, type UIPolicy } from '../utils/policyMapper';
-import { setLocalUsageForPolicy, getAllLocalUsageToday } from '../services/localUsageStore';
+  formatUsageTime,
+  formatLimitTime,
+  formatRemainingTime,
+  type UIPolicy,
+} from '../utils/policyMapper';
+import { hydratePoliciesForUi } from '../helpers/helper';
 
 export default function PoliciesScreen() {
   const navigation = useNavigation<any>();
@@ -46,9 +45,6 @@ export default function PoliciesScreen() {
   const [policies, setPolicies] = useState<UIPolicy[]>([]);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
-  // Track local start times for active usage (local timer fallback)
-  const localTimerStart = React.useRef<Map<string, number>>(new Map());
 
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<UIPolicy | null>(null);
@@ -60,12 +56,8 @@ export default function PoliciesScreen() {
   const fetchPolicies = useCallback(async () => {
     if (!user?.uid) return;
     try {
-      const result = await getPoliciesAPI();
-      const data = Array.isArray(result) ? result : [];
-      const mapped = data.map(mapPolicyToUI);
-      // Merge with local usage — max(local, server) wins
-      const localUsage = await getAllLocalUsageToday();
-      const merged = mergeUsage(mapped, localUsage);
+      const policiesResult = await getPoliciesAPI();
+      const merged = await hydratePoliciesForUi(policiesResult);
       setPolicies(merged);
     } catch (error) {
       console.error('Failed to fetch policies:', error);
@@ -81,110 +73,6 @@ export default function PoliciesScreen() {
       fetchPolicies();
     }, [fetchPolicies]),
   );
-
-  // Subscribe to native timer ticks for real-time progress updates
-  React.useEffect(() => {
-    startTimerRealtimeTracking();
-
-    // Local elapsed seconds per package
-    const localElapsed = new Map<string, number>();
-
-    const unsubTick = subscribeTimerTicks(event => {
-      if (!event?.package) return;
-      const pkg = String(event.package).trim().toLowerCase();
-
-      // Track local elapsed: +1 second per tick
-      const prev = localElapsed.get(pkg) || 0;
-      const newElapsed = prev + 1;
-      localElapsed.set(pkg, newElapsed);
-
-      setPolicies(prevPolicies =>
-        prevPolicies.map(p => {
-          const key = String(p.app_name).trim().toLowerCase();
-          if (key !== pkg) return p;
-
-          const maxSeconds = p.max_time_minutes * 60;
-          const nativeRemaining = Number(event.remaining || 0);
-          const nativeUsed =
-            maxSeconds > 0 ? Math.max(0, maxSeconds - nativeRemaining) : 0;
-          const usedSeconds =
-            maxSeconds > 0 ? Math.max(nativeUsed, newElapsed) : 0;
-          const usedMinutes = usedSeconds / 60;
-
-          const eventBlocked = typeof event.isBlocked === 'boolean'
-            ? event.isBlocked
-            : String(event.status || '').toLowerCase() === 'blocked';
-          const isBlocked =
-            eventBlocked || (maxSeconds > 0 && usedSeconds >= maxSeconds);
-
-          return {
-            ...p,
-            time_used_minutes: usedMinutes,
-            is_blocked: isBlocked,
-            status: isBlocked ? 'blocked' as const : usedMinutes > 0 ? 'active' as const : 'inactive' as const,
-          };
-        }),
-      );
-    });
-
-    const unsubBlocked = subscribeTimerBlocked(event => {
-      if (!event?.package) return;
-      const pkg = String(event.package).trim().toLowerCase();
-      setPolicies(prev =>
-        prev.map(p => {
-          const key = String(p.app_name).trim().toLowerCase();
-          if (key !== pkg) return p;
-          return { ...p, is_blocked: true, status: 'blocked' as const };
-        }),
-      );
-    });
-
-    // Fallback: poll native timer states every second
-    const pollInterval = setInterval(async () => {
-      try {
-        const timerStates = await getNativeTimerStates();
-        if (!Array.isArray(timerStates) || timerStates.length === 0) return;
-
-        setPolicies(prev =>
-          prev.map(p => {
-            const key = String(p.app_name || '').trim().toLowerCase();
-            const timer = timerStates.find((t: any) =>
-              String(t.package || '').trim().toLowerCase() === key
-            );
-            if (!timer) return p;
-
-            const maxSeconds = p.max_time_minutes * 60;
-            const remainingSec = Number(timer.remainingSeconds || 0);
-            const statusLower = String(timer.status || '').toLowerCase();
-            const usedSeconds =
-              maxSeconds > 0 ? Math.max(0, maxSeconds - remainingSec) : 0;
-            const usedMinutes = usedSeconds / 60;
-            const isBlocked =
-              statusLower === 'blocked' ||
-              (statusLower !== 'waiting' && maxSeconds > 0 && remainingSec <= 0);
-
-            // Persist to AsyncStorage
-            if (usedSeconds > 0 && p.id) {
-              setLocalUsageForPolicy(p.id, usedSeconds).catch(() => {});
-            }
-
-            return {
-              ...p,
-              time_used_minutes: usedMinutes,
-              is_blocked: isBlocked,
-              status: isBlocked ? 'blocked' as const : usedMinutes > 0 ? 'active' as const : 'inactive' as const,
-            };
-          })
-        );
-      } catch {}
-    }, 1000);
-
-    return () => {
-      unsubTick();
-      unsubBlocked();
-      clearInterval(pollInterval);
-    };
-  }, []);
 
   const handleDelete = (policy: UIPolicy) => {
     Alert.alert(

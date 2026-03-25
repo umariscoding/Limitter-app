@@ -184,8 +184,3 @@ export const requestRequiredPermissions = async (): Promise<PermissionStatus> =>
     status = await checkPermissions();
   }
 };
-
-export const hasRequiredPermissions = (status: PermissionStatus): boolean => {
-  if (Platform.OS !== "android") return true;
-  return status.overlay && status.usage;
-};

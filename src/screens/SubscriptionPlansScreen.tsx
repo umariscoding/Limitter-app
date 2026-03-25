@@ -22,10 +22,9 @@ import {
   subscriptionLabels
 } from '../data/appData';
 import { useUser } from '../context/UserContext';
-import { resolveCurrentDeviceId } from '../services/currentDeviceService';
+import { resolveCurrentDeviceId } from '../native/currentDeviceService';
 import { getPoliciesAPI } from '../services/policyService';
 import { grantTemporaryOverrideAccess } from '../native/appBlockerService';
-import { addLimitHistoryEntry, incrementOverrideCount } from '../utils/limitHistoryService';
 import { computeNextOverrides, getPlanOverrideLimit, normalizePlan } from '../utils/planRules';
 
 // Memoized feature item for max performance
@@ -165,16 +164,6 @@ export default function SubscriptionPlansScreen() {
       }
 
       await grantTemporaryOverrideAccess(blockingPackage, blockingAppName || blockingPackage, 5);
-      if (mode === 'override') {
-        await incrementOverrideCount();
-      }
-      await addLimitHistoryEntry({
-        appName: blockingAppName || blockingPackage,
-        packageName: blockingPackage,
-        timestamp: Date.now(),
-        type: 'override',
-        overrideUsed: mode === 'override',
-      });
 
       setShowOverrideChoice(false);
       Alert.alert(

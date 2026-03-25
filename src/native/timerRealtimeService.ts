@@ -1,8 +1,7 @@
 import { NativeEventEmitter } from 'react-native';
-import { addLimitHistoryEntry } from '../utils/limitHistoryService';
 import { TimerEventModule, warnIfCustomNativeMissing } from './limitterNativeModules';
 
-type TimerTickEvent = {
+export type TimerTickEvent = {
   package: string;
   appName: string;
   remaining: number;
@@ -11,7 +10,7 @@ type TimerTickEvent = {
   blockedAt?: number;
 };
 
-type TimerBlockedEvent = {
+export type TimerBlockedEvent = {
   package: string;
   appName: string;
   blockedAt?: number;
@@ -25,55 +24,12 @@ let tickSubscription: { remove: () => void } | null = null;
 let blockedSubscription: { remove: () => void } | null = null;
 let isStarted = false;
 
-const blockedTransitionMap = new Map<string, boolean>();
-
-const handleTick = async (event: TimerTickEvent) => {
+const handleTick = (event: TimerTickEvent) => {
   tickListeners.forEach(listener => listener(event));
-
-  const wasBlocked = blockedTransitionMap.get(event.package) || false;
-  if (event.isBlocked && !wasBlocked) {
-    blockedTransitionMap.set(event.package, true);
-    const blockedAt = Number(event.blockedAt || Date.now());
-
-    await addLimitHistoryEntry({
-      appName: event.appName || event.package,
-      packageName: event.package,
-      timestamp: blockedAt,
-      type: 'blocked',
-      overrideUsed: false,
-    });
-
-    blockedListeners.forEach(listener =>
-      listener({
-        package: event.package,
-        appName: event.appName,
-        blockedAt,
-      })
-    );
-  } else if (!event.isBlocked) {
-    blockedTransitionMap.set(event.package, false);
-  }
 };
 
-const handleBlocked = async (event: TimerBlockedEvent) => {
-  const blockedAt = Number(event.blockedAt || Date.now());
-  blockedTransitionMap.set(event.package, true);
-
-  await addLimitHistoryEntry({
-    appName: event.appName || event.package,
-    packageName: event.package,
-    timestamp: blockedAt,
-    type: 'blocked',
-    overrideUsed: false,
-  });
-
-  blockedListeners.forEach(listener =>
-    listener({
-      package: event.package,
-      appName: event.appName,
-      blockedAt,
-    })
-  );
+const handleBlocked = (event: TimerBlockedEvent) => {
+  blockedListeners.forEach(listener => listener(event));
 };
 
 export const startTimerRealtimeTracking = () => {
@@ -87,11 +43,11 @@ export const startTimerRealtimeTracking = () => {
   TimerEventModule.startListening?.();
 
   tickSubscription = eventEmitter.addListener('TIMER_TICK', (event: TimerTickEvent) => {
-    void handleTick(event);
+    handleTick(event);
   });
 
   blockedSubscription = eventEmitter.addListener('TIMER_BLOCKED', (event: TimerBlockedEvent) => {
-    void handleBlocked(event);
+    handleBlocked(event);
   });
 
   isStarted = true;

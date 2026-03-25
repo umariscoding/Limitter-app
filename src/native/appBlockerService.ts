@@ -1,23 +1,17 @@
 import { LimitterModule } from './limitterNativeModules';
 
-export interface BlockedAppAlert {
-  packageName: string;
-  appName: string;
-  blockedUntil: string; // ISO timestamp
-}
-
 /**
- * SERVICE: Monitor foreground app and enforce blocking
- * Requires native Android module + Accessibility Service permissions
+ * Monitor foreground app and enforce blocking.
+ * Requires native Android module + Accessibility Service permissions.
  */
 
-let backgroundTaskId: string | null = null;
 let blockedApps: Map<string, { blockedUntil: number; appName: string }> = new Map();
 
 export interface NativeTimerState {
   package: string;
   name?: string;
   remainingSeconds?: number;
+  liveTimerUsageBudgetSeconds?: number;
   status?: string;
 }
 
@@ -213,47 +207,6 @@ export const startAppBlockerService = async (
   }
 };
 
-export const stopAppBlockerService = async () => {
-  try {
-    if (LimitterModule?.sendCommand) {
-      const result = await LimitterModule.sendCommand('STOP', null);
-      console.log('✅ AppBlocker stopped');
-      return Boolean(result);
-    }
-    return false;
-  } catch (error) {
-    console.error('❌ Failed to stop AppBlocker:', error);
-    return false;
-  }
-};
-
-export const handleForegroundAppChange = async (event: { packageName: string; appName: string }) => {
-  const { packageName, appName } = event;
-
-  const blockedInfo = blockedApps.get(packageName);
-
-  if (blockedInfo && blockedInfo.blockedUntil > Date.now()) {
-    console.log(`🚫 BLOCKED: User tried to open ${appName} (${packageName}) - Time limit active`);
-
-    // Trigger native block flow if needed.
-    if (LimitterModule?.sendCommand) {
-      try {
-        await LimitterModule.sendCommand('BLOCK_APP', {
-          package: packageName,
-          appName: blockedInfo.appName,
-        });
-      } catch (error) {
-        console.error('Error triggering native block:', error);
-      }
-    }
-
-    return true; // App was blocked
-  }
-
-  console.log(`✅ ALLOWED: ${appName} is not blocked`);
-  return false; // App was allowed
-};
-
 export const updateBlockedApps = (newList: Array<{ package_name: string; app_name: string; blocked_until_timestamp?: number }>) => {
   blockedApps.clear();
   newList.forEach(app => {
@@ -267,15 +220,7 @@ export const updateBlockedApps = (newList: Array<{ package_name: string; app_nam
   console.log('✅ Blocked apps list updated:', blockedApps.size, 'apps');
 };
 
-export const isAppBlocked = (packageName: string): boolean => {
-  const blockedInfo = blockedApps.get(packageName);
-  if (blockedInfo && blockedInfo.blockedUntil > Date.now()) {
-    return true;
-  }
-  return false;
-};
-
-export const getNativeTimerStates = async (): Promise<NativeTimerState[]> => {
+export async function getNativeTimerStates(): Promise<NativeTimerState[]> {
   try {
     if (!LimitterModule?.getActiveTimers) {
       return [];
@@ -291,26 +236,30 @@ export const getNativeTimerStates = async (): Promise<NativeTimerState[]> => {
         typeof item?.remainingSeconds === 'number'
           ? item.remainingSeconds
           : Number(item?.remainingSeconds || 0),
+      liveTimerUsageBudgetSeconds:
+        typeof item?.liveTimerUsageBudgetSeconds === 'number'
+          ? item.liveTimerUsageBudgetSeconds
+          : Number(item?.liveTimerUsageBudgetSeconds || 0),
       status: item?.status ? String(item.status).toLowerCase() : undefined,
     }));
   } catch (error) {
     console.warn('Failed to read native timer states:', error);
     return [];
   }
-};
+}
 
-export const getNativeBlockedPackages = async (): Promise<Set<string>> => {
-  const timers = await getNativeTimerStates();
+export function nativeBlockedPackagesFromTimers(timers: NativeTimerState[]): Set<string> {
   const set = new Set<string>();
-
   timers.forEach(timer => {
     const pkg = String(timer.package || '').trim().toLowerCase();
     if (!pkg) return;
-
     if (String(timer.status || '').toLowerCase() === 'blocked') {
       set.add(pkg);
     }
   });
-
   return set;
+}
+
+export const getNativeBlockedPackages = async (): Promise<Set<string>> => {
+  return nativeBlockedPackagesFromTimers(await getNativeTimerStates());
 };

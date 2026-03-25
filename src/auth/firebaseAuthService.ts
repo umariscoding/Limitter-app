@@ -9,7 +9,7 @@ import {
   type User,
 } from "firebase/auth";
 import { auth } from "../config/firebase";
-import axiosService from "./axiosService";
+import axiosService from "../services/axiosService";
 import { API } from "../config/config";
 import { Platform } from "react-native";
 import AsyncStorage from "@react-native-async-storage/async-storage";

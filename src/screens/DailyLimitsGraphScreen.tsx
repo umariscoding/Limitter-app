@@ -12,7 +12,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft } from 'lucide-react-native';
 import { useUser } from '../context/UserContext';
-import { resolveCurrentDeviceId } from '../services/currentDeviceService';
+import { resolveCurrentDeviceId } from '../native/currentDeviceService';
 import { getPoliciesAPI } from '../services/policyService';
 
 type LimitItem = {

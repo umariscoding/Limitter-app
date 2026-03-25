@@ -12,7 +12,7 @@ import {
 import { BaseButton, TextInput, Toast } from "../../components";
 import { Shield } from "lucide-react-native";
 import { useNavigation } from "@react-navigation/native";
-import { resetPassword } from "../services/firebaseAuthService";
+import { resetPassword } from "../auth/firebaseAuthService";
 
 const ForgotPasswordScreen: React.FC = () => {
   const navigation = useNavigation<any>();

@@ -7,8 +7,7 @@ import {
 import MainNavigator from "./src/navigation/MainNavigator";
 import { UserContextProvider, useUser } from "./src/context/UserContext";
 import { UsageContextProvider } from "./src/context/UsageContext";
-import { onAuthStateChanged, bootstrap } from "./src/services/firebaseAuthService";
-
+import { onAuthStateChanged, bootstrap } from "./src/auth/firebaseAuthService";
 const navigationRef = createNavigationContainerRef<any>();
 
 type OverrideLinkPayload = {

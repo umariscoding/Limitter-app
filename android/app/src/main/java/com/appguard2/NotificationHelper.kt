@@ -52,7 +52,7 @@ object NotificationHelper {
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle("Limitter Active")
-            .setContentText("Timer is running (30s POC)")
+            .setContentText("Monitoring app limits in the background")
             .setSmallIcon(android.R.drawable.ic_dialog_info)
             .setContentIntent(pendingIntent)
             .setPriority(NotificationCompat.PRIORITY_LOW)

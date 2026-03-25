@@ -46,7 +46,7 @@ import {
 import { useUser } from '../context/UserContext';
 import { getDevicesAPI } from '../services/deviceService';
 import { Device as BackendDevice } from '../interface/Device';
-import { resolveCurrentDeviceId } from '../services/currentDeviceService';
+import { resolveCurrentDeviceId } from '../native/currentDeviceService';
 import { normalizePlan } from '../utils/planRules';
 
 type PlanTier = 'Free' | 'Pro' | 'Elite';
