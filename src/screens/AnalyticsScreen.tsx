@@ -5,9 +5,9 @@ import { ChevronLeft } from 'lucide-react-native';
 import { useUser } from '../context/UserContext';
 import { useUsageContext } from '../context/UsageContext';
 import { WeeklyUsageGraph } from '../components/WeeklyUsageGraph';
-import { getLimitsAPI } from '../services/limitService';
-import { getNativeBlockedPackages } from '../services/appBlockerService';
-import { getLimitHistory } from '../services/limitHistoryService';
+import { getPoliciesAPI } from '../services/policyService';
+import { getNativeBlockedPackages } from '../native/appBlockerService';
+import { getLimitHistory } from '../utils/limitHistoryService';
 
 interface BreakdownItem {
   id: string;
@@ -29,7 +29,7 @@ const formatMinutes = (mins: number) => {
 export default function AnalyticsScreen() {
   const navigation = useNavigation<any>();
   const { user } = useUser();
-  const { weeklyUsage, isLoadingWeekly, weeklyError, refetchWeeklyUsage, isRefreshing, currentDeviceId } = useUsageContext();
+  const { weeklyUsage, isLoadingWeekly, weeklyError, currentDeviceId, setWeeklyUsage, setIsLoadingWeekly, setWeeklyError } = useUsageContext();
   const [breakdown, setBreakdown] = React.useState<BreakdownItem[]>([]);
 
   const getLimitPackageKey = React.useCallback((item: any) => {
@@ -45,8 +45,24 @@ export default function AnalyticsScreen() {
     }
 
     try {
-      const response = await getLimitsAPI(user.uid, currentDeviceId);
-      const rows = Array.isArray(response?.data) ? response.data : [];
+      const policiesResult = await getPoliciesAPI();
+      const policiesData = Array.isArray(policiesResult) ? policiesResult : [];
+      const rows = policiesData.map((item: any) => {
+        const p = item.policy || item;
+        const state = item.policyState || p.policyState || {};
+        return {
+          id: p.policyId,
+          app_name: p.targetKey,
+          package_name: p.targetKey,
+          packageName: p.targetKey,
+          target_label: p.targetLabel,
+          category: p.type === 'category' ? p.targetLabel : null,
+          max_time_minutes: p.dailyLimitMinutes,
+          time_used_minutes: state.usageTodayMinutes || 0,
+          is_blocked: state.isExhaustedToday || false,
+          created_at: p.createdAt?._seconds ? p.createdAt._seconds * 1000 : Date.now(),
+        };
+      });
 
       const history = await getLimitHistory();
       const latestHistoryByPackage = new Map<string, { type: 'blocked' | 'override'; timestamp: number }>();
@@ -147,8 +163,8 @@ export default function AnalyticsScreen() {
   }, [fetchBreakdown]);
 
   const onRefreshAll = React.useCallback(async () => {
-    await Promise.all([refetchWeeklyUsage(true), fetchBreakdown()]);
-  }, [refetchWeeklyUsage, fetchBreakdown]);
+    await fetchBreakdown();
+  }, [fetchBreakdown]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -165,7 +181,7 @@ export default function AnalyticsScreen() {
         <WeeklyUsageGraph
           title="My Activity - 7 Day Usage"
           data={weeklyUsage}
-          isLoading={isLoadingWeekly || isRefreshing}
+          isLoading={isLoadingWeekly}
           error={weeklyError}
           onRefresh={() => {
             void onRefreshAll();

@@ -1,4 +1,4 @@
-import { getTotalUsageAPI } from './usageAPI';
+import { getTotalUsageAPI } from '../services/usageAPI';
 
 interface CacheEntry {
   data: any;

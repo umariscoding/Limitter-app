@@ -105,6 +105,44 @@ class LimitterModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
         promise.resolve(map)
     }
 
+    @ReactMethod
+    fun openUsageAccessSettings() {
+        val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        reactApplicationContext.startActivity(intent)
+    }
+
+    @ReactMethod
+    fun openOverlaySettings() {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.M) {
+            val context = reactApplicationContext
+            val intent = Intent(
+                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                Uri.parse("package:${context.packageName}")
+            )
+            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+            context.startActivity(intent)
+        }
+    }
+
+    @ReactMethod
+    fun openAccessibilitySettings() {
+        val intent = Intent(Settings.ACTION_ACCESSIBILITY_SETTINGS)
+        intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        reactApplicationContext.startActivity(intent)
+    }
+
+    /** System App info screen for this package (helps users verify install / OEM permission shortcuts). */
+    @ReactMethod
+    fun openApplicationDetailsSettings() {
+        val ctx = reactApplicationContext
+        val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS).apply {
+            data = Uri.parse("package:${ctx.packageName}")
+            addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
+        }
+        ctx.startActivity(intent)
+    }
+
     private fun canScheduleExactAlarms(): Boolean {
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
             val alarmManager = reactApplicationContext.getSystemService(Context.ALARM_SERVICE) as android.app.AlarmManager
@@ -169,9 +207,21 @@ class LimitterModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
                 val map = Arguments.createMap()
                 map.putString("package", pkg)
                 map.putString("name", timer.appName)
-                val remaining = ((timer.endTimeMillis - System.currentTimeMillis()) / 1000).toInt().coerceAtLeast(0)
+                // Must match LimitterService.broadcastTick(): waiting timers have endTimeMillis=0;
+                // using (0 - now) made remaining=0 and React treated every limit as exhausted.
+                val remaining = when {
+                    timer.isBlocked -> 0
+                    timer.isStarted ->
+                        ((timer.endTimeMillis - System.currentTimeMillis()) / 1000).toInt().coerceAtLeast(0)
+                    else -> timer.durationSeconds
+                }
                 map.putInt("remainingSeconds", remaining)
-                map.putString("status", if (timer.isBlocked) "blocked" else "active")
+                val status = when {
+                    timer.isBlocked -> "blocked"
+                    timer.isStarted -> "active"
+                    else -> "waiting"
+                }
+                map.putString("status", status)
                 result.pushMap(map)
             }
             promise.resolve(result)
@@ -310,13 +360,25 @@ class LimitterModule(reactContext: ReactApplicationContext) : ReactContextBaseJa
 
     private fun hasUsageStatsPermission(): Boolean {
         val appOps = reactApplicationContext.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-        val mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
-            appOps.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), reactApplicationContext.packageName)
+        val uid = Process.myUid()
+        val pkg = reactApplicationContext.packageName
+
+        var mode = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            appOps.unsafeCheckOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, uid, pkg)
         } else {
             @Suppress("DEPRECATION")
-            appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, Process.myUid(), reactApplicationContext.packageName)
+            appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, uid, pkg)
         }
-        return mode == AppOpsManager.MODE_ALLOWED
+        if (mode == AppOpsManager.MODE_ALLOWED) return true
+
+        // Some OEM builds mis-report with unsafeCheckOpNoThrow — fall back to checkOpNoThrow on API 29+.
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            @Suppress("DEPRECATION")
+            mode = appOps.checkOpNoThrow(AppOpsManager.OPSTR_GET_USAGE_STATS, uid, pkg)
+            if (mode == AppOpsManager.MODE_ALLOWED) return true
+        }
+
+        return false
     }
 
     private fun convertToSeconds(payload: ReadableMap?): Int {

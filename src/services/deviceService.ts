@@ -1,46 +1,24 @@
-import { BASE_URL, API } from '../config/config';
-import { Device } from '../interface/Device';
+import { API } from "../config/config";
+import axiosService from "./axiosService";
 
 export const registerDeviceAPI = async (
-  user_id: string,
-  device_name: string,
-  device_os: string
+  installationId: string,
+  platform: string,
+  deviceType: string,
+  deviceName: string,
+  osVersion?: string,
+  appVersion?: string,
 ) => {
-  try {
-    const response = await fetch(`${BASE_URL}${API.RegisterDevice}`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({
-        user_id,
-        device_name,
-        device_os,
-      }),
-    });
-
-    const data = await response.json();
-    console.log('✅ Register Device API Response:', data);
-    return data;
-  } catch (error) {
-    console.error('❌ Register Device Error:', error);
-    throw error;
-  }
+  return await axiosService.post(API.RegisterDevice, {
+    installationId,
+    platform,
+    deviceType,
+    deviceName,
+    osVersion,
+    appVersion,
+  });
 };
 
-export const getDevicesAPI = async (user_id: string): Promise<{ success?: boolean; data?: Device[]; message?: string }> => {
-  try {
-    const response = await fetch(
-      `${BASE_URL}${API.GetDevices}`.replace(':user_id', user_id),
-      {
-        method: 'GET',
-        headers: { 'Content-Type': 'application/json' },
-      }
-    );
-
-    const data = await response.json();
-    console.log('✅ Get Devices API Response:', data);
-    return data;
-  } catch (error) {
-    console.error('❌ Get Devices Error:', error);
-    throw error;
-  }
+export const getDevicesAPI = async () => {
+  return await axiosService.get(API.GetDevices);
 };

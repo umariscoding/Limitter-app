@@ -1,86 +1,79 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android"
-    xmlns:tools="http://schemas.android.com/tools">
-
-    <uses-permission android:name="android.permission.INTERNET" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
-    <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW" />
-    <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
-    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE" />
-    <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS" />
-    <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES" />
-    <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM" />
-    <uses-permission android:name="android.permission.WAKE_LOCK" />
-    <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS" />
-
-    <application
-      android:name=".MainApplication"
-      android:label="@string/app_name"
-      android:icon="@mipmap/ic_launcher"
-      android:roundIcon="@mipmap/ic_launcher_round"
-      android:allowBackup="false"
-      android:theme="@style/AppTheme"
-      android:usesCleartextTraffic="${usesCleartextTraffic}"
-      android:supportsRtl="true">
-    
-      <activity
-    android:name=".MainActivity"
-    android:exported="true"
-    android:launchMode="singleTask">
-    <intent-filter>
-        <action android:name="android.intent.action.MAIN" />
-        <category android:name="android.intent.category.LAUNCHER" />
-    </intent-filter>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android" xmlns:tools="http://schemas.android.com/tools">
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE"/>
+  <uses-permission android:name="android.permission.FOREGROUND_SERVICE_SPECIAL_USE"/>
+  <uses-permission android:name="android.permission.INTERNET"/>
+  <uses-permission android:name="android.permission.PACKAGE_USAGE_STATS"/>
+  <uses-permission android:name="android.permission.POST_NOTIFICATIONS"/>
+  <uses-permission android:name="android.permission.QUERY_ALL_PACKAGES"/>
+  <uses-permission android:name="android.permission.READ_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
+  <uses-permission android:name="android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"/>
+  <uses-permission android:name="android.permission.SCHEDULE_EXACT_ALARM"/>
+  <uses-permission android:name="android.permission.SYSTEM_ALERT_WINDOW"/>
+  <uses-permission android:name="android.permission.VIBRATE"/>
+  <uses-permission android:name="android.permission.WAKE_LOCK"/>
+  <uses-permission android:name="android.permission.WRITE_EXTERNAL_STORAGE" android:maxSdkVersion="32" tools:replace="android:maxSdkVersion"/>
+  <queries>
+    <intent>
+      <action android:name="android.intent.action.VIEW"/>
+      <category android:name="android.intent.category.BROWSABLE"/>
+      <data android:scheme="https"/>
+    </intent>
+  </queries>
+  <application android:name=".MainApplication" android:label="@string/app_name" android:icon="@mipmap/ic_launcher" android:roundIcon="@mipmap/ic_launcher_round" android:allowBackup="true" android:theme="@style/AppTheme" android:supportsRtl="true" android:enableOnBackInvokedCallback="false">
+    <meta-data android:name="expo.modules.updates.ENABLED" android:value="false"/>
+    <meta-data android:name="expo.modules.updates.EXPO_UPDATES_CHECK_ON_LAUNCH" android:value="ALWAYS"/>
+    <meta-data android:name="expo.modules.updates.EXPO_UPDATES_LAUNCH_WAIT_MS" android:value="0"/>
+    <activity android:name=".MainActivity" android:configChanges="keyboard|keyboardHidden|orientation|screenSize|screenLayout|uiMode|smallestScreenSize" android:launchMode="singleTask" android:windowSoftInputMode="adjustResize" android:theme="@style/Theme.App.SplashScreen" android:exported="true">
       <intent-filter>
-        <action android:name="android.intent.action.VIEW" />
-        <category android:name="android.intent.category.DEFAULT" />
-        <category android:name="android.intent.category.BROWSABLE" />
-        <data android:scheme="appguard2" android:host="override" />
+        <action android:name="android.intent.action.MAIN"/>
+        <category android:name="android.intent.category.LAUNCHER"/>
       </intent-filter>
-</activity>
-      <service 
-        android:name=".LimitterService"
-        android:enabled="true"
-        android:exported="false"
-        android:foregroundServiceType="specialUse">
-        <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-          android:value="Digital wellbeing app usage limitation and interface blocking" />
-      </service>
-
-      <service
-        android:name=".WebsiteBlockerService"
-        android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-        android:exported="false">
-        <intent-filter>
-          <action android:name="android.accessibilityservice.AccessibilityService" />
-        </intent-filter>
-        <meta-data
-          android:name="android.accessibilityservice"
-          android:resource="@xml/website_blocker_config" />
-      </service>
-
-      <!-- Category Tracking POC Service (Integration step) -->
-      <service
-        android:name=".CategoryTrackerAccessibilityService"
-        android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-        android:exported="false">
-        <intent-filter>
-          <action android:name="android.accessibilityservice.AccessibilityService" />
-        </intent-filter>
-        <meta-data
-          android:name="android.accessibilityservice"
-          android:resource="@xml/category_tracker_config" />
-      </service>
-      <activity
-        android:name=".WebsiteBlockerOverlayActivity"
-        android:label="Blocked"
-        android:theme="@style/AppTheme"
-        android:excludeFromRecents="true"
-        android:exported="false" />
-
-      <receiver
-        android:name=".AlarmReceiver"
-        android:enabled="true"
-        android:exported="false" />
-
-    </application>
+      <intent-filter>
+        <action android:name="android.intent.action.VIEW"/>
+        <category android:name="android.intent.category.DEFAULT"/>
+        <category android:name="android.intent.category.BROWSABLE"/>
+        <data android:scheme="appguard2" android:host="override"/>
+      </intent-filter>
+    </activity>
+    <service
+      android:name=".LimitterService"
+      android:enabled="true"
+      android:exported="false"
+      android:foregroundServiceType="specialUse">
+      <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+        android:value="Digital wellbeing app usage limitation and interface blocking"/>
+    </service>
+    <service
+      android:name=".WebsiteBlockerService"
+      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService"/>
+      </intent-filter>
+      <meta-data
+        android:name="android.accessibilityservice"
+        android:resource="@xml/website_blocker_config"/>
+    </service>
+    <service
+      android:name=".CategoryTrackerAccessibilityService"
+      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
+      android:exported="false">
+      <intent-filter>
+        <action android:name="android.accessibilityservice.AccessibilityService"/>
+      </intent-filter>
+      <meta-data
+        android:name="android.accessibilityservice"
+        android:resource="@xml/category_tracker_config"/>
+    </service>
+    <activity
+      android:name=".WebsiteBlockerOverlayActivity"
+      android:label="Blocked"
+      android:theme="@style/AppTheme"
+      android:excludeFromRecents="true"
+      android:exported="false"/>
+    <receiver
+      android:name=".AlarmReceiver"
+      android:enabled="true"
+      android:exported="false"/>
+  </application>
 </manifest>

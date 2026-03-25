@@ -1,8 +1,5 @@
-/**
- * @format
- */
-
-import { AppRegistry, LogBox } from 'react-native';
+import { LogBox } from "react-native";
+import { registerRootComponent } from "expo";
 
 LogBox.ignoreLogs([
   '`new NativeEventEmitter()` was called with a non-null argument without the required `addListener` method.',
@@ -10,7 +7,6 @@ LogBox.ignoreLogs([
   'SafeAreaView has been deprecated and will be removed in a future release.',
 ]);
 
-import App from './App';
-import { name as appName } from './app.json';
+import App from "./App";
 
-AppRegistry.registerComponent(appName, () => App);
+registerRootComponent(App);

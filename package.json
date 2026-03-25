@@ -3,10 +3,12 @@
   "version": "0.0.1",
   "private": true,
   "scripts": {
-    "android": "react-native run-android",
-    "ios": "react-native run-ios",
+    "android": "expo run:android",
+    "ios": "expo run:ios",
     "lint": "eslint .",
-    "start": "react-native start",
+    "start": "expo start",
+    "start:devclient": "expo start --dev-client",
+    "run:android": "expo run:android",
     "test": "jest"
   },
   "dependencies": {
@@ -15,13 +17,20 @@
     "@react-navigation/bottom-tabs": "^7.15.5",
     "@react-navigation/native": "^7.1.33",
     "@react-navigation/native-stack": "^7.14.4",
+    "axios": "^1.13.6",
+    "expo": "^55.0.8",
+    "expo-dev-client": "~55.0.18",
+    "firebase": "^12.11.0",
     "lucide-react-native": "^0.577.0",
-    "react": "19.2.3",
-    "react-native": "0.84.1",
+    "nativewind": "^4.2.3",
+    "react": "19.2.0",
+    "react-native": "0.83.2",
     "react-native-background-timer": "^2.4.1",
-    "react-native-safe-area-context": "^5.7.0",
-    "react-native-screens": "^4.24.0",
-    "react-native-svg": "^15.15.3"
+    "react-native-css-interop": "^0.2.3",
+    "react-native-safe-area-context": "~5.6.2",
+    "react-native-screens": "~4.23.0",
+    "react-native-svg": "^15.15.3",
+    "tailwindcss": "^3.4.17"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",

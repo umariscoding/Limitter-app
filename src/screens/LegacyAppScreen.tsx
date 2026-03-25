@@ -6,7 +6,6 @@ import {
   Text,
   TouchableOpacity,
   View,
-  NativeModules,
   Alert,
   TextInput,
   ActivityIndicator,
@@ -16,9 +15,8 @@ import {
   Linking,
 } from 'react-native';
 
-const { LimitterModule, TimerEventModule } = NativeModules;
-
-import { startCategoryService } from '../services/categoryService';
+import { LimitterModule, TimerEventModule } from '../native/limitterNativeModules';
+import { startCategoryService } from '../native/categoryService';
 import { NavigationContainer } from '@react-navigation/native';
 import MainNavigator from '../navigation/MainNavigator';
 type AppInfo = {

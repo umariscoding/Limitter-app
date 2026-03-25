@@ -1,11 +1,13 @@
-import React from 'react';
-import { Linking } from 'react-native';
-import { NavigationContainer, createNavigationContainerRef } from '@react-navigation/native';
-import MainNavigator from './src/navigation/MainNavigator';
-import { UserContextProvider } from './src/context/UserContext';
-import { UsageContextProvider } from './src/context/UsageContext';
-import { startTimerRealtimeTracking } from './src/services/timerRealtimeService';
-import { startUsageSync, stopUsageSync } from './src/services/usageTrackingService';
+import React from "react";
+import { Linking, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from "react-native";
+import {
+  NavigationContainer,
+  createNavigationContainerRef,
+} from "@react-navigation/native";
+import MainNavigator from "./src/navigation/MainNavigator";
+import { UserContextProvider, useUser } from "./src/context/UserContext";
+import { UsageContextProvider } from "./src/context/UsageContext";
+import { onAuthStateChanged, bootstrap } from "./src/services/firebaseAuthService";
 
 const navigationRef = createNavigationContainerRef<any>();
 
@@ -14,94 +16,157 @@ type OverrideLinkPayload = {
   appName: string;
 };
 
-function App(): React.JSX.Element {
+/**
+ * Inner component that has access to UserContext.
+ * Handles Firebase Auth state listener and deep links.
+ */
+function AppInner(): React.JSX.Element {
+  const { setFirebaseUser, setAccountData, setIsLoading, clearUser } = useUser();
+  const [bootstrapError, setBootstrapError] = React.useState<string | null>(null);
+  const [retrying, setRetrying] = React.useState(false);
   const pendingOverrideRef = React.useRef<OverrideLinkPayload | null>(null);
 
-  const parseOverrideLink = React.useCallback((url: string): OverrideLinkPayload | null => {
-    try {
-      const parsed = new URL(url);
-      const packageName = parsed.searchParams.get('package') || '';
-      const appName = parsed.searchParams.get('appName') || packageName;
+  const parseOverrideLink = React.useCallback(
+    (url: string): OverrideLinkPayload | null => {
+      try {
+        const parsed = new URL(url);
+        const packageName = parsed.searchParams.get("package") || "";
+        const appName = parsed.searchParams.get("appName") || packageName;
+        if (parsed.hostname === "override" && packageName) {
+          return { packageName, appName };
+        }
+      } catch (_) {}
 
-      if (parsed.hostname === 'override' && packageName) {
-        return { packageName, appName };
-      }
-    } catch (_) {
-      // Fallback for environments where URL parsing can fail intermittently.
-    }
-
-    const overrideMatch = url.match(/appguard2:\/\/override\?(.*)$/i);
-    if (!overrideMatch) return null;
-
-    const query = overrideMatch[1] || '';
-    const params = new URLSearchParams(query);
-    const packageName = params.get('package') || '';
-    const appName = params.get('appName') || packageName;
-    if (!packageName) return null;
-
-    return { packageName, appName };
-  }, []);
+      const overrideMatch = url.match(/appguard2:\/\/override\?(.*)$/i);
+      if (!overrideMatch) return null;
+      const params = new URLSearchParams(overrideMatch[1] || "");
+      const packageName = params.get("package") || "";
+      const appName = params.get("appName") || packageName;
+      if (!packageName) return null;
+      return { packageName, appName };
+    },
+    [],
+  );
 
   const openOverrideFlow = React.useCallback((payload: OverrideLinkPayload) => {
     if (!navigationRef.isReady()) {
       pendingOverrideRef.current = payload;
       return;
     }
-
-    navigationRef.navigate('SubscriptionPlansScreen', {
+    navigationRef.navigate("SubscriptionPlansScreen", {
       fromBlockingOverride: true,
       packageName: payload.packageName,
       appName: payload.appName,
     });
   }, []);
 
-  React.useEffect(() => {
-    startTimerRealtimeTracking();
-    startUsageSync();
+  const loadAccount = React.useCallback(async () => {
+    try {
+      setBootstrapError(null);
+      const accountData = await bootstrap();
+      setAccountData(accountData);
+    } catch (err: any) {
+      console.error("Bootstrap failed:", err);
+      setBootstrapError(err?.message || "Failed to load account. Check your connection.");
+    }
+  }, [setAccountData]);
 
+  // Firebase Auth state listener — drives the whole auth flow
+  React.useEffect(() => {
+    const unsubscribe = onAuthStateChanged(async (fbUser) => {
+      if (fbUser && !fbUser.emailVerified) {
+        // Unverified user — don't bootstrap, treat as logged out
+        setFirebaseUser(null);
+        clearUser();
+        setIsLoading(false);
+        return;
+      }
+      setFirebaseUser(fbUser);
+      if (fbUser) {
+        await loadAccount();
+      } else {
+        clearUser();
+        setBootstrapError(null);
+      }
+      setIsLoading(false);
+    });
+    return unsubscribe;
+  }, [loadAccount]);
+
+  // Deep link listener
+  React.useEffect(() => {
     const onDeepLink = ({ url }: { url: string }) => {
       try {
         const payload = parseOverrideLink(url);
-        if (payload) {
-          openOverrideFlow(payload);
-        }
-      } catch (error) {
-        console.error('Deep link parse failed:', error);
-      }
+        if (payload) openOverrideFlow(payload);
+      } catch {}
     };
 
-    const sub = Linking.addEventListener('url', onDeepLink);
-
-    Linking.getInitialURL().then(initialUrl => {
-      if (initialUrl) {
-        onDeepLink({ url: initialUrl });
-      }
+    const sub = Linking.addEventListener("url", onDeepLink);
+    Linking.getInitialURL().then((initialUrl) => {
+      if (initialUrl) onDeepLink({ url: initialUrl });
     });
 
-    return () => {
-      sub.remove();
-      stopUsageSync();
-    };
+    return () => sub.remove();
   }, [openOverrideFlow, parseOverrideLink]);
 
+  if (bootstrapError) {
+    return (
+      <View style={errorStyles.container}>
+        <Text style={errorStyles.title}>Connection Error</Text>
+        <Text style={errorStyles.message}>{bootstrapError}</Text>
+        <TouchableOpacity
+          style={[errorStyles.retryBtn, retrying && { opacity: 0.6 }]}
+          disabled={retrying}
+          onPress={async () => {
+            setRetrying(true);
+            await loadAccount();
+            setRetrying(false);
+          }}
+        >
+          {retrying ? (
+            <ActivityIndicator color="#FFFFFF" />
+          ) : (
+            <Text style={errorStyles.retryText}>Retry</Text>
+          )}
+        </TouchableOpacity>
+      </View>
+    );
+  }
+
+  return (
+    <NavigationContainer
+      ref={navigationRef}
+      onReady={() => {
+        if (pendingOverrideRef.current) {
+          const payload = pendingOverrideRef.current;
+          pendingOverrideRef.current = null;
+          openOverrideFlow(payload);
+        }
+      }}
+    >
+      <MainNavigator />
+    </NavigationContainer>
+  );
+}
+
+
+function App(): React.JSX.Element {
   return (
     <UserContextProvider>
       <UsageContextProvider>
-        <NavigationContainer
-          ref={navigationRef}
-          onReady={() => {
-            if (pendingOverrideRef.current) {
-              const payload = pendingOverrideRef.current;
-              pendingOverrideRef.current = null;
-              openOverrideFlow(payload);
-            }
-          }}
-        >
-          <MainNavigator />
-        </NavigationContainer>
+        <AppInner />
       </UsageContextProvider>
     </UserContextProvider>
   );
 }
+
+const errorStyles = StyleSheet.create({
+  container: { flex: 1, justifyContent: 'center', alignItems: 'center', padding: 32, backgroundColor: '#FFFFFF' },
+  title: { fontSize: 22, fontWeight: '800', color: '#0F172A', marginBottom: 12 },
+  message: { fontSize: 15, color: '#64748B', textAlign: 'center', marginBottom: 32, lineHeight: 22 },
+  retryBtn: { backgroundColor: '#4F46E5', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12 },
+  retryText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+});
 
 export default App;

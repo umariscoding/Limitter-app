@@ -7,7 +7,7 @@ import { WeeklyUsageGraph } from '../components/WeeklyUsageGraph';
 
 export default function UsageScreen() {
   const navigation = useNavigation<any>();
-  const { weeklyUsage, isLoadingWeekly, weeklyError, refetchWeeklyUsage, isRefreshing } = useUsageContext();
+  const { weeklyUsage, isLoadingWeekly, weeklyError } = useUsageContext();
 
   return (
     <SafeAreaView style={styles.container}>
@@ -24,11 +24,9 @@ export default function UsageScreen() {
         <WeeklyUsageGraph
           title="My Activity - 7 Day Usage"
           data={weeklyUsage}
-          isLoading={isLoadingWeekly || isRefreshing}
+          isLoading={isLoadingWeekly}
           error={weeklyError}
-          onRefresh={() => {
-            void refetchWeeklyUsage(true);
-          }}
+          onRefresh={() => {}}
         />
       </View>
     </SafeAreaView>

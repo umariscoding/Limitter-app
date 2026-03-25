@@ -1,7 +1,6 @@
-import { NativeEventEmitter, NativeModules } from 'react-native';
-import { addLimitHistoryEntry } from './limitHistoryService';
-
-const { TimerEventModule } = NativeModules;
+import { NativeEventEmitter } from 'react-native';
+import { addLimitHistoryEntry } from '../utils/limitHistoryService';
+import { TimerEventModule, warnIfCustomNativeMissing } from './limitterNativeModules';
 
 type TimerTickEvent = {
   package: string;
@@ -80,7 +79,7 @@ const handleBlocked = async (event: TimerBlockedEvent) => {
 export const startTimerRealtimeTracking = () => {
   if (isStarted) return;
   if (!TimerEventModule) {
-    console.warn('TimerEventModule not available');
+    warnIfCustomNativeMissing();
     return;
   }
 

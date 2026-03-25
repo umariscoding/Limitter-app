@@ -1,10 +1,7 @@
-import React, { useState } from 'react';
-import { signupAPI } from '../api/api.js'; 
-
+import React, { useState } from "react";
 import {
   View,
   Text,
-  Alert,
   StyleSheet,
   SafeAreaView,
   TouchableOpacity,
@@ -12,90 +9,84 @@ import {
   Platform,
   ScrollView,
   Keyboard,
-} from 'react-native';
-import { BaseButton, TextInput, Toast } from '../../components';
-import { Shield } from 'lucide-react-native';
-import { useNavigation } from '@react-navigation/native';
+} from "react-native";
+import { BaseButton, TextInput, Toast } from "../../components";
+import { Shield } from "lucide-react-native";
+import { useNavigation } from "@react-navigation/native";
+import { signUp } from "../services/firebaseAuthService";
 
-interface SignupScreenProps {
-  onSignup?: (email: string, pass: string) => void;
-  onNavigateToLogin?: () => void;
-}
-
-const SignupScreen: React.FC<SignupScreenProps> = ({
-  onSignup,
-  onNavigateToLogin,
-}) => {
+const SignupScreen: React.FC = () => {
   const navigation = useNavigation<any>();
-  const [email, setEmail] = useState('');
-  const [password, setPassword] = useState('');
-  const [confirmPassword, setConfirmPassword] = useState('');
+  const [email, setEmail] = useState("");
+  const [name, setName] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
   const [error, setError] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
   const handleSignup = async () => {
-    // Reset error
     setError(null);
 
-    // 4. Validation: Check that Password and Confirm Password match
     if (password !== confirmPassword) {
-      setError('Passwords do not match');
+      setError("Passwords do not match");
       return;
     }
-
-    // Prevent submission if empty (basic check)
     if (!email || !password) {
-      setError('Email and password are required');
+      setError("Email and password are required");
+      return;
+    }
+    if (password.length < 6) {
+      setError("Password must be at least 6 characters");
       return;
     }
 
-    // Dismiss keyboard
     Keyboard.dismiss();
-
     setIsLoading(true);
 
-  try {
-  const response = await signupAPI(email.trim(), password, confirmPassword);
-  console.log('Signup API response:', response);
-
-  if (!response) {
-    setError('No response from signup API');
-    return;
-  }
-
-  if (!response.success) {
-    setError(response.message || 'Signup failed');
-    return;
-  }
-
-  setShowToast(true);
-  navigation.navigate('Login'); // auto navigate after success
-} catch (apiError: unknown) {
-  console.error(apiError);
-  const errorMessage =
-    apiError instanceof Error ? apiError.message : 'Signup request failed';
-  setError(errorMessage);
-}
+    try {
+      await signUp(
+        email.trim(),
+        password,
+        name.trim() || email.split("@")[0],
+      );
+      setShowToast(true);
+      // Navigate to verify email screen after short delay for toast
+      setTimeout(() => {
+        navigation.navigate("VerifyEmail", { email: email.trim() });
+      }, 1500);
+    } catch (err: any) {
+      const code = err?.code || "";
+      if (code === "auth/email-already-in-use") {
+        setError("An account with this email already exists");
+      } else if (code === "auth/weak-password") {
+        setError("Password is too weak. Use at least 6 characters.");
+      } else if (code === "auth/invalid-email") {
+        setError("Invalid email address");
+      } else {
+        setError(err?.message || "Signup failed");
+      }
+    } finally {
+      setIsLoading(false);
+    }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <Toast 
-        visible={showToast} 
-        message="Account Created Successfully!" 
-        onHide={() => setShowToast(false)} 
+      <Toast
+        visible={showToast}
+        message="Account created! Check your email to verify."
+        onHide={() => setShowToast(false)}
         type="success"
       />
       <KeyboardAvoidingView
-        behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+        behavior={Platform.OS === "ios" ? "padding" : "height"}
         style={styles.flex}
       >
         <ScrollView
           contentContainerStyle={styles.scrollContent}
           showsVerticalScrollIndicator={false}
         >
-          {/* 1. Screen Layout: App Icon & Title */}
           <View style={styles.header}>
             <View style={styles.iconContainer}>
               <Shield size={48} color="#4F46E5" />
@@ -103,8 +94,14 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
             <Text style={styles.title}>Create Account</Text>
           </View>
 
-          {/* 2. Fields: Email, Password, Confirm Password */}
           <View style={styles.formContainer}>
+            <TextInput
+              label="Name"
+              placeholder="Enter your name"
+              value={name}
+              onChangeText={setName}
+              autoCapitalize="words"
+            />
             <TextInput
               label="Email Address"
               placeholder="Enter your email"
@@ -119,18 +116,17 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
               placeholder="Create a password"
               value={password}
               onChangeText={setPassword}
-              secureTextEntry={true}
+              secureTextEntry
             />
             <TextInput
               label="Confirm Password"
               placeholder="Repeat your password"
               value={confirmPassword}
               onChangeText={setConfirmPassword}
-              secureTextEntry={true}
-              error={error || undefined} // 4. Validation: Show error message if passwords don't match
+              secureTextEntry
+              error={error || undefined}
             />
 
-            {/* 3. Button: Create Account */}
             <BaseButton
               variant="primary"
               fullWidth
@@ -138,14 +134,16 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
               disabled={isLoading}
               style={styles.signupButton}
             >
-              {isLoading ? 'Testing API...' : 'Create Account'}
+              {isLoading ? "Creating account..." : "Create Account"}
             </BaseButton>
           </View>
 
-          {/* 4. Navigation: Already have an account? Login */}
           <View style={styles.footer}>
-            <Text style={styles.footerText}>Already have an account?{" "}</Text>
-            <TouchableOpacity onPress={() => navigation.navigate('Login')} activeOpacity={0.6}>
+            <Text style={styles.footerText}>Already have an account? </Text>
+            <TouchableOpacity
+              onPress={() => navigation.navigate("Login")}
+              activeOpacity={0.6}
+            >
               <Text style={styles.loginText}>Login</Text>
             </TouchableOpacity>
           </View>
@@ -156,62 +154,23 @@ const SignupScreen: React.FC<SignupScreenProps> = ({
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#FFFFFF',
-  },
-  flex: {
-    flex: 1,
-  },
-  scrollContent: {
-    flexGrow: 1,
-    paddingHorizontal: 24,
-    paddingBottom: 40,
-  },
-  header: {
-    alignItems: 'center',
-    marginTop: 40,
-    marginBottom: 48,
-  },
+  container: { flex: 1, backgroundColor: "#FFFFFF" },
+  flex: { flex: 1 },
+  scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 40 },
+  header: { alignItems: "center", marginTop: 40, marginBottom: 48 },
   iconContainer: {
-    width: 80,
-    height: 80,
-    borderRadius: 40,
-    backgroundColor: '#F1F5F9',
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginBottom: 20,
-    alignSelf: 'center',
+    width: 80, height: 80, borderRadius: 40, backgroundColor: "#F1F5F9",
+    alignItems: "center", justifyContent: "center", marginBottom: 20,
   },
-  title: {
-    fontSize: 28,
-    fontWeight: '900',
-    color: '#0F172A',
-    textAlign: 'center',
-  },
-  formContainer: {
-    width: '100%',
-  },
-  signupButton: {
-    marginTop: 16,
-    marginBottom: 24,
-  },
+  title: { fontSize: 28, fontWeight: "900", color: "#0F172A", textAlign: "center" },
+  formContainer: { width: "100%" },
+  signupButton: { marginTop: 16, marginBottom: 24 },
   footer: {
-    flexDirection: 'row',
-    justifyContent: 'center',
-    alignItems: 'center',
-    marginTop: 'auto',
-    paddingTop: 24,
+    flexDirection: "row", justifyContent: "center", alignItems: "center",
+    marginTop: "auto", paddingTop: 24,
   },
-  footerText: {
-    color: '#64748B',
-    fontSize: 15,
-  },
-  loginText: {
-    color: '#10B981', // Figma Teal
-    fontWeight: '800',
-    fontSize: 15,
-  },
+  footerText: { color: "#64748B", fontSize: 15 },
+  loginText: { color: "#10B981", fontWeight: "800", fontSize: 15 },
 });
 
 export default SignupScreen;

@@ -1,6 +1,4 @@
-import { NativeModules } from 'react-native';
-
-const { LimitterModule } = NativeModules;
+import { LimitterModule } from './limitterNativeModules';
 
 export interface BlockedAppAlert {
   packageName: string;

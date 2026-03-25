@@ -1,6 +1,7 @@
 export { default as LoginScreen } from './LoginScreen';
 export { default as SignupScreen } from './SignupScreen';
 export { default as ForgotPasswordScreen } from './ForgotPasswordScreen';
+export { default as VerifyEmailScreen } from './VerifyEmailScreen';
 export { default as DashboardScreen } from './DashboardScreen';
 export { default as ActivityScreen } from './ActivityScreen';
 export { default as AddContentScreen } from './AddContentScreen';
@@ -12,3 +13,4 @@ export { default as SubscriptionPlansScreen } from './SubscriptionPlansScreen';
 export { default as AnalyticsScreen } from './AnalyticsScreen';
 export { default as ConfirmOverrideScreen } from './ConfirmOverrideScreen';
 export { default as DailyLimitsGraphScreen } from './DailyLimitsGraphScreen';
+export { default as PoliciesScreen } from './PoliciesScreen';

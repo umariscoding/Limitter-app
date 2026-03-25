@@ -13,7 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft } from 'lucide-react-native';
 import { useUser } from '../context/UserContext';
 import { resolveCurrentDeviceId } from '../services/currentDeviceService';
-import { getLimitsAPI } from '../services/limitService';
+import { getPoliciesAPI } from '../services/policyService';
 
 type LimitItem = {
   id: string;
@@ -50,8 +50,20 @@ export default function DailyLimitsGraphScreen() {
     }
 
     try {
-      const response = await getLimitsAPI(user.uid, workingDeviceId);
-      const list = Array.isArray(response?.data) ? response.data : [];
+      const policiesResult = await getPoliciesAPI();
+      const policiesData = Array.isArray(policiesResult) ? policiesResult : [];
+      const list = policiesData.map((item: any) => {
+        const p = item.policy || item;
+        const state = item.policyState || p.policyState || {};
+        return {
+          id: p.policyId,
+          app_name: p.targetLabel || p.targetKey,
+          category: p.type === 'category' ? p.targetLabel : undefined,
+          max_time_minutes: p.dailyLimitMinutes,
+          time_used_minutes: state.usageTodayMinutes || 0,
+          is_blocked: state.isExhaustedToday || false,
+        };
+      });
       setLimits(list);
     } catch (error) {
       console.error('Failed to fetch daily limits graph data:', error);

@@ -47,7 +47,7 @@ import { useUser } from '../context/UserContext';
 import { getDevicesAPI } from '../services/deviceService';
 import { Device as BackendDevice } from '../interface/Device';
 import { resolveCurrentDeviceId } from '../services/currentDeviceService';
-import { normalizePlan } from '../services/planRules';
+import { normalizePlan } from '../utils/planRules';
 
 type PlanTier = 'Free' | 'Pro' | 'Elite';
 type DeviceType = 'phone' | 'tablet' | 'laptop' | 'desktop';
@@ -142,12 +142,12 @@ export default function ControlPlansScreen() {
     }
 
     try {
-      const resolvedId = currentDeviceId || await resolveCurrentDeviceId(user.uid);
+      const resolvedId = currentDeviceId || await resolveCurrentDeviceId();
       if (resolvedId && resolvedId !== currentDeviceId) {
         setCurrentDeviceId(resolvedId);
       }
 
-      const response = await getDevicesAPI(user.uid);
+      const response = await getDevicesAPI();
       const list = Array.isArray(response?.data) ? response.data : [];
       const sorted = [...list].sort(
         (a, b) => Number(b.last_active || 0) - Number(a.last_active || 0)

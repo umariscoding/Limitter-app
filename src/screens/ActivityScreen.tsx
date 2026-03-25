@@ -11,14 +11,14 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
-import { getLimitsAPI } from '../services/limitService';
-import { getNativeBlockedPackages } from '../services/appBlockerService';
-import { getLimitHistory, subscribeLimitHistory } from '../services/limitHistoryService';
+import { getPoliciesAPI } from '../services/policyService';
+import { getNativeBlockedPackages } from '../native/appBlockerService';
+import { getLimitHistory, subscribeLimitHistory } from '../utils/limitHistoryService';
 import {
   startTimerRealtimeTracking,
   subscribeTimerBlocked,
   subscribeTimerTicks,
-} from '../services/timerRealtimeService';
+} from '../native/timerRealtimeService';
 import { resolveCurrentDeviceId } from '../services/currentDeviceService';
 
 export default function ActivityScreen() {
@@ -96,12 +96,29 @@ export default function ActivityScreen() {
     }
 
     try {
-      const response = await getLimitsAPI(user.uid, deviceId);
-      const list = Array.isArray(response?.data) ? response.data : [];
-      // Sort with latest first
+      const policiesResult = await getPoliciesAPI();
+      const policiesData = Array.isArray(policiesResult) ? policiesResult : [];
+      // Map policies to limit shape and sort with latest first
+      const list = policiesData.map((item: any) => {
+        const p = item.policy || item;
+        const state = item.policyState || p.policyState || {};
+        return {
+          id: p.policyId,
+          app_name: p.targetKey,
+          package_name: p.targetKey,
+          packageName: p.targetKey,
+          category: p.type === 'category' ? p.targetLabel : null,
+          target_label: p.targetLabel,
+          target_type: p.type,
+          max_time_minutes: p.dailyLimitMinutes,
+          time_used_minutes: state.usageTodayMinutes || 0,
+          is_blocked: state.isExhaustedToday || false,
+          blocked_until_timestamp: 0,
+          created_at: p.createdAt?._seconds ? p.createdAt._seconds * 1000 : Date.now(),
+        };
+      });
       const sortedList = list.sort(
-        (a: any, b: any) =>
-          new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+        (a: any, b: any) => b.created_at - a.created_at
       );
       const normalizedList = sortedList.map(normalizeLimit);
       const history = await getLimitHistory();

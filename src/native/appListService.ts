@@ -1,8 +1,8 @@
-
 import { NativeModules } from 'react-native';
 
+import { LimitterModule } from './limitterNativeModules';
+
 const { AppListModule } = NativeModules;
-const { LimitterModule } = NativeModules;
 
 export interface InstalledApp {
   packageName: string;

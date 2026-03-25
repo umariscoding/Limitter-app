@@ -1,54 +1,50 @@
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { Platform } from 'react-native';
-import { getDevicesAPI, registerDeviceAPI } from './deviceService';
-import { Device } from '../interface/Device';
+import AsyncStorage from "@react-native-async-storage/async-storage";
+import { Platform } from "react-native";
+import { getDevicesAPI, registerDeviceAPI } from "./deviceService";
+import { getOrCreateInstallationId } from "./firebaseAuthService";
 
-const CURRENT_DEVICE_KEY_PREFIX = 'APPGUARD_CURRENT_DEVICE_ID_';
+const CURRENT_DEVICE_KEY = "@limitter_current_device_id";
 
-const getStorageKey = (userId: string) => `${CURRENT_DEVICE_KEY_PREFIX}${userId}`;
-
-const parseCreatedAt = (device: Device) => Number(device.created_at || 0);
-
-export const resolveCurrentDeviceId = async (userId: string): Promise<string | null> => {
-  if (!userId) return null;
-
-  const storageKey = getStorageKey(userId);
-
+export const resolveCurrentDeviceId = async (_userId?: string): Promise<string | null> => {
   try {
-    const [devicesResponse, cachedId] = await Promise.all([
-      getDevicesAPI(userId),
-      AsyncStorage.getItem(storageKey),
-    ]);
+    const cachedId = await AsyncStorage.getItem(CURRENT_DEVICE_KEY);
 
-    const devices = Array.isArray(devicesResponse?.data) ? devicesResponse.data : [];
+    const devicesData = await getDevicesAPI();
+    const devices = Array.isArray(devicesData) ? devicesData : [];
 
-    if (cachedId && devices.some(device => device.id === cachedId)) {
+    if (cachedId && devices.some((d: any) => d.deviceId === cachedId)) {
       return cachedId;
     }
 
     if (devices.length > 0) {
-      const latest = [...devices].sort((a, b) => parseCreatedAt(b) - parseCreatedAt(a))[0];
-      await AsyncStorage.setItem(storageKey, latest.id);
-      return latest.id;
+      const deviceId = devices[0].deviceId || devices[0].id;
+      await AsyncStorage.setItem(CURRENT_DEVICE_KEY, deviceId);
+      return deviceId;
     }
 
-    const deviceName = Platform.OS === 'android' ? 'Android Phone' : 'iPhone';
-    const deviceOS = `${Platform.OS} ${String(Platform.Version)}`;
+    // No devices — register one using the shared installation ID
+    const installationId = await getOrCreateInstallationId();
+    const deviceName = Platform.OS === "android" ? "Android Phone" : "iPhone";
+    const osVersion = String(Platform.Version);
 
-    await registerDeviceAPI(userId, deviceName, deviceOS);
+    await registerDeviceAPI(
+      installationId,
+      Platform.OS === "ios" ? "ios" : "android",
+      "phone",
+      deviceName,
+      osVersion,
+    );
 
-    const refreshed = await getDevicesAPI(userId);
-    const refreshedDevices = Array.isArray(refreshed?.data) ? refreshed.data : [];
+    const refreshedData = await getDevicesAPI();
+    const refreshedDevices = Array.isArray(refreshedData) ? refreshedData : [];
 
-    if (refreshedDevices.length === 0) {
-      return null;
-    }
+    if (refreshedDevices.length === 0) return null;
 
-    const latest = [...refreshedDevices].sort((a, b) => parseCreatedAt(b) - parseCreatedAt(a))[0];
-    await AsyncStorage.setItem(storageKey, latest.id);
-    return latest.id;
+    const deviceId = refreshedDevices[0].deviceId || refreshedDevices[0].id;
+    await AsyncStorage.setItem(CURRENT_DEVICE_KEY, deviceId);
+    return deviceId;
   } catch (error) {
-    console.error('Failed to resolve current device id:', error);
+    console.error("Failed to resolve current device id:", error);
     return null;
   }
 };

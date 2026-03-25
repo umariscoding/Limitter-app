@@ -39,11 +39,11 @@ import {
   overrideLabels
 } from '../data/appData';
 import { useUser } from '../context/UserContext';
-import { getLimitsAPI, useOverrideAPI } from '../services/limitService';
-import { grantTemporaryOverrideAccess } from '../services/appBlockerService';
-import { addLimitHistoryEntry, incrementOverrideCount } from '../services/limitHistoryService';
+import { getPoliciesAPI } from '../services/policyService';
+import { grantTemporaryOverrideAccess } from '../native/appBlockerService';
+import { addLimitHistoryEntry, incrementOverrideCount } from '../utils/limitHistoryService';
 import { resolveCurrentDeviceId } from '../services/currentDeviceService';
-import { computeNextOverrides } from '../services/planRules';
+import { computeNextOverrides } from '../utils/planRules';
 
 export default function ConfirmOverrideScreen() {
   const navigation = useNavigation<any>();
@@ -110,16 +110,17 @@ export default function ConfirmOverrideScreen() {
       let resolvedLimitId = limitId;
 
       if (!resolvedLimitId && packageName) {
-        const limitsResponse = await getLimitsAPI(user.uid, resolvedDeviceId);
-        const list = Array.isArray(limitsResponse?.data) ? limitsResponse.data : [];
-        const matching = list
-          .filter((item: any) => item?.app_name === packageName)
+        const policiesResult = await getPoliciesAPI();
+        const policiesData = Array.isArray(policiesResult) ? policiesResult : [];
+        const matching = policiesData
+          .map((item: any) => item.policy || item)
+          .filter((p: any) => p?.targetKey === packageName)
           .sort(
             (a: any, b: any) =>
-              new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+              (b.createdAt?._seconds || 0) - (a.createdAt?._seconds || 0)
           )[0];
 
-        resolvedLimitId = matching?.id;
+        resolvedLimitId = matching?.policyId;
       }
 
       if (!resolvedLimitId) {
@@ -127,17 +128,14 @@ export default function ConfirmOverrideScreen() {
         return;
       }
 
-      const response = await useOverrideAPI(user.uid, resolvedDeviceId, resolvedLimitId);
-
-      if (!response?.success) {
-        Alert.alert('Error', response?.message || 'Override failed');
-        return;
-      }
+      // TODO: Phase 5 - Replace with real override API call
+      // For now, grant override locally via native module
+      const overridesLeft = Math.max(0, (user?.overrides_left || 1) - 1);
 
       const remainingAfterUse = computeNextOverrides(
         user?.plan,
         user?.overrides_left,
-        response?.data?.overrides_left
+        overridesLeft
       );
       updateUser({ overrides_left: remainingAfterUse });
 
@@ -156,7 +154,7 @@ export default function ConfirmOverrideScreen() {
 
       Alert.alert(
         overrideLabels.alertUnlockedTitle,
-        response?.data?.message || 'Override applied successfully',
+        'Override applied successfully',
         [{
           text: 'OK',
           onPress: () =>

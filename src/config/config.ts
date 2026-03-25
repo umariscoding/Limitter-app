@@ -1,19 +1,29 @@
-export const BASE_URL = 'https://nonremediably-nonbearded-miguel.ngrok-free.dev';
+export const BASE_URL = "https://866c-119-156-101-36.ngrok-free.app"; // Android emulator -> host localhost
 
 export const API = {
   // Auth
-  LogIn: '/api/auth/login',
-  SIGNUP: '/api/auth/signup',
-  Logout: '/api/auth/logout',
-  
-  // Limits
-  CreateLimit: '/api/limits/create',
-  UpdateUsage: '/api/limits/update-usage',
-  Override: '/api/limits/override',
-  GetLimits: '/api/limits/:user_id/:device_id',
-  DeleteLimit: '/api/limits/:limit_id',
+  SetupAccount: "/api/auth/setup-account",
+  Bootstrap: "/api/auth/bootstrap",
+  Login: "/api/auth/login",
+  Logout: "/api/auth/logout",
+  ResendVerification: "/api/auth/resend-verification",
+  ForgotPassword: "/api/auth/forgot-password",
 
   // Devices
-  RegisterDevice: '/api/devices/register',
-  GetDevices: '/api/devices/:user_id',
+  RegisterDevice: "/api/devices/register",
+  GetDevices: "/api/devices",
+
+  // Policies (Phase 3+)
+  Policies: "/api/policies",
+
+  // Usage (Phase 4+)
+  UsageRecord: "/api/usage/record",
+  UsageDaily: "/api/usage/daily",
+  UsageWeekly: "/api/usage/weekly",
+  UsageRemaining: "/api/usage/remaining",
+
+  // Overrides (Phase 5+)
+  OverrideUse: "/api/overrides/use",
+  OverrideHistory: "/api/overrides/history",
+  OverrideBalance: "/api/overrides/balance",
 };

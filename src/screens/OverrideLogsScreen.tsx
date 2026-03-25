@@ -2,7 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, SafeAreaView, Platform, StatusBar } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { overrideLogLabels, dashboardLabels } from '../data/appData';
-import { getLimitHistory, LimitHistoryEntry, subscribeLimitHistory } from '../services/limitHistoryService';
+import { getLimitHistory, LimitHistoryEntry, subscribeLimitHistory } from '../utils/limitHistoryService';
 import { 
   Home, 
   BarChart2, 

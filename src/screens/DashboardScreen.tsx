@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -25,35 +25,40 @@ import {
   AlertCircle,
   Clock,
   RefreshCw,
+  Shield,
 } from 'lucide-react-native';
 import { useUser } from '../context/UserContext';
-import { getLimitsAPI, createLimitAPI, updateUsageAPI } from '../services/limitService';
+import { createPolicyAPI, getPoliciesAPI, archivePolicyAPI } from '../services/policyService';
 import { Toast } from '../../components';
-import { getInstalledApps, InstalledApp } from '../services/appListService';
+import { getInstalledApps, InstalledApp } from '../native/appListService';
 import {
   getNativeBlockedPackages,
+  getNativeTimerStates,
   getWebsiteBlockerStatus,
   startAppBlockerService,
   startAppClockTimer,
   startAppUsageTimer,
   startWebsiteTimer,
   updateBlockedApps,
-} from '../services/appBlockerService';
+} from '../native/appBlockerService';
 import {
   startTimerRealtimeTracking,
   subscribeTimerBlocked,
   subscribeTimerTicks,
-} from '../services/timerRealtimeService';
+} from '../native/timerRealtimeService';
 import { resolveCurrentDeviceId } from '../services/currentDeviceService';
-import { getLimitHistory, subscribeLimitHistory } from '../services/limitHistoryService';
+import { getLimitHistory, subscribeLimitHistory } from '../utils/limitHistoryService';
 import { addUsageToBuffer } from '../services/usageTrackingService';
 import { useUsageContext } from '../context/UsageContext';
+import { requestRequiredPermissions } from '../native/permissionsService';
+import { mapPolicyToUI, mergeUsage, formatUsageTime, formatLimitTime } from '../utils/policyMapper';
+import { setLocalUsageForPolicy, getAllLocalUsageToday } from '../services/localUsageStore';
 
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user } = useUser();
-  const { totalUsage, isLoadingTotal, isRefreshing: isRefreshingUsage, refetchTotalUsage, refetchAllUsageData } = useUsageContext();
+  const { currentDeviceId } = useUsageContext();
 
   const [limits, setLimits] = useState<any[]>([]);
   const [loading, setLoading] = useState(true);
@@ -71,10 +76,10 @@ export default function DashboardScreen() {
   const [loadingApps, setLoadingApps] = useState(false);
   const [targetType, setTargetType] = useState<'app' | 'category' | 'website'>('app');
   const [timerType, setTimerType] = useState<'combined' | 'single' | 'clock'>('combined');
-  const [hours, setHours] = useState('0');
-  const [minutes, setMinutes] = useState('30');
-  const [seconds, setSeconds] = useState('0');
-  const [singleTimerValue, setSingleTimerValue] = useState('30');
+  const [hours, setHours] = useState('');
+  const [minutes, setMinutes] = useState('');
+  const [seconds, setSeconds] = useState('');
+  const [singleTimerValue, setSingleTimerValue] = useState('');
   const [singleTimerUnit, setSingleTimerUnit] = useState<'seconds' | 'minutes' | 'hours'>('minutes');
   const [clockHour, setClockHour] = useState('12');
   const [clockMinute, setClockMinute] = useState('00');
@@ -116,7 +121,8 @@ export default function DashboardScreen() {
 
     const maxMinutes = Number(item?.max_time_minutes || 0);
     const usedMinutes = Number(item?.time_used_minutes || 0);
-    return maxMinutes > 0 && usedMinutes >= maxMinutes;
+    if (maxMinutes <= 0) return false;
+    return usedMinutes >= maxMinutes;
   }, []);
 
   const normalizeLimit = React.useCallback(
@@ -133,40 +139,67 @@ export default function DashboardScreen() {
     // Track last recorded usage minutes per app to avoid duplicate recording
     const lastRecordedMinutes = new Map<string, number>();
 
+    // Track local elapsed seconds per package (independent of native remaining)
+    const localElapsed = new Map<string, number>();
+
     const unsubscribeTick = subscribeTimerTicks(event => {
       if (!event?.package) return;
+      const pkg = String(event.package).trim().toLowerCase();
+
+      console.log('[TIMER_TICK]', JSON.stringify({
+        package: event.package,
+        remaining: event.remaining,
+        isBlocked: event.isBlocked,
+        status: event.status,
+      }));
+
+      // Track local elapsed: increment by 1 second each tick
+      const prevElapsed = localElapsed.get(pkg) || 0;
+      const newElapsed = prevElapsed + 1;
+      localElapsed.set(pkg, newElapsed);
 
       setLimits(prev =>
         prev.map((item: any) => {
           if (!matchesLimitPackage(item, event.package)) return item;
 
           const maxMinutes = Number(item.max_time_minutes || 0);
-          const consumedSeconds = Math.max(0, maxMinutes * 60 - Number(event.remaining || 0));
-          const newUsedMinutes = Math.floor(consumedSeconds / 60);
+          const maxSeconds = maxMinutes * 60;
+
+          // Use BOTH: native remaining AND local elapsed, pick the more restrictive
+          const nativeRemaining = Number(event.remaining || 0);
+          const localUsedSeconds = newElapsed;
+          const nativeUsedSeconds =
+            maxSeconds > 0 ? Math.max(0, maxSeconds - nativeRemaining) : 0;
+
+          // Take the higher usage (more restrictive) = min(remaining)
+          const usedSeconds = Math.max(nativeUsedSeconds, localUsedSeconds);
+          const newUsedMinutes = maxSeconds > 0 ? usedSeconds / 60 : 0;
+
           const eventBlocked =
             typeof event.isBlocked === 'boolean'
               ? event.isBlocked
               : String(event.status || '').toLowerCase() === 'blocked';
+          const isBlocked =
+            eventBlocked || (maxSeconds > 0 && usedSeconds >= maxSeconds);
 
-          // Record usage to backend buffer if minutes changed
-          const appKey = String(event.package).trim().toLowerCase();
-          const lastRecorded = lastRecordedMinutes.get(appKey) || 0;
-          if (newUsedMinutes > lastRecorded && user?.uid && deviceId) {
-            const minutesToAdd = newUsedMinutes - lastRecorded;
-            // Extract category from limit item or use default
-            const categoryId = item.category_id || 'general';
-            const appName = item.app_name || String(event.package);
-            console.log(`[UsageTracking] Recording ${minutesToAdd}min for ${appName}`);
-            addUsageToBuffer(user.uid, deviceId, appName, categoryId, minutesToAdd).catch(err =>
-              console.error('[UsageTracking] Buffer error:', err)
-            );
-            lastRecordedMinutes.set(appKey, newUsedMinutes);
+          // Record usage to backend buffer every 3 seconds
+          const lastRecordedSec = lastRecordedMinutes.get(pkg) || 0;
+          if (usedSeconds >= lastRecordedSec + 3 && user?.uid && deviceId) {
+            const secondsToAdd = Math.floor(usedSeconds) - lastRecordedSec;
+            const policyId = item.id;
+            if (policyId && secondsToAdd > 0) {
+              addUsageToBuffer(policyId, deviceId, secondsToAdd).catch(err =>
+                console.error('[UsageTracking] Buffer error:', err)
+              );
+            }
+            lastRecordedMinutes.set(pkg, Math.floor(usedSeconds));
           }
 
           return {
             ...item,
             time_used_minutes: newUsedMinutes,
-            is_blocked: eventBlocked,
+            is_blocked: isBlocked,
+            status: isBlocked ? 'blocked' : newUsedMinutes > 0 ? 'active' : item.status,
           };
         })
       );
@@ -181,9 +214,59 @@ export default function DashboardScreen() {
       );
     });
 
+    // Fallback: check native timer states periodically to catch usage even without ticks
+    const pollInterval = setInterval(async () => {
+      try {
+        const timerStates = await getNativeTimerStates();
+        if (!Array.isArray(timerStates) || timerStates.length === 0) return;
+
+        setLimits(prev =>
+          prev.map((item: any) => {
+            const itemKey = String(item.app_name || '').trim().toLowerCase();
+            const timer = timerStates.find((t: any) =>
+              String(t.package || '').trim().toLowerCase() === itemKey
+            );
+            if (!timer) return item;
+
+            const maxSeconds = Number(item.max_time_minutes || 0) * 60;
+            const remainingSec = Number(timer.remainingSeconds || 0);
+            const statusLower = String(timer.status || '').toLowerCase();
+            const usedSeconds =
+              maxSeconds > 0 ? Math.max(0, maxSeconds - remainingSec) : 0;
+            const usedMinutes = usedSeconds / 60;
+            const isBlocked =
+              statusLower === 'blocked' ||
+              (statusLower !== 'waiting' && maxSeconds > 0 && remainingSec <= 0);
+
+            // Persist to AsyncStorage (works offline)
+            if (usedSeconds > 0 && item.id) {
+              setLocalUsageForPolicy(item.id, usedSeconds).catch(() => {});
+            }
+
+            // Buffer to API sync every 3 seconds
+            if (usedSeconds > 0 && item.id && deviceId) {
+              const lastSec = lastRecordedMinutes.get(itemKey) || 0;
+              if (usedSeconds >= lastSec + 3) {
+                addUsageToBuffer(item.id, deviceId, Math.floor(usedSeconds) - lastSec).catch(() => {});
+                lastRecordedMinutes.set(itemKey, Math.floor(usedSeconds));
+              }
+            }
+
+            return {
+              ...item,
+              time_used_minutes: usedMinutes,
+              is_blocked: isBlocked,
+              status: isBlocked ? 'blocked' : usedMinutes > 0 ? 'active' : item.status,
+            };
+          })
+        );
+      } catch {}
+    }, 1000);
+
     return () => {
       unsubscribeTick();
       unsubscribeBlocked();
+      clearInterval(pollInterval);
     };
   }, [matchesLimitPackage, user?.uid, deviceId]);
 
@@ -219,6 +302,11 @@ export default function DashboardScreen() {
 
     return () => unsubscribe();
   }, [user?.uid, deviceId, matchesLimitPackage]);
+
+  // Request Android permissions on first mount
+  useEffect(() => {
+    requestRequiredPermissions();
+  }, []);
 
   React.useEffect(() => {
     const loadCurrentDevice = async () => {
@@ -288,7 +376,10 @@ export default function DashboardScreen() {
 
   const categories = ['Social Media', 'Video Streaming', 'Gaming', 'Productivity', 'Education'];
 
-  // ✅ Fetch limits from backend
+  // ✅ Shared mapper — same logic as PoliciesScreen
+  const policyToLimit = mapPolicyToUI;
+
+  // ✅ Fetch limits (policies) from backend
   const fetchLimits = async () => {
     if (!user?.uid) {
       console.log('⚠️ No user UID available');
@@ -304,46 +395,55 @@ export default function DashboardScreen() {
     }
 
     try {
-      const response = await getLimitsAPI(user.uid, deviceId);
+      const policiesResult = await getPoliciesAPI();
+      const policiesData = Array.isArray(policiesResult) ? policiesResult : [];
 
-      if (response.success || response.data) {
-        const limitsData = Array.isArray(response.data) ? response.data : [response.data];
+      if (policiesData) {
 
-        // ✅ Sort limits - latest first (by creation date)
-        const sortedLimits = limitsData
-          .filter((l: any) => l && l.id)
-          .sort(
-            (a: any, b: any) =>
-              new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
-          );
+        const mappedLimits = policiesData.map(policyToLimit);
+
+        // Merge local usage (AsyncStorage) with server usage — max() wins
+        const localUsage = await getAllLocalUsageToday();
+        const mergedLimits = mergeUsage(mappedLimits, localUsage);
+
+        const sortedLimits = mergedLimits
+          .sort((a: any, b: any) => b.created_at - a.created_at);
 
         const normalizedLimits = sortedLimits.map(normalizeLimit);
         const history = await getLimitHistory();
+
+        // Only consider today's history entries for blocked/override state
+        const todayStart = new Date();
+        todayStart.setHours(0, 0, 0, 0);
+        const todayMs = todayStart.getTime();
 
         const latestHistoryByPackage = new Map<string, { type: 'blocked' | 'override'; timestamp: number }>();
         history.forEach(entry => {
           const key = String(entry.packageName || '').trim().toLowerCase();
           if (!key) return;
+          const ts = Number(entry.timestamp || 0);
+          if (ts < todayMs) return; // Skip entries from previous days
 
           const current = latestHistoryByPackage.get(key);
-          if (!current || Number(entry.timestamp || 0) > current.timestamp) {
-            latestHistoryByPackage.set(key, {
-              type: entry.type,
-              timestamp: Number(entry.timestamp || 0),
-            });
+          if (!current || ts > current.timestamp) {
+            latestHistoryByPackage.set(key, { type: entry.type, timestamp: ts });
           }
         });
 
         const nativeBlockedPackages = await getNativeBlockedPackages();
 
+        // API data is the primary source of truth.
+        // Local history and native state are overlays for real-time responsiveness.
         const reconciledLimits = normalizedLimits.map((item: any) => {
           const key = getLimitPackageKey(item);
-          const latest = latestHistoryByPackage.get(key);
 
+          // Native blocker says it's blocked → trust it (real-time)
           if (nativeBlockedPackages.has(key)) {
             return { ...item, is_blocked: true };
           }
 
+          // Today's local history
+          const latest = latestHistoryByPackage.get(key);
           if (!latest) return item;
 
           if (latest.type === 'blocked') {
@@ -355,7 +455,7 @@ export default function DashboardScreen() {
           return item;
         });
         setLimits(reconciledLimits);
-        console.log('✅ Fetched limits (sorted):', sortedLimits);
+        console.log('✅ Fetched limits (sorted):', reconciledLimits);
 
         // ✅ Start AppBlocker with current blocked apps
         const blockedAppsList = reconciledLimits
@@ -371,8 +471,20 @@ export default function DashboardScreen() {
         }
         updateBlockedApps(blockedAppsList);
 
-        // ✅ Refetch usage data from centralized context
-        await refetchAllUsageData();
+        // ✅ Start native timers for all active (non-blocked) app policies
+        for (const limit of reconciledLimits) {
+          if (limit.is_blocked) continue;
+          if (limit.target_type !== 'app') continue;
+          const pkg = limit.app_name || limit.package_name || limit.packageName;
+          if (!pkg) continue;
+          const remainingSeconds = Math.max(0, (limit.max_time_minutes - (limit.time_used_minutes || 0)) * 60);
+          if (remainingSeconds <= 0) continue;
+          try {
+            await startAppUsageTimer(pkg, limit.target_label || pkg, remainingSeconds);
+          } catch (err) {
+            console.warn(`Failed to start timer for ${pkg}:`, err);
+          }
+        }
       }
     } catch (error) {
       console.error('❌ Failed to fetch limits:', error);
@@ -498,23 +610,28 @@ export default function DashboardScreen() {
       }
     }
 
-    if (!Number.isFinite(totalSeconds) || totalSeconds <= 0) {
-      Alert.alert('Validation', 'Timer must be greater than 0 seconds');
+    if (!Number.isFinite(totalSeconds) || totalSeconds < 60) {
+      Alert.alert('Validation', 'Minimum limit is 1 minute (60 seconds)');
       return;
     }
 
     setLoading(true);
     try {
-      const response = await createLimitAPI(
-        user.uid,
-        deviceId,
-        parsedMinutes,
-        targetType === 'app' ? appName : targetType === 'website' ? websiteUrl : null,
-        targetType === 'category' ? category : targetType === 'website' ? 'Website' : null
-      );
-      console.log('Create limit result:', response);
+      const targetKey = targetType === 'app' ? appName : targetType === 'website' ? websiteUrl : category;
+      const targetLabel = targetType === 'app'
+        ? (selectedInstalledApp?.appName || appName)
+        : targetType === 'website' ? websiteUrl : category;
 
-      if (response?.success) {
+      const response = await createPolicyAPI({
+        type: targetType,
+        targetKey,
+        targetLabel,
+        dailyLimitMinutes: parsedMinutes,
+        scope: 'account',
+      });
+      console.log('Create policy result:', response);
+
+      if (response) {
         if (targetType === 'app' && selectedInstalledApp) {
           const timerStartResult = timerType === 'clock'
             ? await startAppClockTimer(
@@ -539,7 +656,7 @@ export default function DashboardScreen() {
           if (!timerStartResult.success) {
             Alert.alert(
               'Permission Required',
-              'Please grant Overlay and Usage Access permissions for app blocking to work.'
+              'Enable Display over other apps and Usage access for Limitter. Open Settings → Apps → Special app access → Usage access, then turn on Limitter (package com.appguard2)—not under Accessibility.'
             );
           }
         }
@@ -572,7 +689,7 @@ export default function DashboardScreen() {
           if (!timerStartResult.success) {
             Alert.alert(
               'Permission Required',
-              'Please grant Overlay and Accessibility permissions for website blocking to work.'
+              'Enable Display over other apps and Limitter’s accessibility service (Settings → Accessibility → Downloaded apps) for website blocking.'
             );
           }
         }
@@ -586,45 +703,30 @@ export default function DashboardScreen() {
         setCreateCategory('');
         setCreateWebsiteUrl('');
         setAppSearch('');
-        setHours('0');
-        setMinutes('30');
-        setSeconds('0');
-        setSingleTimerValue('30');
+        setHours('');
+        setMinutes('');
+        setSeconds('');
+        setSingleTimerValue('');
         setSingleTimerUnit('minutes');
         setClockHour('12');
         setClockMinute('00');
         setClockPeriod('PM');
         await fetchLimits();
       } else {
-        Alert.alert('Error', response?.message || 'Failed to create limit');
+        Alert.alert('Error', 'Failed to create limit');
       }
-    } catch (error) {
-      console.error('Create limit error:', error);
-      Alert.alert('Error', 'Failed to create limit');
+    } catch (error: any) {
+      console.error('Create policy error:', error);
+      const msg = error?.message || 'Failed to create limit';
+      Alert.alert('Error', msg);
     } finally {
       setLoading(false);
     }
   };
 
-  const handleSimulateUsage = async (limitId: string) => {
-    setLoading(true);
-    try {
-      const response = await updateUsageAPI(limitId, 5);
-      console.log('Update usage result:', response);
-
-      if (response?.success) {
-        setToastMessage('Added 5 minutes usage');
-        setShowToast(true);
-        await fetchLimits();
-      } else {
-        Alert.alert('Error', response?.message || 'Failed to update usage');
-      }
-    } catch (error) {
-      console.error('Update usage error:', error);
-      Alert.alert('Error', 'Failed to update usage');
-    } finally {
-      setLoading(false);
-    }
+  // Simulate usage - disabled until Phase 4 (Usage API) is implemented
+  const handleSimulateUsage = async (_limitId: string) => {
+    Alert.alert('Info', 'Usage simulation will be available after Phase 4 implementation.');
   };
 
   if (loading && !refreshing) {
@@ -665,12 +767,7 @@ export default function DashboardScreen() {
               >
                 <Text style={[styles.selectorBtnText, targetType === 'app' && styles.selectorBtnTextActive]}>App</Text>
               </TouchableOpacity>
-              <TouchableOpacity
-                style={[styles.selectorBtn, targetType === 'category' && styles.selectorBtnActive]}
-                onPress={() => setTargetType('category')}
-              >
-                <Text style={[styles.selectorBtnText, targetType === 'category' && styles.selectorBtnTextActive]}>Category</Text>
-              </TouchableOpacity>
+              {/* Category hidden for v1 — will be enabled later */}
               <TouchableOpacity
                 style={[styles.selectorBtn, targetType === 'website' && styles.selectorBtnActive]}
                 onPress={() => setTargetType('website')}
@@ -950,16 +1047,12 @@ export default function DashboardScreen() {
           </View>
            <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
              <TouchableOpacity
-               style={[styles.settingsBtn, isRefreshingUsage && { opacity: 0.6 }]}
-               onPress={async () => {
-                 await refetchAllUsageData(true);
-               }}
-               disabled={isRefreshingUsage}
+               style={styles.settingsBtn}
+               onPress={() => fetchLimits()}
              >
                <RefreshCw
                  size={22}
                  color="#4F46E5"
-                 style={isRefreshingUsage ? { transform: [{ rotate: '180deg' }] } : undefined}
                />
              </TouchableOpacity>
              <TouchableOpacity
@@ -1018,19 +1111,30 @@ export default function DashboardScreen() {
               {limits.slice(0, 5).map((limit: any) => (
                 <View key={limit.id} style={styles.limitCard}>
                   <View style={styles.limitInfo}>
-                    <Text style={styles.limitName}>{limit.app_name || limit.category || 'App'}</Text>
+                    <Text style={styles.limitName}>{limit.target_label || limit.app_name || limit.category || 'App'}</Text>
                     <View style={styles.limitStats}>
                       <Text style={styles.limitStat}>
-                        {limit.time_used_minutes || 0} / {limit.max_time_minutes} min
+                        {formatUsageTime(limit.time_used_minutes || 0)} / {formatLimitTime(limit.max_time_minutes)}
                       </Text>
                       <View
                         style={[
                           styles.statusBadge,
-                          limit.is_blocked ? styles.statusBlocked : styles.statusActive,
+                          limit.is_blocked
+                            ? styles.statusBlocked
+                            : (limit.time_used_minutes || 0) > 0
+                              ? styles.statusActive
+                              : styles.statusTracking,
                         ]}
                       >
-                        <Text style={[styles.statusText, limit.is_blocked ? styles.statusBlockedText : styles.statusActiveText]}>
-                          {limit.is_blocked ? 'BLOCKED' : 'ACTIVE'}
+                        <Text style={[
+                          styles.statusText,
+                          limit.is_blocked
+                            ? styles.statusBlockedText
+                            : (limit.time_used_minutes || 0) > 0
+                              ? styles.statusActiveText
+                              : styles.statusTrackingText,
+                        ]}>
+                          {limit.is_blocked ? 'BLOCKED' : (limit.time_used_minutes || 0) > 0 ? 'ACTIVE' : 'TRACKING'}
                         </Text>
                       </View>
                     </View>
@@ -1079,11 +1183,11 @@ export default function DashboardScreen() {
                 </View>
               ))}
               {limits.length > 5 && (
-                <View style={styles.moreItemsNote}>
+                <TouchableOpacity style={styles.moreItemsNote} onPress={() => navigation.navigate('PoliciesScreen')}>
                   <Text style={styles.moreItemsText}>
-                    +{limits.length - 5} more limit{limits.length - 5 > 1 ? 's' : ''} • View Activity to see all
+                    +{limits.length - 5} more limit{limits.length - 5 > 1 ? 's' : ''} • Tap to manage all
                   </Text>
-                </View>
+                </TouchableOpacity>
               )}
             </ScrollView>
           )}
@@ -1092,6 +1196,14 @@ export default function DashboardScreen() {
         {/* ===== QUICK ACTIONS ===== */}
         <View style={styles.section}>
           <Text style={styles.sectionTitle}>Quick Actions</Text>
+          <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('PoliciesScreen')}>
+            <Shield size={24} color="#10B981" />
+            <View style={styles.actionContent}>
+              <Text style={styles.actionTitle}>My Limits</Text>
+              <Text style={styles.actionDesc}>Edit or delete your limits</Text>
+            </View>
+          </TouchableOpacity>
+
           <TouchableOpacity style={styles.actionCard} onPress={() => navigation.navigate('ActivityScreen')}>
             <BarChart2 size={24} color="#4F46E5" />
             <View style={styles.actionContent}>
@@ -1137,6 +1249,10 @@ export default function DashboardScreen() {
         <TouchableOpacity style={styles.navItem}>
           <Home size={22} color="#4F46E5" />
           <Text style={styles.navLabel}>Home</Text>
+        </TouchableOpacity>
+        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('PoliciesScreen')}>
+          <Shield size={22} color="#94A3B8" />
+          <Text style={[styles.navLabel, styles.inactiveLabel]}>Limits</Text>
         </TouchableOpacity>
         <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('AnalyticsScreen')}>
           <BarChart2 size={22} color="#94A3B8" />
@@ -1441,9 +1557,11 @@ const styles = StyleSheet.create({
   limitStat: { fontSize: 13, color: '#64748B', fontWeight: '500' },
   statusBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 6 },
   statusActive: { backgroundColor: '#DCFCE7' },
+  statusTracking: { backgroundColor: '#F1F5F9' },
   statusBlocked: { backgroundColor: '#FEE2E2' },
   statusText: { fontSize: 11, fontWeight: '700' },
   statusActiveText: { color: '#166534' },
+  statusTrackingText: { color: '#64748B' },
   statusBlockedText: { color: '#991B1B' },
   progressContainer: { height: 8, backgroundColor: '#E2E8F0', borderRadius: 4, overflow: 'hidden', marginBottom: 12 },
   progressBar: { height: '100%', backgroundColor: '#10B981', borderRadius: 4 },

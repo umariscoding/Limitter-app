@@ -23,10 +23,10 @@ import {
 } from '../data/appData';
 import { useUser } from '../context/UserContext';
 import { resolveCurrentDeviceId } from '../services/currentDeviceService';
-import { getLimitsAPI, useOverrideAPI } from '../services/limitService';
-import { grantTemporaryOverrideAccess } from '../services/appBlockerService';
-import { addLimitHistoryEntry, incrementOverrideCount } from '../services/limitHistoryService';
-import { computeNextOverrides, getPlanOverrideLimit, normalizePlan } from '../services/planRules';
+import { getPoliciesAPI } from '../services/policyService';
+import { grantTemporaryOverrideAccess } from '../native/appBlockerService';
+import { addLimitHistoryEntry, incrementOverrideCount } from '../utils/limitHistoryService';
+import { computeNextOverrides, getPlanOverrideLimit, normalizePlan } from '../utils/planRules';
 
 // Memoized feature item for max performance
 const FeatureItem = React.memo(({ feature }: { feature: { text: string; enabled: boolean } }) => (
@@ -135,16 +135,17 @@ export default function SubscriptionPlansScreen() {
         return;
       }
 
-      const limitsResponse = await getLimitsAPI(user.uid, resolvedDeviceId);
-      const list = Array.isArray(limitsResponse?.data) ? limitsResponse.data : [];
-      const matching = list
-        .filter((item: any) => item?.app_name === blockingPackage)
+      const policiesResult = await getPoliciesAPI();
+      const policiesData = Array.isArray(policiesResult) ? policiesResult : [];
+      const matching = policiesData
+        .map((item: any) => item.policy || item)
+        .filter((p: any) => p?.targetKey === blockingPackage)
         .sort(
           (a: any, b: any) =>
-            new Date(b.created_at || 0).getTime() - new Date(a.created_at || 0).getTime()
+            (b.createdAt?._seconds || 0) - (a.createdAt?._seconds || 0)
         )[0];
 
-      const limitId = matching?.id;
+      const limitId = matching?.policyId;
       if (!limitId) {
         Alert.alert('Error', 'Unable to find active limit for this app.');
         return;
@@ -153,16 +154,12 @@ export default function SubscriptionPlansScreen() {
       let remainingAfterUse = user?.overrides_left ?? 0;
 
       if (mode === 'override') {
-        const overrideResponse = await useOverrideAPI(user.uid, resolvedDeviceId, limitId);
-        if (!overrideResponse?.success) {
-          Alert.alert('Error', overrideResponse?.message || 'Override failed.');
-          return;
-        }
-
+        // TODO: Phase 5 - Override API not yet implemented on backend
+        // For now, handle override locally
         remainingAfterUse = computeNextOverrides(
           user?.plan,
           user?.overrides_left,
-          overrideResponse?.data?.overrides_left
+          (user?.overrides_left || 1) - 1
         );
         updateUser({ overrides_left: remainingAfterUse });
       }

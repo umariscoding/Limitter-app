@@ -2,13 +2,13 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, Platform, Alert } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
-
+import { signOut } from '../services/firebaseAuthService';
 import { dashboardLabels } from '../data/appData';
 import { Home, BarChart2, Settings as SettingsIcon } from 'lucide-react-native';
 
 export default function SettingsScreen() {
   const navigation = useNavigation<any>();
-  const { logout } = useUser();
+  const { clearUser } = useUser();
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
@@ -16,12 +16,9 @@ export default function SettingsScreen() {
       {
         text: 'Sign Out',
         style: 'destructive',
-        onPress: () => {
-          logout();
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'Login' }],
-          });
+        onPress: async () => {
+          await signOut();
+          clearUser();
         },
       },
     ]);
