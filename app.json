@@ -18,6 +18,9 @@
         "android.permission.WAKE_LOCK",
         "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
       ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.limitter"
     }
   }
 }
