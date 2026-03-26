@@ -1,4 +1,4 @@
-package com.appguard2
+package com.limitter
 
 import android.os.Build
 import android.os.Bundle

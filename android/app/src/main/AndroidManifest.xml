@@ -32,37 +32,9 @@
         <action android:name="android.intent.action.VIEW"/>
         <category android:name="android.intent.category.DEFAULT"/>
         <category android:name="android.intent.category.BROWSABLE"/>
-        <data android:scheme="appguard2" android:host="override"/>
+        <data android:scheme="limitter"/>
+        <data android:scheme="exp+limitter"/>
       </intent-filter>
     </activity>
-    <service
-      android:name=".LimitterService"
-      android:enabled="true"
-      android:exported="false"
-      android:foregroundServiceType="specialUse">
-      <property android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
-        android:value="Digital wellbeing app usage limitation and interface blocking"/>
-    </service>
-    <service
-      android:name=".WebsiteBlockerService"
-      android:permission="android.permission.BIND_ACCESSIBILITY_SERVICE"
-      android:exported="false">
-      <intent-filter>
-        <action android:name="android.accessibilityservice.AccessibilityService"/>
-      </intent-filter>
-      <meta-data
-        android:name="android.accessibilityservice"
-        android:resource="@xml/website_blocker_config"/>
-    </service>
-    <activity
-      android:name=".WebsiteBlockerOverlayActivity"
-      android:label="Blocked"
-      android:theme="@style/AppTheme"
-      android:excludeFromRecents="true"
-      android:exported="false"/>
-    <receiver
-      android:name=".AlarmReceiver"
-      android:enabled="true"
-      android:exported="false"/>
   </application>
 </manifest>
