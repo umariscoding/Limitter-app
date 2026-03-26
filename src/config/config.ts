@@ -1,4 +1,4 @@
-export const BASE_URL = "https://866c-119-156-101-36.ngrok-free.app"; // Android emulator -> host localhost
+export const BASE_URL = "https://nonremediably-nonbearded-miguel.ngrok-free.dev";
 
 export const API = {
   // Auth

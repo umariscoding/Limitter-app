@@ -36,7 +36,7 @@ function AppInner(): React.JSX.Element {
         }
       } catch (_) {}
 
-      const overrideMatch = url.match(/appguard2:\/\/override\?(.*)$/i);
+      const overrideMatch = url.match(/limitter:\/\/override\?(.*)$/i);
       if (!overrideMatch) return null;
       const params = new URLSearchParams(overrideMatch[1] || "");
       const packageName = params.get("package") || "";

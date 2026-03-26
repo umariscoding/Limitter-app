@@ -1,10 +1,11 @@
 {
   "expo": {
     "name": "Limitter",
-    "slug": "appguard2",
+    "slug": "limitter",
+    "scheme": "limitter",
     "version": "1.0.0",
     "android": {
-      "package": "com.appguard2",
+      "package": "com.limitter",
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.FOREGROUND_SERVICE",
@@ -17,6 +18,9 @@
         "android.permission.WAKE_LOCK",
         "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
       ]
+    },
+    "ios": {
+      "bundleIdentifier": "com.limitter"
     }
   }
 }

@@ -1,4 +1,3 @@
 <resources>
   <string name="app_name">Limitter</string>
-  <string name="accessibility_service_description">Monitors app usage and URLs for category tracking.</string>
 </resources>

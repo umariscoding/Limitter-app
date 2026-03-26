@@ -1,97 +1,153 @@
-This is a new [**React Native**](https://reactnative.dev) project, bootstrapped using [`@react-native-community/cli`](https://github.com/react-native-community/cli).
+# Limitter App
 
-# Getting Started
+React Native app using **Expo (Prebuild / CNG)**.
 
-> **Note**: Make sure you have completed the [Set Up Your Environment](https://reactnative.dev/docs/set-up-your-environment) guide before proceeding.
+Native folders (`android/`, `ios/`) are generated locally — not committed.
 
-## Step 1: Start Metro
+---
 
-First, you will need to run **Metro**, the JavaScript build tool for React Native.
+## 📦 Setup
 
-To start the Metro dev server, run the following command from the root of your React Native project:
+git clone <repo>
+cd limitter-app
+npm install
 
-```sh
-# Using npm
-npm start
+Before starting anythihg, delete .expo, node_modules, .android, ios if these folders exist. 
 
-# OR using Yarn
-yarn start
+---
+
+## ⚙️ Requirements
+
+- Node.js (use nvm recommended)
+- Java **17** -- IMPORTANT
+- Android Studio (SDK + Emulator) - SDK Platformn Tools. Build Tools. SDK, Emulator. Make Sure that these packages are installed.
+
+Check Java:
+java -version
+
+---
+
+## 🌍 Environment Variables
+
+
+### macOS / Linux
+
+Add to ~/.zshrc or ~/.bashrc:
+
+export ANDROID_HOME=$HOME/Library/Android/sdk
+export PATH=$PATH:$ANDROID_HOME/platform-tools
+export PATH=$PATH:$ANDROID_HOME/emulatorS
+export JAVA_HOME=$(/usr/libexec/java_home -v 17)
+export PATH=$JAVA_HOME/bin:$PATH
+
+Reload:
+source ~/.zshrc
+
+---
+
+### Windows
+
+For windows, open System Settings -> Environment Variables
+
+Set:
+
+ANDROID_HOME = C:\Users\YOUR_USER\AppData\Local\Android\Sdk
+
+Add to PATH:
+
+%ANDROID_HOME%\platform-tools
+%ANDROID_HOME%\emulator
+
+---
+
+### Windows — Running on a Physical Device
+
+> **Why is this needed?**
+> Windows Defender Firewall blocks the Metro bundler port (8081) by default, and USB-connected
+> Android devices require an ADB reverse tunnel so they can reach Metro via the USB cable.
+> macOS handles both of these automatically; Windows does not.
+
+**One-time setup + build — just double-click:**
+
+```
+run-android.bat
 ```
 
-## Step 2: Build and run your app
+That single script will:
+1. Detect your connected Android device (waits up to 30 s)
+2. Open Windows Firewall for Metro / Expo ports (8081, 8082, 19000–19002)
+3. Run `adb reverse tcp:8081 tcp:8081` to create the USB tunnel
+4. Run `npx expo run:android` to build, install, and launch the app
 
-With Metro running, open a new terminal window/pane from the root of your React Native project, and use one of the following commands to build and run your Android or iOS app:
+> **Note:** The script requires Administrator privileges (it will prompt automatically).
+> You must have USB Debugging enabled on your phone.
 
-### Android
+**Firewall-only setup (standalone):**
 
-```sh
-# Using npm
-npm run android
-
-# OR using Yarn
-yarn android
+If you only want to open the firewall ports without building, run:
+```
+windows-setup.bat
 ```
 
-### iOS
+---
 
-For iOS, remember to install CocoaPods dependencies (this only needs to be run on first clone or after updating native deps).
+## 🚀 Run App
+1. npm i --force
+2. npm i expo
+3. npm i --force
 
-The first time you create a new project, run the Ruby bundler to install CocoaPods itself:
+**macOS / Linux** — Start emulator (Android Studio), then:
 
-```sh
-bundle install
+```
+npx expo run:android
 ```
 
-Then, and every time you update your native dependencies, run:
+**Windows** — Connect phone via USB, then double-click `run-android.bat` (see section above).
 
-```sh
-bundle exec pod install
-```
+---
 
-For more information, please visit [CocoaPods Getting Started guide](https://guides.cocoapods.org/using/getting-started.html).
+## 🔄 Clean Build (if errors)
+rm -rf android node_modules
+npm install
+npx expo run:android 
+---
 
-```sh
-# Using npm
-npm run ios
+## 📌 Rules
 
-# OR using Yarn
-yarn ios
-```
+Do NOT commit:
+- android/
+- ios/
+- android/local.properties
 
-If everything is set up correctly, you should see your new app running in the Android Emulator, iOS Simulator, or your connected device.
+Install packages using:
+npx expo install <package>
 
-This is one way to run your app — you can also build it directly from Android Studio or Xcode.
+---
 
-## Step 3: Modify your app
+## 🛠 Troubleshooting
 
-Now that you have successfully run the app, let's make changes!
+SDK issue:
+echo $ANDROID_HOME
+adb --version
 
-Open `App.tsx` in your text editor of choice and make some changes. When you save, your app will automatically update and reflect these changes — this is powered by [Fast Refresh](https://reactnative.dev/docs/fast-refresh).
+Java issue:
+java -version (must be 17)
 
-When you want to forcefully reload, for example to reset the state of your app, you can perform a full reload:
+Devices:
+adb devices
 
-- **Android**: Press the <kbd>R</kbd> key twice or select **"Reload"** from the **Dev Menu**, accessed via <kbd>Ctrl</kbd> + <kbd>M</kbd> (Windows/Linux) or <kbd>Cmd ⌘</kbd> + <kbd>M</kbd> (macOS).
-- **iOS**: Press <kbd>R</kbd> in iOS Simulator.
+**Windows — `SocketTimeoutException: failed to connect to /192.168.x.x`**
+Windows Firewall is blocking Metro. Fix: run `windows-setup.bat` as Administrator,
+or double-click `run-android.bat` which does this automatically.
 
-## Congratulations! :tada:
+**Windows — `Unable to load script` / `adb reverse tcp:8081 tcp:8081`**
+The ADB USB tunnel is not set up. Fix: run `adb reverse tcp:8081 tcp:8081` in a terminal
+after plugging in your phone, or use `run-android.bat` which does this automatically.
 
-You've successfully run and modified your React Native App. :partying_face:
+---
 
-### Now what?
+## ⚡ Quick Start
 
-- If you want to add this new React Native code to an existing application, check out the [Integration guide](https://reactnative.dev/docs/integration-with-existing-apps).
-- If you're curious to learn more about React Native, check out the [docs](https://reactnative.dev/docs/getting-started).
-
-# Troubleshooting
-
-If you're having issues getting the above steps to work, see the [Troubleshooting](https://reactnative.dev/docs/troubleshooting) page.
-
-# Learn More
-
-To learn more about React Native, take a look at the following resources:
-
-- [React Native Website](https://reactnative.dev) - learn more about React Native.
-- [Getting Started](https://reactnative.dev/docs/environment-setup) - an **overview** of React Native and how setup your environment.
-- [Learn the Basics](https://reactnative.dev/docs/getting-started) - a **guided tour** of the React Native **basics**.
-- [Blog](https://reactnative.dev/blog) - read the latest official React Native **Blog** posts.
-- [`@facebook/react-native`](https://github.com/facebook/react-native) - the Open Source; GitHub **repository** for React Native.
+npm install
+npx expo prebuild --clean
+npx expo run:android

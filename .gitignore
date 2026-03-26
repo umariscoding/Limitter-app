@@ -76,3 +76,8 @@ yarn-error.log
 
 
 .expo/
+.android/
+.ios/
+android/
+ios/
+_native_backup/
