@@ -153,8 +153,9 @@ export default function ActivityScreen() {
         prev.map((item: any) => {
           if (!matchesLimitPackage(item, event.package)) return item;
 
-          const maxMinutes = Number(item.max_time_minutes || 0);
-          const consumedSeconds = Math.max(0, maxMinutes * 60 - Number(event.remaining || 0));
+          const budgetSeconds = item._nativeBudgetSeconds || Number(item.max_time_minutes || 0) * 60;
+          const remaining = Math.max(0, Number(event.remaining || 0));
+          const consumedSeconds = Math.max(0, budgetSeconds - remaining);
           const eventBlocked =
             typeof event.isBlocked === 'boolean'
               ? event.isBlocked
@@ -162,7 +163,7 @@ export default function ActivityScreen() {
 
           return {
             ...item,
-            time_used_minutes: Math.floor(consumedSeconds / 60),
+            time_used_minutes: consumedSeconds / 60,
             is_blocked: eventBlocked,
           };
         })

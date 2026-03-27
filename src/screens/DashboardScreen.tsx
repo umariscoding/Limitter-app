@@ -30,19 +30,23 @@ import {
   Clock,
   RefreshCw,
   Shield,
+  Trash2,
 } from 'lucide-react-native';
 import { useUser } from '../context/UserContext';
-import { createPolicyAPI, getPoliciesAPI } from '../services/policyService';
+import { createPolicyAPI, getPoliciesAPI, archivePolicyAPI } from '../services/policyService';
 import { Toast } from '../../components';
 import { getInstalledApps, InstalledApp } from '../native/appListService';
 import {
   getWebsiteBlockerStatus,
+  getNativeTimerStates,
   startAppBlockerService,
   startAppClockTimer,
   startAppUsageTimer,
   startWebsiteTimer,
   updateBlockedApps,
 } from '../native/appBlockerService';
+import { LimitterModule } from '../native/limitterNativeModules';
+import { subscribeTimerTicks, subscribeTimerBlocked } from '../native/timerRealtimeService';
 import { resolveCurrentDeviceId } from '../native/currentDeviceService';
 import { requestRequiredPermissions } from '../native/permissionsService';
 import {
@@ -116,7 +120,14 @@ export default function DashboardScreen() {
 
   // Request Android permissions on first mount
   useEffect(() => {
-    requestRequiredPermissions();
+    requestRequiredPermissions().then((status) => {
+      console.log('=== PERMISSION STATUS ===');
+      console.log('Usage Access:', status.usage ? 'GRANTED' : 'DENIED');
+      console.log('Overlay:', status.overlay ? 'GRANTED' : 'DENIED');
+      console.log('Battery:', status.battery ? 'GRANTED' : 'DENIED');
+      console.log('Accessibility:', status.accessibility ? 'GRANTED' : 'DENIED');
+      console.log('=========================');
+    });
   }, []);
 
   React.useEffect(() => {
@@ -200,8 +211,27 @@ export default function DashboardScreen() {
       return;
     }
 
+    let policiesResult: any;
+    for (let attempt = 0; attempt < 2; attempt++) {
+      try {
+        policiesResult = await getPoliciesAPI();
+        break;
+      } catch (error: any) {
+        const status = error?.response?.status;
+        if (attempt === 0 && (status === 503 || status === 502)) {
+          console.warn('⚠️ API returned', status, '— retrying in 2s...');
+          await new Promise<void>(r => setTimeout(r, 2000));
+          continue;
+        }
+        console.error('❌ Failed to fetch limits:', error);
+        // Keep existing limits on transient errors instead of wiping them
+        setLoading(false);
+        setRefreshing(false);
+        return;
+      }
+    }
+
     try {
-      const policiesResult = await getPoliciesAPI();
       const reconciledLimits = await hydratePoliciesForUi(policiesResult);
       setLimits(reconciledLimits);
       console.log('✅ Fetched limits (sorted):', reconciledLimits);
@@ -219,11 +249,23 @@ export default function DashboardScreen() {
       }
       updateBlockedApps(blockedAppsList);
 
+      // Get currently running native timers so we don't restart them
+      const activeTimers = await getNativeTimerStates();
+      const activePackages = new Set(
+        activeTimers
+          .filter(t => (t.remainingSeconds || 0) > 0)
+          .map(t => String(t.package || '').trim().toLowerCase()),
+      );
+
       for (const limit of reconciledLimits) {
         if (limit.is_blocked) continue;
         if (limit.target_type !== 'app') continue;
         const pkg = limit.app_name || limit.package_name || limit.packageName;
         if (!pkg) continue;
+
+        // Skip if native timer is already running for this package
+        if (activePackages.has(String(pkg).trim().toLowerCase())) continue;
+
         const remainingSeconds = Math.max(
           0,
           (limit.max_time_minutes - (limit.time_used_minutes || 0)) * 60,
@@ -240,8 +282,7 @@ export default function DashboardScreen() {
         }
       }
     } catch (error) {
-      console.error('❌ Failed to fetch limits:', error);
-      setLimits([]);
+      console.error('❌ Failed to process limits:', error);
     } finally {
       setLoading(false);
       setRefreshing(false);
@@ -274,6 +315,50 @@ export default function DashboardScreen() {
       fetchLimits();
     }, [user?.uid, deviceId, route?.params?.refreshAt, matchesLimitPackage]),
   );
+
+  // Real-time timer updates so the displayed time flows smoothly
+  React.useEffect(() => {
+    const unsubTick = subscribeTimerTicks(event => {
+      if (!event?.package) return;
+
+      setLimits(prev =>
+        prev.map((item: any) => {
+          if (!matchesLimitPackage(item, event.package)) return item;
+
+          // Use native budget if available, otherwise fall back to API max
+          const budgetSeconds = item._nativeBudgetSeconds || Number(item.max_time_minutes || 0) * 60;
+          const remaining = Math.max(0, Number(event.remaining || 0));
+          const consumedSeconds = Math.max(0, budgetSeconds - remaining);
+          const eventBlocked =
+            typeof event.isBlocked === 'boolean'
+              ? event.isBlocked
+              : String(event.status || '').toLowerCase() === 'blocked';
+
+          return {
+            ...item,
+            time_used_minutes: consumedSeconds / 60,
+            is_blocked: eventBlocked,
+          };
+        }),
+      );
+    });
+
+    const unsubBlocked = subscribeTimerBlocked(event => {
+      if (!event?.package) return;
+      setLimits(prev =>
+        prev.map((item: any) =>
+          matchesLimitPackage(item, event.package)
+            ? { ...item, is_blocked: true }
+            : item,
+        ),
+      );
+    });
+
+    return () => {
+      unsubTick();
+      unsubBlocked();
+    };
+  }, [user?.uid, matchesLimitPackage]);
 
   const onRefresh = () => {
     setRefreshing(true);
@@ -311,7 +396,8 @@ export default function DashboardScreen() {
     const category = createCategory.trim();
     const websiteUrl = createWebsiteUrl.trim();
     const totalSeconds = calculateTotalSeconds();
-    const parsedMinutes = Math.ceil(totalSeconds / 60);
+    const parsedMinutes = Math.round(totalSeconds / 60) || 1;
+    console.log('🕐 Create limit:', { totalSeconds, parsedMinutes, timerType, hours, minutes, seconds, singleTimerValue, singleTimerUnit });
 
     if (targetType === 'app') {
       if (!selectedInstalledApp || !appName) {
@@ -426,6 +512,9 @@ export default function DashboardScreen() {
         setClockHour('12');
         setClockMinute('00');
         setClockPeriod('PM');
+        // Small delay to let the native service register the timer
+        // before fetchLimits checks activeTimers
+        await new Promise<void>(r => setTimeout(r, 1500));
         await fetchLimits();
       } else {
         Alert.alert('Error', 'Failed to create limit');
@@ -437,6 +526,53 @@ export default function DashboardScreen() {
     } finally {
       setLoading(false);
     }
+  };
+
+  const handleResetAll = () => {
+    if (limits.length === 0) {
+      Alert.alert('Nothing to reset', 'No limits found.');
+      return;
+    }
+    Alert.alert(
+      'Reset All Limits',
+      'This will delete all limits and stop all timers. Are you sure?',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Reset All',
+          style: 'destructive',
+          onPress: async () => {
+            setLoading(true);
+            try {
+              // Archive all policies on backend (skip any without a valid id)
+              const archivePromises = limits
+                .filter((l: any) => l.id)
+                .map((l: any) => archivePolicyAPI(l.id).catch((e: any) =>
+                  console.warn('Failed to archive policy', l.id, e?.message),
+                ));
+              await Promise.all(archivePromises);
+
+              // Stop native tracking service & clear blocked apps
+              try {
+                if (LimitterModule?.sendCommand) {
+                  await LimitterModule.sendCommand('STOP', {});
+                }
+              } catch (nativeErr) {
+                console.warn('Native STOP command failed:', nativeErr);
+              }
+              updateBlockedApps([]);
+              setLimits([]);
+              setToastMessage('All limits removed');
+              setShowToast(true);
+            } catch (error: any) {
+              Alert.alert('Error', error?.message || 'Failed to reset limits');
+            } finally {
+              setLoading(false);
+            }
+          },
+        },
+      ],
+    );
   };
 
   if (loading && !refreshing) {
@@ -857,6 +993,12 @@ export default function DashboardScreen() {
             <Text style={styles.subtitle}>Welcome, {user?.name || 'User'}</Text>
           </View>
           <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
+            <TouchableOpacity
+              style={styles.settingsBtn}
+              onPress={handleResetAll}
+            >
+              <Trash2 size={22} color="#EF4444" />
+            </TouchableOpacity>
             <TouchableOpacity
               style={styles.settingsBtn}
               onPress={() => fetchLimits()}

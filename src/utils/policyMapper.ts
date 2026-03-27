@@ -19,6 +19,8 @@ export interface UIPolicy {
   status: 'active' | 'inactive' | 'blocked';
   blocked_until_timestamp: number;
   created_at: number;
+  /** Actual native timer budget in seconds — used for accurate tick display */
+  _nativeBudgetSeconds?: number;
 }
 
 /**
@@ -73,12 +75,14 @@ export function formatUsageTime(minutes: number): string {
  * Examples: "30m", "1h", "1h 30m"
  */
 export function formatLimitTime(minutes: number): string {
-  if (minutes >= 60) {
-    const h = Math.floor(minutes / 60);
-    const m = minutes % 60;
+  const rounded = Math.round(minutes);
+  if (rounded >= 60) {
+    const h = Math.floor(rounded / 60);
+    const m = rounded % 60;
     return m > 0 ? `${h}h ${m}m` : `${h}h`;
   }
-  return `${minutes}m`;
+  if (rounded <= 0) return '< 1m';
+  return `${rounded}m`;
 }
 
 /**
@@ -192,6 +196,7 @@ export function mergeLiveTimerUsageIntoPolicies(
       time_used_minutes: mergedUsed,
       is_blocked,
       status,
+      _nativeBudgetSeconds: budget > 0 ? budget : undefined,
     };
   });
 }

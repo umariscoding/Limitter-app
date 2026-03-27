@@ -1,6 +1,7 @@
 import React, {
   createContext,
   useState,
+  useCallback,
   useContext,
   ReactNode,
 } from "react";
@@ -73,20 +74,27 @@ export const UserContextProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const setAccountData = (data: any) => {
+  const setAccountData = useCallback((data: any) => {
     setUser(parseAccountData(data));
-  };
+  }, []);
 
-  const clearUser = () => {
+  const clearUser = useCallback(() => {
     setUser(null);
     setFirebaseUser(null);
-  };
+  }, []);
 
-  const login = (userData: any) => setAccountData(userData);
-  const logout = () => clearUser();
-  const updateUser = (partial: Partial<AccountContext>) => {
-    if (user) setUser({ ...user, ...partial });
-  };
+  const login = useCallback((userData: any) => {
+    setUser(parseAccountData(userData));
+  }, []);
+
+  const logout = useCallback(() => {
+    setUser(null);
+    setFirebaseUser(null);
+  }, []);
+
+  const updateUser = useCallback((partial: Partial<AccountContext>) => {
+    setUser((prev) => prev ? { ...prev, ...partial } : prev);
+  }, []);
 
   return (
     <UserContext.Provider

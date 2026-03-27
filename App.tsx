@@ -8,6 +8,7 @@ import MainNavigator from "./src/navigation/MainNavigator";
 import { UserContextProvider, useUser } from "./src/context/UserContext";
 import { UsageContextProvider } from "./src/context/UsageContext";
 import { onAuthStateChanged, bootstrap } from "./src/auth/firebaseAuthService";
+import { startTimerRealtimeTracking } from "./src/native/timerRealtimeService";
 const navigationRef = createNavigationContainerRef<any>();
 
 type OverrideLinkPayload = {
@@ -91,6 +92,11 @@ function AppInner(): React.JSX.Element {
     });
     return unsubscribe;
   }, [loadAccount]);
+
+  // Start native timer event bridge so screens receive real-time ticks
+  React.useEffect(() => {
+    startTimerRealtimeTracking();
+  }, []);
 
   // Deep link listener
   React.useEffect(() => {

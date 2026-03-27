@@ -26,14 +26,14 @@ export const getInstalledApps = async (): Promise<InstalledApp[]> => {
         (app: InstalledApp) => app.appName.length > 0 && app.packageName.length > 0
       );
 
-      console.log('✅ Installed apps fetched via AppListModule:', validApps.length);
+      console.log(' Installed apps fetched via AppListModule:', validApps.length);
       return validApps;
     }
 
-    console.warn('⚠️ AppListModule not available');
+    console.warn(' AppListModule not available');
     return [];
   } catch (error) {
-    console.error('❌ Failed to get installed apps:', error);
+    console.error(' Failed to get installed apps:', error);
     return [];
   }
 };

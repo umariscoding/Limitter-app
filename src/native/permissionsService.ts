@@ -11,7 +11,7 @@ import { LimitterModule, warnIfCustomNativeMissing } from "./limitterNativeModul
 /** Must match android/app/src/main/res/values/strings.xml app_name (launcher + Usage access list). */
 const ANDROID_APP_LABEL = "Limitter";
 
-const ANDROID_PACKAGE_ID = "com.appguard2";
+const ANDROID_PACKAGE_ID = "com.limitter";
 
 export interface PermissionStatus {
   overlay: boolean;
@@ -23,7 +23,7 @@ export interface PermissionStatus {
 
 type PermissionStep = "usage" | "overlay" | "battery";
 
-type PromptChoice = "later" | "open" | "appinfo";
+type PromptChoice = "open" | "appinfo";
 
 function waitForNextForeground(): Promise<void> {
   return new Promise((resolve) => {
@@ -59,7 +59,7 @@ async function openStepSettings(step: PermissionStep): Promise<void> {
       return;
     }
     if (step === "battery" && LimitterModule?.requestBatteryOptimizationExemption) {
-      LimitterModule.requestBatteryOptimizationExemption();
+      await LimitterModule.requestBatteryOptimizationExemption();
       return;
     }
     await Linking.openSettings();
@@ -69,32 +69,30 @@ async function openStepSettings(step: PermissionStep): Promise<void> {
 }
 
 function stepCopy(step: PermissionStep): { title: string; message: string } {
-  switch (step) {
-    case "usage":
-      return {
-        title: "Usage access (not a service)",
-        message:
-          `This is not under Accessibility. On the Usage access screen you should see one row named “${ANDROID_APP_LABEL}” (same name as the app icon).\n\n` +
-          `Turn ON “Permit usage access” for that row. If the list is long, scroll — it is sorted alphabetically under “L”.\n\n` +
-          `Technical id (for search/support): ${ANDROID_PACKAGE_ID}\n\n` +
-          `If you still don’t see ${ANDROID_APP_LABEL}: tap “This app’s settings” to confirm Android recognizes this install, then try “Usage access list” again.\n\n` +
-          `Samsung: Special access → Usage data access. Xiaomi: App management → App permissions → Other permissions → Usage access.`,
-      };
-    case "overlay":
-      return {
-        title: "Display over other apps",
-        message:
-          `${ANDROID_APP_LABEL} needs permission to draw over other apps when a limit is reached.\n\n` +
-          `On the next screen, find ${ANDROID_APP_LABEL} and allow display over other apps.`,
-      };
-    case "battery":
-      return {
-        title: "Battery / background",
-        message:
-          `For reliable timers in the background, allow ${ANDROID_APP_LABEL} to ignore battery optimization.\n\n` +
-          `On the next screen, tap Allow if you want maximum reliability.`,
-      };
+  if (step === 'usage') {
+    return {
+      title: 'Enable Usage Access',
+      message:
+        'Find “' + ANDROID_APP_LABEL + '” in the list and turn ON usage access.\n\n' +
+        'Xiaomi (Redmi/POCO): Settings > Apps > Special app access > Usage data access > find ' + ANDROID_APP_LABEL + ' > turn ON.\n\n' +
+        'If not there: Settings > Apps > Manage apps > find ' + ANDROID_APP_LABEL + ' > Other permissions > Usage access > Allow.\n\n' +
+        'Package: ' + ANDROID_PACKAGE_ID,
+    };
   }
+  if (step === 'overlay') {
+    return {
+      title: 'Display over other apps',
+      message:
+        ANDROID_APP_LABEL + ' needs permission to draw over other apps when a limit is reached.\n\n' +
+        'On the next screen, find ' + ANDROID_APP_LABEL + ' and allow display over other apps.',
+    };
+  }
+  return {
+    title: 'Battery / background',
+    message:
+      'For reliable timers in the background, allow ' + ANDROID_APP_LABEL + ' to ignore battery optimization.\n\n' +
+      'On the next screen, tap Allow if you want maximum reliability.',
+  };
 }
 
 function promptStep(step: PermissionStep): Promise<PromptChoice> {
@@ -102,16 +100,14 @@ function promptStep(step: PermissionStep): Promise<PromptChoice> {
   return new Promise((resolve) => {
     if (step === "usage") {
       Alert.alert(title, message, [
-        { text: "Later", style: "cancel", onPress: () => resolve("later") },
         { text: "This app’s settings", onPress: () => resolve("appinfo") },
         { text: "Usage access list", onPress: () => resolve("open") },
-      ]);
+      ], { cancelable: false });
       return;
     }
     Alert.alert(title, message, [
-      { text: "Later", style: "cancel", onPress: () => resolve("later") },
       { text: "Open settings", onPress: () => resolve("open") },
-    ]);
+    ], { cancelable: false });
   });
 }
 
@@ -171,7 +167,6 @@ export const requestRequiredPermissions = async (): Promise<PermissionStatus> =>
     if (!step) return status;
 
     const choice = await promptStep(step);
-    if (choice === "later") return status;
 
     const waiter = waitForNextForeground();
     if (choice === "appinfo") {
