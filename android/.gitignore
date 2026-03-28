@@ -1,16 +1,33 @@
-# OSX
-#
+# macOS
 .DS_Store
 
-# Android/IntelliJ
-#
+# Gradle — caches & wrappers are OK to commit; these are not:
+.gradle/
+**/build/
 build/
-.idea
-.gradle
-local.properties
-*.iml
-*.hprof
-.cxx/
 
-# Bundle artifacts
+# Local SDK path (each machine’s Android SDK location)
+local.properties
+
+# Android Studio / IntelliJ
+.idea/
+*.iml
+
+# CMake / NDK
+.cxx/
+.externalNativeBuild/
+
+# Profiling / captures
+*.hprof
+captures/
+
+# Kotlin incremental (Gradle 8+)
+.kotlin/
+
+# Built app binaries (never commit)
+*.apk
+*.aab
+*.ap_
+
+# Metro (if ever emitted here)
 *.jsbundle

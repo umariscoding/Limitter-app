@@ -78,6 +78,8 @@ yarn-error.log
 .expo/
 .android/
 .ios/
-android/
+
+# Android: the folder is committed so Kotlin/Java/XML sources are shared. Ignore only generated & local files
+# (see android/.gitignore): .gradle/, **/build/, local.properties, .idea/, *.apk, etc.
 ios/
 _native_backup/
