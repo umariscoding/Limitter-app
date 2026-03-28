@@ -392,6 +392,8 @@ export default function DashboardScreen() {
       return;
     }
 
+    Alert.alert('DEBUG', 'handleCreateLimit called - code is updated!');
+
     const appName = createAppName.trim();
     const category = createCategory.trim();
     const websiteUrl = createWebsiteUrl.trim();
@@ -406,7 +408,7 @@ export default function DashboardScreen() {
           'Please select an app from your installed apps list',
         );
         return;
-      }
+      } 
     } else if (targetType === 'category') {
       if (!category) {
         Alert.alert('Validation', 'Category is required');
@@ -450,6 +452,7 @@ export default function DashboardScreen() {
 
       if (response) {
         if (targetType === 'app' && selectedInstalledApp) {
+          console.log('DEBUG: Starting timer for', selectedInstalledApp.packageName, 'duration:', totalSeconds);
           const timerStartResult =
             timerType === 'clock'
               ? await startAppClockTimer(
@@ -463,6 +466,8 @@ export default function DashboardScreen() {
                   selectedInstalledApp.appName,
                   totalSeconds,
                 );
+
+          Alert.alert('DEBUG Timer Result', JSON.stringify(timerStartResult));
 
           if (!timerStartResult.success) {
             Alert.alert(
