@@ -408,7 +408,7 @@ export default function DashboardScreen() {
           'Please select an app from your installed apps list',
         );
         return;
-      } 
+      }
     } else if (targetType === 'category') {
       if (!category) {
         Alert.alert('Validation', 'Category is required');
@@ -432,14 +432,14 @@ export default function DashboardScreen() {
         targetType === 'app'
           ? appName
           : targetType === 'website'
-          ? websiteUrl
-          : category;
+            ? websiteUrl
+            : category;
       const targetLabel =
         targetType === 'app'
           ? selectedInstalledApp?.appName || appName
           : targetType === 'website'
-          ? websiteUrl
-          : category;
+            ? websiteUrl
+            : category;
 
       const response = await createPolicyAPI({
         type: targetType,
@@ -456,16 +456,16 @@ export default function DashboardScreen() {
           const timerStartResult =
             timerType === 'clock'
               ? await startAppClockTimer(
-                  selectedInstalledApp.packageName,
-                  selectedInstalledApp.appName,
-                  toHour24(clockHour, clockPeriod),
-                  Math.max(0, Math.min(59, Number(clockMinute || '0'))),
-                )
+                selectedInstalledApp.packageName,
+                selectedInstalledApp.appName,
+                toHour24(clockHour, clockPeriod),
+                Math.max(0, Math.min(59, Number(clockMinute || '0'))),
+              )
               : await startAppUsageTimer(
-                  selectedInstalledApp.packageName,
-                  selectedInstalledApp.appName,
-                  totalSeconds,
-                );
+                selectedInstalledApp.packageName,
+                selectedInstalledApp.appName,
+                totalSeconds,
+              );
 
           Alert.alert('DEBUG Timer Result', JSON.stringify(timerStartResult));
 
@@ -499,8 +499,8 @@ export default function DashboardScreen() {
           targetType === 'app'
             ? appName
             : targetType === 'category'
-            ? category
-            : websiteUrl;
+              ? category
+              : websiteUrl;
         setToastMessage(`Limit created for ${label}`);
         setShowToast(true);
         setShowCreateModal(false);
@@ -902,7 +902,7 @@ export default function DashboardScreen() {
                         style={[
                           styles.selectorBtnText,
                           singleTimerUnit === unit &&
-                            styles.selectorBtnTextActive,
+                          styles.selectorBtnTextActive,
                         ]}
                       >
                         {unit}
@@ -947,7 +947,7 @@ export default function DashboardScreen() {
                         style={[
                           styles.selectorBtnText,
                           clockPeriod === period &&
-                            styles.selectorBtnTextActive,
+                          styles.selectorBtnTextActive,
                         ]}
                       >
                         {period}
@@ -963,8 +963,8 @@ export default function DashboardScreen() {
                 {targetType === 'app'
                   ? createAppName || 'No app selected'
                   : targetType === 'category'
-                  ? createCategory || 'No category selected'
-                  : createWebsiteUrl || 'No website selected'}
+                    ? createCategory || 'No category selected'
+                    : createWebsiteUrl || 'No website selected'}
               </Text>
             </View>
             <View style={styles.modalActions}>
@@ -1090,8 +1090,8 @@ export default function DashboardScreen() {
                           limit.is_blocked
                             ? styles.statusBlocked
                             : (limit.time_used_minutes || 0) > 0
-                            ? styles.statusActive
-                            : styles.statusTracking,
+                              ? styles.statusActive
+                              : styles.statusTracking,
                         ]}
                       >
                         <Text
@@ -1100,15 +1100,15 @@ export default function DashboardScreen() {
                             limit.is_blocked
                               ? styles.statusBlockedText
                               : (limit.time_used_minutes || 0) > 0
-                              ? styles.statusActiveText
-                              : styles.statusTrackingText,
+                                ? styles.statusActiveText
+                                : styles.statusTrackingText,
                           ]}
                         >
                           {limit.is_blocked
                             ? 'BLOCKED'
                             : (limit.time_used_minutes || 0) > 0
-                            ? 'ACTIVE'
-                            : 'TRACKING'}
+                              ? 'ACTIVE'
+                              : 'TRACKING'}
                         </Text>
                       </View>
                     </View>
@@ -1121,7 +1121,7 @@ export default function DashboardScreen() {
                         {
                           width: `${Math.min(
                             (limit.time_used_minutes / limit.max_time_minutes) *
-                              100,
+                            100,
                             100,
                           )}%`,
                         },
