@@ -6,6 +6,7 @@ import React, {
   ReactNode,
 } from "react";
 import { type User as FirebaseUser } from "firebase/auth";
+import { getPlanOverrideLimit } from "../utils/planRules";
 
 export interface AccountContext {
   uid: string;
@@ -64,7 +65,10 @@ function parseAccountData(data: any): AccountContext | null {
     // Compat aliases
     name: displayName || data.user?.email?.split("@")[0] || "",
     plan: planCode,
-    overrides_left: 0,
+    overrides_left:
+      data.overrides_left ??
+      data.account?.overrides_left ??
+      getPlanOverrideLimit(planCode),
     idToken: "",
   };
 }
