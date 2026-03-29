@@ -2,6 +2,7 @@ package com.limitter
 
 import android.app.Activity
 import android.graphics.Color
+import android.net.Uri
 import android.os.Bundle
 import android.util.TypedValue
 import android.view.Gravity
@@ -61,36 +62,18 @@ class BlockOverlayActivity : Activity() {
         }
         layout.addView(message)
 
-        // Go Home button
-        val homeBtn = Button(this).apply {
-            text = "Go Home"
+        // Use Override button
+        val overrideBtn = Button(this).apply {
+            text = "Use Override"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
             setTextColor(Color.WHITE)
             setBackgroundColor(Color.parseColor("#4F46E5"))
             setPadding(dp(32), dp(16), dp(32), dp(16))
             setOnClickListener {
-                goHome()
+                useOverride()
             }
         }
-        layout.addView(homeBtn, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT,
-            LinearLayout.LayoutParams.WRAP_CONTENT
-        ).apply {
-            gravity = Gravity.CENTER
-            bottomMargin = dp(16)
-        })
-
-        // Open Limitter button
-        val limitterBtn = Button(this).apply {
-            text = "Open Limitter"
-            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
-            setTextColor(Color.parseColor("#94A3B8"))
-            setBackgroundColor(Color.TRANSPARENT)
-            setOnClickListener {
-                openLimitter()
-            }
-        }
-        layout.addView(limitterBtn, LinearLayout.LayoutParams(
+        layout.addView(overrideBtn, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.WRAP_CONTENT,
             LinearLayout.LayoutParams.WRAP_CONTENT
         ).apply {
@@ -114,13 +97,19 @@ class BlockOverlayActivity : Activity() {
         finish()
     }
 
-    private fun openLimitter() {
-        val intent = packageManager.getLaunchIntentForPackage(packageName)
-        if (intent != null) {
-            intent.flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
+    private fun useOverride() {
+        val pkg = intent.getStringExtra("package_name") ?: ""
+        val name = intent.getStringExtra("app_name") ?: ""
+        val deepLink = Uri.parse(
+            "limitter://override?package=${Uri.encode(pkg)}&appName=${Uri.encode(name)}"
+        )
+        val overrideIntent = android.content.Intent(
+            android.content.Intent.ACTION_VIEW, deepLink
+        ).apply {
+            flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or
                 android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
-            startActivity(intent)
         }
+        startActivity(overrideIntent)
         finish()
     }
 

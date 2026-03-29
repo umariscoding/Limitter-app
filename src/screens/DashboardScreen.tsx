@@ -33,7 +33,7 @@ import {
   Trash2,
 } from 'lucide-react-native';
 import { useUser } from '../context/UserContext';
-import { createPolicyAPI, getPoliciesAPI, archivePolicyAPI } from '../services/policyService';
+import { createPolicyAPI, getPoliciesAPI, archivePolicyAPI, hardDeleteAllPoliciesAPI } from '../services/policyService';
 import { Toast } from '../../components';
 import { getInstalledApps, InstalledApp } from '../native/appListService';
 import {
@@ -549,13 +549,8 @@ export default function DashboardScreen() {
           onPress: async () => {
             setLoading(true);
             try {
-              // Archive all policies on backend (skip any without a valid id)
-              const archivePromises = limits
-                .filter((l: any) => l.id)
-                .map((l: any) => archivePolicyAPI(l.id).catch((e: any) =>
-                  console.warn('Failed to archive policy', l.id, e?.message),
-                ));
-              await Promise.all(archivePromises);
+              // Hard delete all policies on backend (for testing)
+              await hardDeleteAllPoliciesAPI();
 
               // Stop native tracking service & clear blocked apps
               try {

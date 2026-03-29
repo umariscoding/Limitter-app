@@ -2,7 +2,7 @@ export type NormalizedPlan = 'free' | 'pro' | 'elite';
 
 // Centralized plan rules keep dashboard, upgrade, and override behavior in sync.
 const PLAN_OVERRIDE_LIMITS: Record<NormalizedPlan, number> = {
-  free: 3,
+  free: 5,
   pro: 12,
   elite: 9999,
 };

@@ -22,8 +22,6 @@ import {
   subscriptionLabels
 } from '../data/appData';
 import { useUser } from '../context/UserContext';
-import { resolveCurrentDeviceId } from '../native/currentDeviceService';
-import { getPoliciesAPI } from '../services/policyService';
 import { grantTemporaryOverrideAccess } from '../native/appBlockerService';
 import { computeNextOverrides, getPlanOverrideLimit, normalizePlan } from '../utils/planRules';
 
@@ -59,15 +57,49 @@ export default function SubscriptionPlansScreen() {
   const [extraDevices, setExtraDevices] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showOverrideChoice, setShowOverrideChoice] = useState(false);
+  const [showBuyOverridesModal, setShowBuyOverridesModal] = useState(false);
+
+  const OVERRIDE_PRICE = 1.99;
+  const OVERRIDE_PACKS = [
+    { count: 2, total: +(2 * 1.99).toFixed(2) },
+    { count: 5, total: +(5 * 1.99).toFixed(2) },
+    { count: 10, total: +(10 * 1.99).toFixed(2) },
+  ];
 
   const blockingPackage = route?.params?.packageName as string | undefined;
   const blockingAppName = route?.params?.appName as string | undefined;
   const fromBlockingOverride = Boolean(route?.params?.fromBlockingOverride && blockingPackage);
 
   React.useEffect(() => {
-    if (fromBlockingOverride) {
-      setShowOverrideChoice(true);
-    }
+    if (!fromBlockingOverride) return;
+
+    const autoUseOverride = async () => {
+      if ((user?.overrides_left ?? 0) > 0) {
+        setIsProcessing(true);
+        try {
+          const remainingAfterUse = computeNextOverrides(
+            user?.plan,
+            user?.overrides_left,
+            (user?.overrides_left || 1) - 1
+          );
+          updateUser({ overrides_left: remainingAfterUse });
+          await grantTemporaryOverrideAccess(blockingPackage!, blockingAppName || blockingPackage!, 5);
+          navigation.navigate('DashboardScreen', {
+            refreshAt: Date.now(),
+            justOverriddenPackage: blockingPackage,
+          });
+        } catch (error) {
+          console.error('Auto override failed:', error);
+          Alert.alert('Error', 'Failed to use override.');
+        } finally {
+          setIsProcessing(false);
+        }
+      } else {
+        setShowOverrideChoice(true);
+      }
+    };
+
+    autoUseOverride();
   }, [fromBlockingOverride]);
 
   const selectedPlan = subscriptionPlans.find(p => p.id === selectedPlanId) || subscriptionPlans[1];
@@ -115,76 +147,37 @@ export default function SubscriptionPlansScreen() {
     }, 1500); 
   };
 
-  const handleBlockingOverrideAction = async (mode: 'override' | 'spend' | 'plan') => {
-    if (!user?.uid || !blockingPackage) {
-      Alert.alert('Error', 'Missing user or app context for override.');
-      return;
-    }
+  const handleBuyPlan = () => {
+    setShowOverrideChoice(false);
+  };
 
-    if (mode === 'plan') {
-      setShowOverrideChoice(false);
-      return;
-    }
+  const handleBuyOverrides = () => {
+    setShowOverrideChoice(false);
+    setShowBuyOverridesModal(true);
+  };
 
+  const handleCloseOverrideChoice = () => {
+    setShowOverrideChoice(false);
+    navigation.goBack();
+  };
+
+  const handlePurchaseOverridePack = async (count: number) => {
+    if (!blockingPackage) return;
     setIsProcessing(true);
     try {
-      const resolvedDeviceId = await resolveCurrentDeviceId(user.uid);
-      if (!resolvedDeviceId) {
-        Alert.alert('Error', 'Unable to resolve your device.');
-        return;
-      }
-
-      const policiesResult = await getPoliciesAPI();
-      const policiesData = Array.isArray(policiesResult) ? policiesResult : [];
-      const matching = policiesData
-        .map((item: any) => item.policy || item)
-        .filter((p: any) => p?.targetKey === blockingPackage)
-        .sort(
-          (a: any, b: any) =>
-            (b.createdAt?._seconds || 0) - (a.createdAt?._seconds || 0)
-        )[0];
-
-      const limitId = matching?.policyId;
-      if (!limitId) {
-        Alert.alert('Error', 'Unable to find active limit for this app.');
-        return;
-      }
-
-      let remainingAfterUse = user?.overrides_left ?? 0;
-
-      if (mode === 'override') {
-        // TODO: Phase 5 - Override API not yet implemented on backend
-        // For now, handle override locally
-        remainingAfterUse = computeNextOverrides(
-          user?.plan,
-          user?.overrides_left,
-          (user?.overrides_left || 1) - 1
-        );
-        updateUser({ overrides_left: remainingAfterUse });
-      }
-
+      // Add purchased overrides locally, then use one
+      const newTotal = (user?.overrides_left ?? 0) + count;
+      const remainingAfterUse = Math.max(0, newTotal - 1);
+      updateUser({ overrides_left: remainingAfterUse });
       await grantTemporaryOverrideAccess(blockingPackage, blockingAppName || blockingPackage, 5);
-
-      setShowOverrideChoice(false);
-      Alert.alert(
-        'Override Activated',
-        mode === 'spend'
-          ? 'You spent $1.99 and app access is now temporarily unlocked.'
-          : `Override used successfully. Remaining overrides: ${remainingAfterUse}`,
-        [
-          {
-            text: 'OK',
-            onPress: () =>
-              navigation.navigate('DashboardScreen', {
-                refreshAt: Date.now(),
-                justOverriddenPackage: blockingPackage,
-              }),
-          },
-        ]
-      );
+      setShowBuyOverridesModal(false);
+      navigation.navigate('DashboardScreen', {
+        refreshAt: Date.now(),
+        justOverriddenPackage: blockingPackage,
+      });
     } catch (error) {
-      console.error('Blocking override action failed:', error);
-      Alert.alert('Error', 'Failed to process override action.');
+      console.error('Purchase override failed:', error);
+      Alert.alert('Error', 'Failed to process override purchase.');
     } finally {
       setIsProcessing(false);
     }
@@ -194,48 +187,78 @@ export default function SubscriptionPlansScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" />
 
+      {/* No overrides left — 3 options popup */}
       <Modal
         visible={showOverrideChoice}
         transparent
         animationType="fade"
-        onRequestClose={() => setShowOverrideChoice(false)}
+        onRequestClose={handleCloseOverrideChoice}
       >
         <View style={styles.overrideModalOverlay}>
           <View style={styles.overrideModalCard}>
-            <Text style={styles.overrideModalTitle}>App Blocked</Text>
-            <Text style={styles.overrideModalSubTitle}>{blockingAppName || 'Selected app'} reached its daily limit.</Text>
-            <Text style={styles.overrideModalBody}>Spend $1.99 or buy an override plan to continue.</Text>
+            <Text style={styles.overrideModalTitle}>No Overrides Left</Text>
+            <Text style={styles.overrideModalSubTitle}>
+              {blockingAppName || 'Selected app'} reached its daily limit.
+            </Text>
+            <Text style={styles.overrideModalBody}>
+              You have no overrides remaining. Buy a plan or purchase overrides to continue.
+            </Text>
 
             <TouchableOpacity
-              style={[styles.overrideModalBtn, styles.overrideSpendBtn, isProcessing && styles.payButtonDisabled]}
-              disabled={isProcessing}
-              onPress={() => handleBlockingOverrideAction('spend')}
+              style={[styles.overrideModalBtn, styles.overridePlanBtn]}
+              onPress={handleBuyPlan}
             >
-              <Text style={styles.overrideModalBtnText}>Spend $1.99</Text>
+              <Text style={styles.overrideModalBtnText}>Buy a Plan</Text>
             </TouchableOpacity>
 
-              {(user?.overrides_left ?? 0) > 0 ? (
-                <TouchableOpacity
-                  style={[styles.overrideModalBtn, styles.overridePlanBtn, isProcessing && styles.payButtonDisabled]}
-                  disabled={isProcessing}
-                  onPress={() => handleBlockingOverrideAction('override')}
-                >
-                  <Text style={styles.overrideModalBtnText}>Use 1 Override ({user?.overrides_left})</Text>
-                </TouchableOpacity>
-              ) : (
-                <TouchableOpacity
-                  style={[styles.overrideModalBtn, styles.overridePlanBtn, isProcessing && styles.payButtonDisabled]}
-                  disabled={isProcessing}
-                  onPress={() => handleBlockingOverrideAction('plan')}
-                >
-                  <Text style={styles.overrideModalBtnText}>Buy a Plan</Text>
-                </TouchableOpacity>
-              )}
+            <TouchableOpacity
+              style={[styles.overrideModalBtn, styles.overrideSpendBtn]}
+              onPress={handleBuyOverrides}
+            >
+              <Text style={styles.overrideModalBtnText}>Buy Overrides</Text>
+            </TouchableOpacity>
+
+            <TouchableOpacity
+              style={[styles.overrideModalBtn, styles.overrideCloseBtn]}
+              onPress={handleCloseOverrideChoice}
+            >
+              <Text style={styles.overrideCloseBtnText}>Close</Text>
+            </TouchableOpacity>
+          </View>
+        </View>
+      </Modal>
+
+      {/* Buy Overrides pack picker */}
+      <Modal
+        visible={showBuyOverridesModal}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShowBuyOverridesModal(false)}
+      >
+        <View style={styles.overrideModalOverlay}>
+          <View style={styles.overrideModalCard}>
+            <Text style={styles.overrideModalTitle}>Buy Overrides</Text>
+            <Text style={styles.overrideModalSubTitle}>
+              Each override is ${OVERRIDE_PRICE.toFixed(2)}
+            </Text>
+
+            {OVERRIDE_PACKS.map((pack) => (
+              <TouchableOpacity
+                key={pack.count}
+                style={[styles.overrideModalBtn, styles.overridePackBtn, isProcessing && styles.payButtonDisabled]}
+                disabled={isProcessing}
+                onPress={() => handlePurchaseOverridePack(pack.count)}
+              >
+                <Text style={styles.overrideModalBtnText}>
+                  {pack.count} Overrides — ${pack.total.toFixed(2)}
+                </Text>
+              </TouchableOpacity>
+            ))}
 
             <TouchableOpacity
               style={[styles.overrideModalBtn, styles.overrideCloseBtn]}
               disabled={isProcessing}
-              onPress={() => setShowOverrideChoice(false)}
+              onPress={() => setShowBuyOverridesModal(false)}
             >
               <Text style={styles.overrideCloseBtnText}>Close</Text>
             </TouchableOpacity>
@@ -705,6 +728,9 @@ const styles = StyleSheet.create({
   },
   overridePlanBtn: {
     backgroundColor: '#16A34A',
+  },
+  overridePackBtn: {
+    backgroundColor: '#4F46E5',
   },
   overrideCloseBtn: {
     backgroundColor: '#E2E8F0',
