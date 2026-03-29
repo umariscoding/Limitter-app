@@ -41,6 +41,7 @@ const LoginScreen: React.FC = () => {
     } catch (err: any) {
       const code = err?.code || "";
       const message = err?.message || "";
+      console.log("🔑 LoginScreen: Error:", err);
       if (message.toLowerCase().includes("email not verified") || message.toLowerCase().includes("verification")) {
         // Email not verified — redirect to verify screen
         navigation.navigate("VerifyEmail", { email: email.trim() });

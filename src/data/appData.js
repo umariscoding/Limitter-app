@@ -317,7 +317,7 @@ export const overrideTierLogic = {
     showPrice: false,
     priceLabel: "Free",
     remainingOverrides: 12,
-    remainingLabel: "Free (12 Remaining)",
+    remainingLabel: "Free",
   },
   Elite: {
     isFree: true,

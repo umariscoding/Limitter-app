@@ -108,6 +108,8 @@ export default function DashboardScreen() {
     ready: boolean;
   } | null>(null);
 
+  const justOverriddenPackageRef = React.useRef<string | null>(null);
+
   const matchesLimitPackage = React.useCallback(
     (item: any, packageName?: string) => {
       if (!packageName) return false;
@@ -233,7 +235,34 @@ export default function DashboardScreen() {
 
     try {
       const reconciledLimits = await hydratePoliciesForUi(policiesResult);
-      setLimits(reconciledLimits);
+
+      // If an override was just used, reset the limit locally so it shows as active
+      const overriddenPkg = justOverriddenPackageRef.current;
+      if (overriddenPkg) {
+        justOverriddenPackageRef.current = null;
+        const resetLimits = reconciledLimits.map((item: any) =>
+          matchesLimitPackage(item, overriddenPkg)
+            ? { ...item, is_blocked: false, time_used_minutes: 0, status: 'active' }
+            : item,
+        );
+        setLimits(resetLimits);
+
+        // Restart native timer with full budget for the overridden app
+        const overriddenLimit = reconciledLimits.find((l: any) => matchesLimitPackage(l, overriddenPkg));
+        if (overriddenLimit && overriddenLimit.target_type === 'app') {
+          const pkg = overriddenLimit.app_name || overriddenLimit.package_name;
+          const budgetSeconds = overriddenLimit.max_time_minutes * 60;
+          if (pkg && budgetSeconds > 0) {
+            try {
+              await startAppUsageTimer(pkg, overriddenLimit.target_label || pkg, budgetSeconds);
+            } catch (err) {
+              console.warn(`Failed to restart timer after override for ${pkg}:`, err);
+            }
+          }
+        }
+      } else {
+        setLimits(reconciledLimits);
+      }
       console.log('✅ Fetched limits (sorted):', reconciledLimits);
 
       const blockedAppsList = reconciledLimits
@@ -302,13 +331,7 @@ export default function DashboardScreen() {
         | string
         | undefined;
       if (overriddenPackage) {
-        setLimits(prev =>
-          prev.map((item: any) =>
-            matchesLimitPackage(item, overriddenPackage)
-              ? { ...item, is_blocked: false }
-              : item,
-          ),
-        );
+        justOverriddenPackageRef.current = overriddenPackage;
       }
 
       setLoading(true);
@@ -392,8 +415,6 @@ export default function DashboardScreen() {
       return;
     }
 
-    Alert.alert('DEBUG', 'handleCreateLimit called - code is updated!');
-
     const appName = createAppName.trim();
     const category = createCategory.trim();
     const websiteUrl = createWebsiteUrl.trim();
@@ -466,8 +487,6 @@ export default function DashboardScreen() {
                 selectedInstalledApp.appName,
                 totalSeconds,
               );
-
-          Alert.alert('DEBUG Timer Result', JSON.stringify(timerStartResult));
 
           if (!timerStartResult.success) {
             Alert.alert(
