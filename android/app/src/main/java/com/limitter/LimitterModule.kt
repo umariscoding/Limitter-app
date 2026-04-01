@@ -1,16 +1,9 @@
 package com.limitter
 
-import android.app.AppOpsManager
-import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.PowerManager
-import android.os.Process
 import android.provider.Settings
-import android.accessibilityservice.AccessibilityServiceInfo
 import android.util.Log
-import android.view.accessibility.AccessibilityManager
-import android.app.usage.UsageStatsManager
 import androidx.core.content.ContextCompat
 import org.json.JSONArray
 import org.json.JSONObject
@@ -32,55 +25,13 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
     fun checkPermissions(promise: Promise) {
         try {
             val map = WritableNativeMap()
-            map.putBoolean("usage", hasUsageStatsPermission())
-            map.putBoolean("overlay", hasOverlayPermission())
-            map.putBoolean("batteryOptimized", isBatteryOptimized())
-            map.putBoolean("accessibility", hasAccessibilityPermission())
+            map.putBoolean("usage", PermissionChecker.hasUsageStats(reactContext))
+            map.putBoolean("overlay", PermissionChecker.hasOverlay(reactContext))
+            map.putBoolean("batteryOptimized", PermissionChecker.isBatteryOptimized(reactContext))
+            map.putBoolean("accessibility", PermissionChecker.hasAccessibility(reactContext))
             promise.resolve(map)
         } catch (e: Exception) {
             promise.reject("PERMISSION_CHECK_ERROR", e.message, e)
-        }
-    }
-
-    private fun hasUsageStatsPermission(): Boolean {
-        val appOps = reactContext.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
-        val mode = appOps.checkOpNoThrow(
-            AppOpsManager.OPSTR_GET_USAGE_STATS,
-            Process.myUid(),
-            reactContext.packageName
-        )
-        if (mode == AppOpsManager.MODE_ALLOWED) return true
-
-        try {
-            val usm = reactContext.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
-            val now = System.currentTimeMillis()
-            val stats = usm.queryUsageStats(
-                UsageStatsManager.INTERVAL_DAILY,
-                now - 24 * 60 * 60 * 1000,
-                now
-            )
-            if (stats != null && stats.isNotEmpty()) return true
-        } catch (_: Exception) {}
-
-        return false
-    }
-
-    private fun hasOverlayPermission(): Boolean {
-        return Settings.canDrawOverlays(reactContext)
-    }
-
-    private fun isBatteryOptimized(): Boolean {
-        val pm = reactContext.getSystemService(Context.POWER_SERVICE) as PowerManager
-        return !pm.isIgnoringBatteryOptimizations(reactContext.packageName)
-    }
-
-    private fun hasAccessibilityPermission(): Boolean {
-        val am = reactContext.getSystemService(Context.ACCESSIBILITY_SERVICE) as AccessibilityManager
-        val enabledServices = am.getEnabledAccessibilityServiceList(
-            AccessibilityServiceInfo.FEEDBACK_ALL_MASK
-        )
-        return enabledServices.any {
-            it.resolveInfo?.serviceInfo?.packageName == reactContext.packageName
         }
     }
 
@@ -107,39 +58,27 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun openOverlaySettings(promise: Promise) {
-        openSystemSettings(
-            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-            Uri.parse("package:${reactContext.packageName}"),
-            promise
-        )
+        openSystemSettings(Settings.ACTION_MANAGE_OVERLAY_PERMISSION, Uri.parse("package:${reactContext.packageName}"), promise)
     }
 
     @ReactMethod
     fun requestBatteryOptimizationExemption(promise: Promise) {
-        openSystemSettings(
-            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
-            Uri.parse("package:${reactContext.packageName}"),
-            promise
-        )
+        openSystemSettings(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:${reactContext.packageName}"), promise)
     }
 
     @ReactMethod
     fun openApplicationDetailsSettings(promise: Promise) {
-        openSystemSettings(
-            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
-            Uri.parse("package:${reactContext.packageName}"),
-            promise
-        )
+        openSystemSettings(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${reactContext.packageName}"), promise)
     }
 
     @ReactMethod
     fun sendCommand(command: String, params: ReadableMap, promise: Promise) {
         try {
-            if (!hasUsageStatsPermission()) {
+            if (!PermissionChecker.hasUsageStats(reactContext)) {
                 promise.resolve("PERMISSION_USAGE_REQUIRED")
                 return
             }
-            if (!hasOverlayPermission()) {
+            if (!PermissionChecker.hasOverlay(reactContext)) {
                 promise.resolve("PERMISSION_OVERLAY_REQUIRED")
                 return
             }
@@ -265,9 +204,9 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun getWebsiteBlockerStatus(promise: Promise) {
         val map = WritableNativeMap()
-        map.putBoolean("overlayEnabled", hasOverlayPermission())
-        map.putBoolean("accessibilityEnabled", hasAccessibilityPermission())
-        map.putBoolean("ready", hasOverlayPermission() && hasAccessibilityPermission())
+        map.putBoolean("overlayEnabled", PermissionChecker.hasOverlay(reactContext))
+        map.putBoolean("accessibilityEnabled", PermissionChecker.hasAccessibility(reactContext))
+        map.putBoolean("ready", PermissionChecker.hasOverlay(reactContext) && PermissionChecker.hasAccessibility(reactContext))
         promise.resolve(map)
     }
 }
