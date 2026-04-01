@@ -1,7 +1,7 @@
 import { Platform } from "react-native";
 
 // export const BASE_URL = Platform.OS === "android" ? "http://10.0.2.2:3001" : "http://localhost:3001";
-export const BASE_URL = "https://f753-39-63-57-77.ngrok-free.app";
+export const BASE_URL = "https://94cd-119-156-123-51.ngrok-free.app";
 export const API = {
   // Auth
   SetupAccount: "/api/auth/setup-account",
