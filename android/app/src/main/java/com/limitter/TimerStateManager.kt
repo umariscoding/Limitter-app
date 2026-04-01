@@ -1,0 +1,139 @@
+package com.limitter
+
+import android.content.Context
+import android.util.Log
+import org.json.JSONArray
+import org.json.JSONObject
+import java.util.Calendar
+import java.util.concurrent.ConcurrentHashMap
+import java.util.Collections
+
+object TimerStateManager {
+    private const val TAG = "TimerState"
+    private const val PREFS_NAME = "limitter_timers"
+
+    val activeTimers = ConcurrentHashMap<String, TimerEntry>()
+    val blockedPackages: MutableSet<String> = Collections.synchronizedSet(mutableSetOf())
+
+    data class TimerEntry(
+        val packageName: String,
+        val appName: String,
+        val durationSeconds: Int,
+        var usedSeconds: Int = 0,
+        var status: String = "waiting",
+        var lastActiveTimestamp: Long = 0,
+        val startDate: String = todayDate()
+    )
+
+    fun addTimers(appsJson: String) {
+        try {
+            val arr = JSONArray(appsJson)
+            val today = todayDate()
+
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val pkg = obj.getString("package")
+                val appName = obj.optString("appName", pkg)
+                val duration = obj.optString("duration", "0").toIntOrNull() ?: 0
+
+                if (duration <= 0 || pkg.isEmpty()) continue
+
+                val existing = activeTimers[pkg]
+                if (existing != null && existing.startDate == today && existing.durationSeconds == duration) {
+                    Log.w(TAG, "KEEP timer: $appName ($pkg) ${duration}s, used=${existing.usedSeconds}s [${existing.status}]")
+                } else {
+                    activeTimers[pkg] = TimerEntry(
+                        packageName = pkg,
+                        appName = appName,
+                        durationSeconds = duration
+                    )
+                    blockedPackages.remove(pkg)
+                    Log.w(TAG, "NEW timer: $appName ($pkg) ${duration}s")
+                }
+            }
+
+            Log.w(TAG, "Total active timers: ${activeTimers.size}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse timers JSON", e)
+        }
+    }
+
+    fun markBlocked(pkg: String) {
+        blockedPackages.add(pkg)
+    }
+
+    fun clearAll() {
+        activeTimers.clear()
+        blockedPackages.clear()
+    }
+
+    fun resetForNewDay(pkg: String, timer: TimerEntry, today: String): TimerEntry {
+        val reset = timer.copy(usedSeconds = 0, status = "waiting", startDate = today)
+        activeTimers[pkg] = reset
+        blockedPackages.remove(pkg)
+        return reset
+    }
+
+    fun updateTimer(pkg: String, timer: TimerEntry) {
+        activeTimers[pkg] = timer
+    }
+
+    fun persistToPrefs(context: Context) {
+        try {
+            val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+            val arr = JSONArray()
+            for ((pkg, timer) in activeTimers) {
+                val obj = JSONObject()
+                obj.put("pkg", pkg)
+                obj.put("appName", timer.appName)
+                obj.put("duration", timer.durationSeconds)
+                obj.put("used", timer.usedSeconds)
+                obj.put("status", timer.status)
+                obj.put("startDate", timer.startDate)
+                arr.put(obj)
+            }
+            prefs.edit().putString("timers", arr.toString()).apply()
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to persist timers", e)
+        }
+    }
+
+    fun loadFromPrefs(context: Context) {
+        val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+        val json = prefs.getString("timers", null) ?: return
+        val today = todayDate()
+
+        try {
+            val arr = JSONArray(json)
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val pkg = obj.getString("pkg")
+                val startDate = obj.optString("startDate", "")
+
+                if (startDate != today) continue
+
+                val entry = TimerEntry(
+                    packageName = pkg,
+                    appName = obj.getString("appName"),
+                    durationSeconds = obj.getInt("duration"),
+                    usedSeconds = obj.getInt("used"),
+                    status = obj.getString("status"),
+                    lastActiveTimestamp = 0,
+                    startDate = startDate
+                )
+                activeTimers[pkg] = entry
+                if (entry.status == "blocked") {
+                    blockedPackages.add(pkg)
+                }
+            }
+            Log.w(TAG, "Loaded ${activeTimers.size} persisted timers")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to load persisted timers", e)
+        }
+    }
+}
+
+fun todayDate(): String {
+    val cal = Calendar.getInstance()
+    return "${cal.get(Calendar.YEAR)}-${cal.get(Calendar.MONTH) + 1}-${cal.get(Calendar.DAY_OF_MONTH)}"
+}

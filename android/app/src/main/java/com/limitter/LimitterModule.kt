@@ -4,7 +4,6 @@ import android.app.AppOpsManager
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
-import android.os.Build
 import android.os.PowerManager
 import android.os.Process
 import android.provider.Settings
@@ -43,12 +42,6 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
         }
     }
 
-    /**
-     * Check usage stats permission.
-     * Uses AppOpsManager first, then falls back to querying UsageStatsManager.
-     * Xiaomi/MIUI often reports MODE_DEFAULT even when the user has granted the
-     * permission, so we always try a real query as a fallback.
-     */
     private fun hasUsageStatsPermission(): Boolean {
         val appOps = reactContext.getSystemService(Context.APP_OPS_SERVICE) as AppOpsManager
         val mode = appOps.checkOpNoThrow(
@@ -58,8 +51,6 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
         )
         if (mode == AppOpsManager.MODE_ALLOWED) return true
 
-        // Fallback for Xiaomi/MIUI/Samsung: query actual usage data over 24 hours.
-        // If any results come back, the permission is effectively granted.
         try {
             val usm = reactContext.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
             val now = System.currentTimeMillis()
@@ -78,7 +69,6 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
         return Settings.canDrawOverlays(reactContext)
     }
 
-    /** Returns true when the app IS subject to battery optimization (not exempt). */
     private fun isBatteryOptimized(): Boolean {
         val pm = reactContext.getSystemService(Context.POWER_SERVICE) as PowerManager
         return !pm.isIgnoringBatteryOptimizations(reactContext.packageName)
@@ -94,73 +84,57 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
         }
     }
 
-    @ReactMethod
-    fun openUsageAccessSettings(promise: Promise) {
+    private fun openSystemSettings(action: String, data: Uri? = null, promise: Promise) {
         try {
-            val intent = Intent(Settings.ACTION_USAGE_ACCESS_SETTINGS)
+            val intent = Intent(action)
+            if (data != null) intent.data = data
             intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
             reactContext.startActivity(intent)
             promise.resolve(null)
         } catch (e: Exception) {
-            // Fallback for OEMs that don't support the direct intent
-            try {
-                val intent = Intent(Settings.ACTION_SETTINGS)
-                intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-                reactContext.startActivity(intent)
-                promise.resolve(null)
-            } catch (e2: Exception) {
-                promise.reject("OPEN_SETTINGS_ERROR", e2.message, e2)
-            }
+            promise.reject("OPEN_SETTINGS_ERROR", e.message, e)
+        }
+    }
+
+    @ReactMethod
+    fun openUsageAccessSettings(promise: Promise) {
+        try {
+            openSystemSettings(Settings.ACTION_USAGE_ACCESS_SETTINGS, null, promise)
+        } catch (e: Exception) {
+            openSystemSettings(Settings.ACTION_SETTINGS, null, promise)
         }
     }
 
     @ReactMethod
     fun openOverlaySettings(promise: Promise) {
-        try {
-            val intent = Intent(
-                Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
-                Uri.parse("package:${reactContext.packageName}")
-            )
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            reactContext.startActivity(intent)
-            promise.resolve(null)
-        } catch (e: Exception) {
-            promise.reject("OPEN_SETTINGS_ERROR", e.message, e)
-        }
+        openSystemSettings(
+            Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+            Uri.parse("package:${reactContext.packageName}"),
+            promise
+        )
     }
 
     @ReactMethod
     fun requestBatteryOptimizationExemption(promise: Promise) {
-        try {
-            val intent = Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS)
-            intent.data = Uri.parse("package:${reactContext.packageName}")
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            reactContext.startActivity(intent)
-            promise.resolve(null)
-        } catch (e: Exception) {
-            promise.reject("BATTERY_OPT_ERROR", e.message, e)
-        }
+        openSystemSettings(
+            Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS,
+            Uri.parse("package:${reactContext.packageName}"),
+            promise
+        )
     }
 
     @ReactMethod
     fun openApplicationDetailsSettings(promise: Promise) {
-        try {
-            val intent = Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS)
-            intent.data = Uri.parse("package:${reactContext.packageName}")
-            intent.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK)
-            reactContext.startActivity(intent)
-            promise.resolve(null)
-        } catch (e: Exception) {
-            promise.reject("OPEN_SETTINGS_ERROR", e.message, e)
-        }
+        openSystemSettings(
+            Settings.ACTION_APPLICATION_DETAILS_SETTINGS,
+            Uri.parse("package:${reactContext.packageName}"),
+            promise
+        )
     }
-
-    // ── Timer / blocker methods wired to LimitterForegroundService ──
 
     @ReactMethod
     fun sendCommand(command: String, params: ReadableMap, promise: Promise) {
         try {
-            // Check permissions first
             if (!hasUsageStatsPermission()) {
                 promise.resolve("PERMISSION_USAGE_REQUIRED")
                 return
@@ -192,13 +166,12 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
                         putExtra(LimitterForegroundService.EXTRA_APPS_JSON, jsonArray.toString())
                     }
                     ContextCompat.startForegroundService(reactContext, intent)
-                    Log.d("LimitterModule", "Started foreground service with ${jsonArray.length()} timers")
                     promise.resolve("OK")
                 }
                 "BLOCK_APP" -> {
                     val pkg = params.getString("package") ?: ""
                     if (pkg.isNotEmpty()) {
-                        LimitterForegroundService.blockedPackages.add(pkg)
+                        TimerStateManager.markBlocked(pkg)
                     }
                     promise.resolve("OK")
                 }
@@ -231,7 +204,6 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
                 val hour = app.getInt("hour")
                 val minute = app.getInt("minute")
 
-                // Calculate seconds until target time
                 val now = java.util.Calendar.getInstance()
                 val target = java.util.Calendar.getInstance().apply {
                     set(java.util.Calendar.HOUR_OF_DAY, hour)
@@ -263,7 +235,6 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
 
     @ReactMethod
     fun startWebsiteTimer(params: ReadableMap, promise: Promise) {
-        // Website blocking requires accessibility service — stub for now
         promise.resolve("OK")
     }
 
@@ -276,7 +247,7 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
             }
 
             val result = WritableNativeArray()
-            for ((pkg, timer) in LimitterForegroundService.activeTimers) {
+            for ((pkg, timer) in TimerStateManager.activeTimers) {
                 val map = WritableNativeMap()
                 map.putString("package", pkg)
                 map.putString("name", timer.appName)
