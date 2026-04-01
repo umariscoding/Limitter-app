@@ -7,6 +7,7 @@ import {
 import MainNavigator from "./src/navigation/MainNavigator";
 import { UserContextProvider, useUser } from "./src/context/UserContext";
 import { UsageContextProvider } from "./src/context/UsageContext";
+import { PolicyContextProvider } from "./src/context/PolicyContext";
 import { onAuthStateChanged, bootstrap } from "./src/auth/firebaseAuthService";
 import { startTimerRealtimeTracking } from "./src/native/timerRealtimeService";
 const navigationRef = createNavigationContainerRef<any>();
@@ -160,7 +161,9 @@ function App(): React.JSX.Element {
   return (
     <UserContextProvider>
       <UsageContextProvider>
-        <AppInner />
+        <PolicyContextProvider>
+          <AppInner />
+        </PolicyContextProvider>
       </UsageContextProvider>
     </UserContextProvider>
   );

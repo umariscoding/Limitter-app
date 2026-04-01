@@ -16,7 +16,9 @@ import {
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
-import { updatePolicyAPI, archivePolicyAPI, getPoliciesAPI } from '../services/policyService';
+import { usePolicyContext } from '../context/PolicyContext';
+import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
+import { updatePolicyAPI, archivePolicyAPI } from '../services/policyService';
 import {
   Home,
   BarChart2,
@@ -34,20 +36,17 @@ import {
   formatUsageTime,
   formatLimitTime,
   formatRemainingTime,
-  getPolicyPackageKey,
   type UIPolicy,
 } from '../utils/policyMapper';
-import { hydratePoliciesForUi } from '../helpers/helper';
-import { subscribeTimerTicks, subscribeTimerBlocked } from '../native/timerRealtimeService';
+import { useNativeTimerSync } from '../hooks/useNativeTimerSync';
 
 export default function PoliciesScreen() {
   const navigation = useNavigation<any>();
   const { user } = useUser();
+  const { policies, isLoading: loading, setPolicies } = usePolicyContext();
+  const { fetchPolicies } = usePolicyFetcher();
 
-  const [policies, setPolicies] = useState<UIPolicy[]>([]);
-  const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
-
   const [editModalVisible, setEditModalVisible] = useState(false);
   const [editingPolicy, setEditingPolicy] = useState<UIPolicy | null>(null);
   const [editLimitValue, setEditLimitValue] = useState('');
@@ -55,72 +54,13 @@ export default function PoliciesScreen() {
   const [editError, setEditError] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState(false);
 
-  const fetchPolicies = useCallback(async () => {
-    if (!user?.uid) return;
-    try {
-      const policiesResult = await getPoliciesAPI();
-      const merged = await hydratePoliciesForUi(policiesResult);
-      setPolicies(merged);
-    } catch (error) {
-      console.error('Failed to fetch policies:', error);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  }, [user?.uid]);
-
   useFocusEffect(
     useCallback(() => {
-      setLoading(true);
       fetchPolicies();
     }, [fetchPolicies]),
   );
 
-  // Real-time timer updates
-  React.useEffect(() => {
-    const unsubTick = subscribeTimerTicks(event => {
-      if (!event?.package) return;
-      const eventPkg = String(event.package).trim().toLowerCase();
-
-      setPolicies(prev =>
-        prev.map(item => {
-          if (getPolicyPackageKey(item) !== eventPkg) return item;
-
-          const budgetSeconds = item._nativeBudgetSeconds || Number(item.max_time_minutes || 0) * 60;
-          const remaining = Math.max(0, Number(event.remaining || 0));
-          const consumedSeconds = Math.max(0, budgetSeconds - remaining);
-          const eventBlocked =
-            typeof event.isBlocked === 'boolean'
-              ? event.isBlocked
-              : String(event.status || '').toLowerCase() === 'blocked';
-
-          return {
-            ...item,
-            time_used_minutes: consumedSeconds / 60,
-            is_blocked: eventBlocked,
-            status: eventBlocked ? 'blocked' : consumedSeconds > 0 ? 'active' : item.status,
-          };
-        }),
-      );
-    });
-
-    const unsubBlocked = subscribeTimerBlocked(event => {
-      if (!event?.package) return;
-      const eventPkg = String(event.package).trim().toLowerCase();
-      setPolicies(prev =>
-        prev.map(item =>
-          getPolicyPackageKey(item) === eventPkg
-            ? { ...item, is_blocked: true, status: 'blocked' }
-            : item,
-        ),
-      );
-    });
-
-    return () => {
-      unsubTick();
-      unsubBlocked();
-    };
-  }, []);
+  useNativeTimerSync(setPolicies);
 
   const handleDelete = (policy: UIPolicy) => {
     Alert.alert(

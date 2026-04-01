@@ -270,9 +270,9 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun getActiveTimers(promise: Promise) {
         try {
-            // If service was killed, restore from SharedPreferences
-            if (LimitterForegroundService.activeTimers.isEmpty()) {
-                LimitterForegroundService.loadPersistedTimers(reactContext)
+            if (!LimitterForegroundService.isRunning()) {
+                promise.resolve(WritableNativeArray())
+                return
             }
 
             val result = WritableNativeArray()

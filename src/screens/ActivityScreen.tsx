@@ -9,185 +9,23 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
-import { useUser } from '../context/UserContext';
-import { getPoliciesAPI } from '../services/policyService';
-import { getNativeBlockedPackages } from '../native/appBlockerService';
-import { subscribeTimerBlocked, subscribeTimerTicks } from '../native/timerRealtimeService';
-import { resolveCurrentDeviceId } from '../native/currentDeviceService';
+import { useNavigation } from '@react-navigation/native';
+import { usePolicyContext } from '../context/PolicyContext';
+import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
+import { useNativeTimerSync } from '../hooks/useNativeTimerSync';
 
 export default function ActivityScreen() {
   const navigation = useNavigation<any>();
-  const { user } = useUser();
-
-  const [loading, setLoading] = useState(true);
+  const { policies: limits, isLoading: loading, setPolicies: setLimits } = usePolicyContext();
+  const { fetchPolicies } = usePolicyFetcher();
   const [refreshing, setRefreshing] = useState(false);
-  const [limits, setLimits] = useState<any[]>([]);
-  const [deviceId, setDeviceId] = useState<string>('');
 
-  const getLimitPackageKey = React.useCallback((item: any) => {
-    return String(item?.app_name || item?.package_name || item?.packageName || '')
-      .trim()
-      .toLowerCase();
-  }, []);
+  useNativeTimerSync(setLimits);
 
-  const matchesLimitPackage = React.useCallback(
-    (item: any, packageName?: string) => {
-      if (!packageName) return false;
-      return getLimitPackageKey(item) === String(packageName).trim().toLowerCase();
-    },
-    [getLimitPackageKey]
-  );
-
-  const resolveBlockedState = React.useCallback((item: any) => {
-    if (typeof item?.is_blocked === 'boolean') return item.is_blocked;
-
-    const rawStatus = String(item?.status_text || item?.status || '')
-      .trim()
-      .toLowerCase();
-    if (rawStatus.includes('block')) return true;
-    if (rawStatus.includes('active') || rawStatus.includes('running') || rawStatus.includes('unblocked')) {
-      return false;
-    }
-
-    const blockedUntil = Number(item?.blocked_until_timestamp || 0);
-    if (blockedUntil > Date.now()) return true;
-
-    const maxMinutes = Number(item?.max_time_minutes || 0);
-    const usedMinutes = Number(item?.time_used_minutes || 0);
-    return maxMinutes > 0 && usedMinutes >= maxMinutes;
-  }, []);
-
-  const normalizeLimit = React.useCallback(
-    (item: any) => ({
-      ...item,
-      is_blocked: resolveBlockedState(item),
-    }),
-    [resolveBlockedState]
-  );
-
-  React.useEffect(() => {
-    const loadCurrentDevice = async () => {
-      if (!user?.uid) return;
-      const resolvedId = await resolveCurrentDeviceId(user.uid);
-      if (resolvedId) {
-        setDeviceId(resolvedId);
-      }
-    };
-
-    loadCurrentDevice();
-  }, [user?.uid]);
-
-  const fetchActivity = async () => {
-    if (!user?.uid) {
-      setLoading(false);
-      return;
-    }
-
-    if (!deviceId) {
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    try {
-      const policiesResult = await getPoliciesAPI();
-      const policiesData = Array.isArray(policiesResult) ? policiesResult : [];
-      // Map policies to limit shape and sort with latest first
-      const list = policiesData.map((item: any) => {
-        const p = item.policy || item;
-        const state = item.policyState || p.policyState || {};
-        return {
-          id: p.policyId,
-          app_name: p.targetKey,
-          package_name: p.targetKey,
-          packageName: p.targetKey,
-          category: p.type === 'category' ? p.targetLabel : null,
-          target_label: p.targetLabel,
-          target_type: p.type,
-          max_time_minutes: p.dailyLimitMinutes,
-          time_used_minutes: state.usageTodayMinutes || 0,
-          is_blocked: state.isExhaustedToday || false,
-          blocked_until_timestamp: 0,
-          created_at: p.createdAt?._seconds ? p.createdAt._seconds * 1000 : Date.now(),
-        };
-      });
-      const sortedList = list.sort(
-        (a: any, b: any) => b.created_at - a.created_at
-      );
-      const normalizedList = sortedList.map(normalizeLimit);
-      const nativeBlockedPackages = await getNativeBlockedPackages();
-
-      const reconciledList = normalizedList.map((item: any) => {
-        const key = getLimitPackageKey(item);
-        if (nativeBlockedPackages.has(key)) {
-          return { ...item, is_blocked: true };
-        }
-        return item;
-      });
-
-      setLimits(reconciledList);
-      console.log('📊 Activity - All limits:', sortedList);
-    } catch (error) {
-      console.error('Activity fetch failed:', error);
-      setLimits([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  useFocusEffect(
-    React.useCallback(() => {
-      if (!deviceId) return;
-      setLoading(true);
-      fetchActivity();
-    }, [user?.uid, deviceId])
-  );
-
-  React.useEffect(() => {
-    const unsubTick = subscribeTimerTicks(event => {
-      if (!event?.package) return;
-
-      setLimits(prev =>
-        prev.map((item: any) => {
-          if (!matchesLimitPackage(item, event.package)) return item;
-
-          const budgetSeconds = item._nativeBudgetSeconds || Number(item.max_time_minutes || 0) * 60;
-          const remaining = Math.max(0, Number(event.remaining || 0));
-          const consumedSeconds = Math.max(0, budgetSeconds - remaining);
-          const eventBlocked =
-            typeof event.isBlocked === 'boolean'
-              ? event.isBlocked
-              : String(event.status || '').toLowerCase() === 'blocked';
-
-          return {
-            ...item,
-            time_used_minutes: consumedSeconds / 60,
-            is_blocked: eventBlocked,
-          };
-        })
-      );
-    });
-
-    const unsubBlocked = subscribeTimerBlocked(event => {
-      if (!event?.package) return;
-      setLimits(prev =>
-        prev.map((item: any) =>
-          matchesLimitPackage(item, event.package) ? { ...item, is_blocked: true } : item
-        )
-      );
-    });
-
-    return () => {
-      unsubTick();
-      unsubBlocked();
-    };
-  }, [user?.uid, matchesLimitPackage]);
-
-  const onRefresh = () => {
+  const onRefresh = async () => {
     setRefreshing(true);
-    fetchActivity();
+    await fetchPolicies();
+    setRefreshing(false);
   };
 
   const formatMinutes = (mins: number) => {
