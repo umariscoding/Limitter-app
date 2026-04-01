@@ -90,27 +90,8 @@ export async function hydratePoliciesForUi(policiesResult: any): Promise<UIPolic
   const nativeTimers = await getNativeTimerStates();
   const nativeBlockedPackages = nativeBlockedPackagesFromTimers(nativeTimers);
 
-  console.log('[HydratePoliciesForUi] Native timers snapshot:',
-    nativeTimers.map(t => ({
-      package: t.package,
-      status: t.status,
-      remainingSeconds: t.remainingSeconds,
-      liveTimerUsageBudgetSeconds: t.liveTimerUsageBudgetSeconds,
-    }))
-  );
-
   let merged = mergeBlockedOverlaysIntoPolicies(normalized, nativeBlockedPackages);
   merged = mergeLiveTimerUsageIntoPolicies(merged, nativeTimers);
-
-  console.log('[HydratePoliciesForUi] Usage after merge:',
-    merged.map(p => ({
-      id: p.id,
-      package: p.packageName || p.package_name || p.app_name,
-      usedMinutes: p.time_used_minutes,
-      maxMinutes: p.max_time_minutes,
-      isBlocked: p.is_blocked,
-    }))
-  );
 
   return merged;
 }

@@ -53,7 +53,7 @@ export function usePolicyFetcher() {
           if (pkg && budgetSeconds > 0) {
             try {
               await startAppUsageTimer(pkg, overriddenLimit.target_label || pkg, budgetSeconds);
-            } catch (_) {}
+            } catch (_) { /* silenced */ }
           }
         }
       } else {
@@ -94,12 +94,12 @@ export function usePolicyFetcher() {
         if (remainingSeconds <= 0) continue;
         try {
           await startAppUsageTimer(pkg, limit.target_label || pkg, remainingSeconds);
-        } catch (_) {}
+        } catch (_) { /* silenced */ }
       }
 
       setLastFetchedAt(Date.now());
-    } catch (_) {
-    } finally {
+    } catch (_) { /* silenced */ }
+    finally {
       setIsLoading(false);
     }
   }, [setPolicies, setIsLoading, setLastFetchedAt]);

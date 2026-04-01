@@ -1,10 +1,10 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
-import { formatUsageTime, formatLimitTime } from '../utils/policyMapper';
+import { formatUsageTime, formatLimitTime, type UIPolicy } from '../utils/policyMapper';
 
 interface PolicyCardProps {
-  limit: any;
-  onOverride: (limit: any) => void;
+  limit: UIPolicy;
+  onOverride: (limit: UIPolicy) => void;
 }
 
 export default function PolicyCard({ limit, onOverride }: PolicyCardProps) {

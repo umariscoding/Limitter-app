@@ -12,7 +12,7 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft } from 'lucide-react-native';
 import { useUser } from '../context/UserContext';
-import { resolveCurrentDeviceId } from '../native/currentDeviceService';
+import { useDeviceResolver } from '../hooks/useDeviceResolver';
 import { getPoliciesAPI } from '../services/policyService';
 
 type LimitItem = {
@@ -29,21 +29,14 @@ const BAR_COLORS = ['#4F46E5', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#14B
 export default function DailyLimitsGraphScreen() {
   const navigation = useNavigation<any>();
   const { user } = useUser();
+  const { deviceId } = useDeviceResolver(user?.uid);
 
-  const [deviceId, setDeviceId] = useState<string>('');
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
   const [limits, setLimits] = useState<LimitItem[]>([]);
 
-  const fetchData = async (resolvedDeviceId?: string) => {
-    if (!user?.uid) {
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    const workingDeviceId = resolvedDeviceId || deviceId;
-    if (!workingDeviceId) {
+  const fetchData = async () => {
+    if (!user?.uid || !deviceId) {
       setLoading(false);
       setRefreshing(false);
       return;
@@ -65,8 +58,7 @@ export default function DailyLimitsGraphScreen() {
         };
       });
       setLimits(list);
-    } catch (error) {
-      console.error('Failed to fetch daily limits graph data:', error);
+    } catch {
       setLimits([]);
     } finally {
       setLoading(false);
@@ -75,19 +67,10 @@ export default function DailyLimitsGraphScreen() {
   };
 
   useEffect(() => {
-    const init = async () => {
-      if (!user?.uid) return;
-      const resolved = await resolveCurrentDeviceId(user.uid);
-      if (!resolved) {
-        setLoading(false);
-        return;
-      }
-      setDeviceId(resolved);
-      fetchData(resolved);
-    };
-
-    init();
-  }, [user?.uid]);
+    if (deviceId) {
+      fetchData();
+    }
+  }, [user?.uid, deviceId]);
 
   const chartRows = useMemo(() => {
     const filtered = limits.filter(item => Number(item.max_time_minutes || 0) > 0);

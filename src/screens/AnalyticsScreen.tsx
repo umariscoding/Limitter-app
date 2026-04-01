@@ -6,8 +6,10 @@ import { useUser } from '../context/UserContext';
 import { useUsageContext } from '../context/UsageContext';
 import { WeeklyUsageGraph } from '../components/WeeklyUsageGraph';
 import { getPoliciesAPI } from '../services/policyService';
-import { resolveCurrentDeviceId } from '../native/currentDeviceService';
+import { useDeviceResolver } from '../hooks/useDeviceResolver';
 import { getNativeBlockedPackages } from '../native/appBlockerService';
+import { getPolicyPackageKey, formatLimitTime } from '../utils/policyMapper';
+
 interface BreakdownItem {
   id: string;
   name: string;
@@ -18,33 +20,15 @@ interface BreakdownItem {
   timerSetAt: number;
 }
 
-const formatMinutes = (mins: number) => {
-  const safe = Math.max(0, Number(mins || 0));
-  const h = Math.floor(safe / 60);
-  const m = safe % 60;
-  return `${h}h ${m}m`;
-};
-
 export default function AnalyticsScreen() {
   const navigation = useNavigation<any>();
   const { user } = useUser();
   const { weeklyUsage, isLoadingWeekly, weeklyError } = useUsageContext();
+  const { deviceId } = useDeviceResolver(user?.uid);
   const [breakdown, setBreakdown] = React.useState<BreakdownItem[]>([]);
 
-  const getLimitPackageKey = React.useCallback((item: any) => {
-    return String(item?.app_name || item?.package_name || item?.packageName || '')
-      .trim()
-      .toLowerCase();
-  }, []);
-
   const fetchBreakdown = React.useCallback(async () => {
-    if (!user?.uid) {
-      setBreakdown([]);
-      return;
-    }
-
-    const deviceId = await resolveCurrentDeviceId(user.uid);
-    if (!deviceId) {
+    if (!user?.uid || !deviceId) {
       setBreakdown([]);
       return;
     }
@@ -76,7 +60,7 @@ export default function AnalyticsScreen() {
           const appName = String(row?.app_name || row?.package_name || row?.packageName || '').trim();
           if (!appName) return null;
 
-          const packageKey = getLimitPackageKey(row);
+          const packageKey = getPolicyPackageKey(row);
 
           const usedMinutes = Math.max(0, Number(row?.time_used_minutes ?? row?.used_minutes ?? 0));
           const limitMinutes = Math.max(0, Number(row?.max_time_minutes ?? row?.limit_minutes ?? 0));
@@ -87,7 +71,6 @@ export default function AnalyticsScreen() {
               ? blockedRaw
               : statusText.includes('block') || statusText.includes('blocked');
 
-          // Keep app ACTIVE until it actually reaches timer limit.
           const blockedByUsage = limitMinutes > 0 && usedMinutes >= limitMinutes;
           const blockedUntil = Number(row?.blocked_until_timestamp || 0);
           const blockedByUntil = blockedUntil > Date.now();
@@ -95,7 +78,6 @@ export default function AnalyticsScreen() {
 
           let resolvedBlocked = isBlocked || blockedByUsage || blockedByUntil || blockedByNative;
 
-          // Recent timer logic: prefer when timer/limit was created.
           const timerSetAt = Math.max(
             Number(new Date(row?.created_at || 0).getTime() || 0),
             Number(new Date(row?.updated_at || 0).getTime() || 0)
@@ -113,7 +95,6 @@ export default function AnalyticsScreen() {
         })
         .filter((item: BreakdownItem | null): item is BreakdownItem => !!item);
 
-      // Deduplicate per app and keep latest timer-set entry for that app.
       const latestByApp = new Map<string, BreakdownItem>();
       normalized.forEach((item: BreakdownItem) => {
         const key = item.name.trim().toLowerCase();
@@ -131,11 +112,10 @@ export default function AnalyticsScreen() {
         .slice(0, 6);
 
       setBreakdown(mapped);
-    } catch (error) {
-      console.error('❌ Analytics breakdown fetch failed:', error);
+    } catch {
       setBreakdown([]);
     }
-  }, [user?.uid]);
+  }, [user?.uid, deviceId]);
 
   React.useEffect(() => {
     void fetchBreakdown();
@@ -194,14 +174,14 @@ export default function AnalyticsScreen() {
                     </View>
                     <View style={styles.breakdownRow}>
                       <Text style={styles.appCategory}>{item.category}</Text>
-                      <Text style={styles.appTime}>{formatMinutes(item.usedMinutes)}</Text>
+                      <Text style={styles.appTime}>{formatLimitTime(item.usedMinutes)}</Text>
                     </View>
                     <View style={styles.track}>
                       <View style={[styles.fill, { width: `${pct}%` }]} />
                     </View>
                     <View style={styles.breakdownRow}>
-                      <Text style={styles.metaText}>Used: {formatMinutes(item.usedMinutes)}</Text>
-                      <Text style={styles.metaText}>Limit: {formatMinutes(item.limitMinutes)}</Text>
+                      <Text style={styles.metaText}>Used: {formatLimitTime(item.usedMinutes)}</Text>
+                      <Text style={styles.metaText}>Limit: {formatLimitTime(item.limitMinutes)}</Text>
                     </View>
                   </View>
                 );

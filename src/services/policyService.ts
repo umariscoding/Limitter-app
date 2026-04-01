@@ -44,7 +44,6 @@ export const restorePolicyAPI = async (policyId: string) => {
   return await axiosService.post(`${API.Policies}/${policyId}/restore`);
 };
 
-// DEV ONLY: hard delete all policies + state (for testing reset)
 export const hardDeleteAllPoliciesAPI = async () => {
   return await axiosService.delete(`${API.Policies}/all/hard`);
 };

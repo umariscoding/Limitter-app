@@ -168,7 +168,7 @@ export default function DashboardScreen() {
                 if (LimitterModule?.sendCommand) {
                   await LimitterModule.sendCommand('STOP', {});
                 }
-              } catch {}
+              } catch { /* silenced */ }
               updateBlockedApps([]);
               setLimits([]);
               setToastMessage('All limits removed');

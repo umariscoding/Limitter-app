@@ -1,10 +1,5 @@
 import { LimitterModule } from './limitterNativeModules';
 
-/**
- * Monitor foreground app and enforce blocking.
- * Requires native Android module + Accessibility Service permissions.
- */
-
 let blockedApps: Map<string, { blockedUntil: number; appName: string }> = new Map();
 
 export interface NativeTimerState {
@@ -29,7 +24,6 @@ export const startAppUsageTimer = async (
 ) => {
   try {
     if (!LimitterModule?.sendCommand) {
-      console.warn('⚠️ LimitterModule.sendCommand not available');
       return { success: false, message: 'Native timer module not available' };
     }
 
@@ -48,10 +42,8 @@ export const startAppUsageTimer = async (
       return { success: false, message: response };
     }
 
-    console.log('✅ Native timer started for', appName, `(${packageName})`, safeDuration, 'seconds');
     return { success: true };
-  } catch (error) {
-    console.error('❌ Failed to start native timer:', error);
+  } catch {
     return { success: false, message: 'Failed to start native timer' };
   }
 };
@@ -64,7 +56,6 @@ export const startAppClockTimer = async (
 ) => {
   try {
     if (!LimitterModule?.startClockTimer) {
-      console.warn('⚠️ LimitterModule.startClockTimer not available');
       return { success: false, message: 'Native clock timer module not available' };
     }
 
@@ -84,8 +75,7 @@ export const startAppClockTimer = async (
     }
 
     return { success: true };
-  } catch (error) {
-    console.error('❌ Failed to start clock timer:', error);
+  } catch {
     return { success: false, message: 'Failed to start exact-time timer' };
   }
 };
@@ -101,7 +91,6 @@ export const startWebsiteTimer = async ({
 }) => {
   try {
     if (!LimitterModule?.startWebsiteTimer) {
-      console.warn('⚠️ LimitterModule.startWebsiteTimer not available');
       return { success: false, message: 'Native website timer module not available' };
     }
 
@@ -126,8 +115,7 @@ export const startWebsiteTimer = async ({
     }
 
     return { success: true };
-  } catch (error) {
-    console.error('❌ Failed to start website timer:', error);
+  } catch {
     return { success: false, message: 'Failed to start website timer' };
   }
 };
@@ -149,8 +137,7 @@ export const getWebsiteBlockerStatus = async (): Promise<WebsiteBlockerStatus> =
       ready: Boolean(response?.ready),
       targetDomain: response?.targetDomain ? String(response.targetDomain) : undefined,
     };
-  } catch (error) {
-    console.error('❌ Failed to read website blocker status:', error);
+  } catch {
     return {
       overlayEnabled: false,
       accessibilityEnabled: false,
@@ -173,11 +160,9 @@ export const startAppBlockerService = async (
 ) => {
   try {
     if (!LimitterModule?.sendCommand) {
-      console.warn('⚠️ LimitterModule.sendCommand not available - native bridge not linked');
       return false;
     }
 
-    // Store blocked apps locally
     const now = Date.now();
     blockedAppsList.forEach(app => {
       if (app.blocked_until_timestamp && app.blocked_until_timestamp > now) {
@@ -188,9 +173,6 @@ export const startAppBlockerService = async (
       }
     });
 
-    console.log('✅ AppBlocker started with', blockedApps.size, 'blocked apps');
-
-    // Push currently blocked apps to native service so overlay enforcement is immediate.
     for (const app of blockedAppsList) {
       if (app.blocked_until_timestamp && app.blocked_until_timestamp > now) {
         await LimitterModule.sendCommand('BLOCK_APP', {
@@ -201,8 +183,7 @@ export const startAppBlockerService = async (
     }
 
     return true;
-  } catch (error) {
-    console.error('❌ Failed to start AppBlocker:', error);
+  } catch {
     return false;
   }
 };
@@ -217,7 +198,6 @@ export const updateBlockedApps = (newList: Array<{ package_name: string; app_nam
       });
     }
   });
-  console.log('✅ Blocked apps list updated:', blockedApps.size, 'apps');
 };
 
 export async function getNativeTimerStates(): Promise<NativeTimerState[]> {
@@ -242,8 +222,7 @@ export async function getNativeTimerStates(): Promise<NativeTimerState[]> {
           : Number(item?.liveTimerUsageBudgetSeconds || 0),
       status: item?.status ? String(item.status).toLowerCase() : undefined,
     }));
-  } catch (error) {
-    console.warn('Failed to read native timer states:', error);
+  } catch {
     return [];
   }
 }

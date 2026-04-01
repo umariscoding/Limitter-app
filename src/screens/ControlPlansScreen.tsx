@@ -1,12 +1,12 @@
 import React, { useState, useEffect } from 'react';
-import { 
-  View, 
-  Text, 
-  StyleSheet, 
-  TouchableOpacity, 
-  ScrollView, 
-  SafeAreaView, 
-  Alert, 
+import {
+  View,
+  Text,
+  StyleSheet,
+  TouchableOpacity,
+  ScrollView,
+  SafeAreaView,
+  Alert,
   Switch,
   Keyboard,
   Platform,
@@ -15,13 +15,13 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { 
-  Home, 
-  BarChart2, 
-  Settings as SettingsIcon, 
-  Smartphone, 
-  Monitor, 
-  Laptop, 
+import {
+  Home,
+  BarChart2,
+  Settings as SettingsIcon,
+  Smartphone,
+  Monitor,
+  Laptop,
   Tablet,
   Clock,
   Calendar,
@@ -30,23 +30,19 @@ import {
   Bell,
   ChevronRight,
   Plus,
-  ArrowLeft
+  ArrowLeft,
 } from 'lucide-react-native';
-
-// Standard React Native app, likely no NativeWind setup shown in package.json
-// Using StyleSheet for maximum compatibility
-
-import { 
-  planDetails, 
-  usageControls, 
+import {
+  planDetails,
+  usageControls,
   featureToggles,
   controlLabels,
-  dashboardLabels
+  dashboardLabels,
 } from '../data/appData';
 import { useUser } from '../context/UserContext';
 import { getDevicesAPI } from '../services/deviceService';
 import { Device as BackendDevice } from '../interface/Device';
-import { resolveCurrentDeviceId } from '../native/currentDeviceService';
+import { useDeviceResolver } from '../hooks/useDeviceResolver';
 import { normalizePlan } from '../utils/planRules';
 
 type PlanTier = 'Free' | 'Pro' | 'Elite';
@@ -65,6 +61,7 @@ export default function ControlPlansScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user, logout } = useUser();
+  const { deviceId: currentDeviceId } = useDeviceResolver(user?.uid);
 
   const planLabelMap: Record<'free' | 'pro' | 'elite', PlanTier> = {
     free: 'Free',
@@ -72,12 +69,10 @@ export default function ControlPlansScreen() {
     elite: 'Elite',
   };
 
-  // Mock Data
   const [currentPlan, setCurrentPlan] = useState<PlanTier>(
     planLabelMap[normalizePlan(user?.plan)]
   );
 
-  // Handle Plan Sync from SubscriptionPlansScreen
   useEffect(() => {
     if (route.params?.activePlan) {
       setCurrentPlan(route.params.activePlan);
@@ -87,18 +82,15 @@ export default function ControlPlansScreen() {
   useEffect(() => {
     setCurrentPlan(planLabelMap[normalizePlan(user?.plan)]);
   }, [user?.plan]);
-  
+
   const devicesTotal = planDetails.deviceSlotsTotal;
   const [managedDevices, setManagedDevices] = useState<DisplayDevice[]>([]);
   const [loadingDevices, setLoadingDevices] = useState(true);
   const [refreshingDevices, setRefreshingDevices] = useState(false);
-  const [currentDeviceId, setCurrentDeviceId] = useState<string>('');
 
-  // Usage Controls State
   const [safeBrowsing, setSafeBrowsing] = useState(featureToggles.find(f => f.key === 'safeBrowsing')?.defaultValue ?? true);
   const [smartOverride, setSmartOverride] = useState(featureToggles.find(f => f.key === 'smartOverride')?.defaultValue ?? true);
 
-  // Derived Values
   const devicesUsed = managedDevices.length;
   const progressPercentage = devicesTotal > 0 ? (devicesUsed / devicesTotal) * 100 : 0;
   const slotsRemaining = devicesTotal - devicesUsed;
@@ -142,19 +134,13 @@ export default function ControlPlansScreen() {
     }
 
     try {
-      const resolvedId = currentDeviceId || await resolveCurrentDeviceId();
-      if (resolvedId && resolvedId !== currentDeviceId) {
-        setCurrentDeviceId(resolvedId);
-      }
-
       const response = await getDevicesAPI();
       const list = Array.isArray(response?.data) ? response.data : [];
       const sorted = [...list].sort(
         (a, b) => Number(b.last_active || 0) - Number(a.last_active || 0)
       );
       setManagedDevices(sorted.map(mapApiDeviceToDisplay));
-    } catch (error) {
-      console.error('Failed to load devices:', error);
+    } catch {
       setManagedDevices([]);
     } finally {
       setLoadingDevices(false);
@@ -184,16 +170,16 @@ export default function ControlPlansScreen() {
   const handleSignOut = () => {
     Alert.alert(controlLabels.signOut, controlLabels.signOutConfirm, [
       { text: controlLabels.cancel, style: "cancel" },
-      { 
-        text: controlLabels.signOut, 
-        style: "destructive", 
+      {
+        text: controlLabels.signOut,
+        style: "destructive",
         onPress: () => {
           logout();
           navigation.reset({
             index: 0,
             routes: [{ name: 'Login' }],
           });
-        } 
+        }
       }
     ]);
   };
@@ -222,7 +208,7 @@ export default function ControlPlansScreen() {
           />
         }
       >
-        
+
         <View style={styles.planCard}>
           <View style={styles.planCardHeader}>
             <Text style={styles.planTitle}>{currentPlan}{controlLabels.memberSuffix}</Text>
@@ -248,7 +234,7 @@ export default function ControlPlansScreen() {
           </Text>
         </View>
 
-        <TouchableOpacity 
+        <TouchableOpacity
           style={[styles.primaryBtn, isTopPlan && styles.disabledBtn]}
           onPress={() => {
             Keyboard.dismiss();
@@ -302,9 +288,9 @@ export default function ControlPlansScreen() {
         </View>
 
         {usageControls.map((control) => (
-          <TouchableOpacity 
-            key={control.id} 
-            style={styles.row} 
+          <TouchableOpacity
+            key={control.id}
+            style={styles.row}
             onPress={() => {
               if (control.icon === 'clock') {
                 navigation.navigate('DailyLimitsGraphScreen');
@@ -335,10 +321,10 @@ export default function ControlPlansScreen() {
               <Text style={styles.rowTitle}>{toggle.title}</Text>
               <Text style={styles.rowSubtitle}>{toggle.description}</Text>
             </View>
-            <Switch 
-              value={toggle.key === 'safeBrowsing' ? safeBrowsing : smartOverride} 
-              onValueChange={toggle.key === 'safeBrowsing' ? setSafeBrowsing : setSmartOverride} 
-              trackColor={{ false: "#E2E8F0", true: "#4F46E5" }} 
+            <Switch
+              value={toggle.key === 'safeBrowsing' ? safeBrowsing : smartOverride}
+              onValueChange={toggle.key === 'safeBrowsing' ? setSafeBrowsing : setSmartOverride}
+              trackColor={{ false: "#E2E8F0", true: "#4F46E5" }}
             />
           </View>
         ))}
@@ -384,28 +370,17 @@ export default function ControlPlansScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { 
-    flexDirection: 'row', 
-    alignItems: 'center', 
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
-    paddingBottom: 15,
-    borderBottomWidth: 1, 
-    borderBottomColor: '#E2E8F0', 
-    backgroundColor: '#FFF' 
-  },
+  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#FFF' },
   backButton: { padding: 8 },
   headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: '#0F172A' },
   headerSpacer: { width: 40 },
   scrollContent: { padding: 20, paddingBottom: 40 },
-  
   planCard: { backgroundColor: '#4F46E5', borderRadius: 16, padding: 20, marginBottom: 20 },
   planCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
   planTitle: { fontSize: 20, fontWeight: '800', color: '#FFF', marginRight: 10 },
   activeBadge: { backgroundColor: '#10B981', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
   activeBadgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
   planBenefits: { color: '#E0E7FF', fontSize: 13 },
-
   card: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 20 },
   quotaHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
   quotaLabel: { fontWeight: '600', color: '#1E293B' },
@@ -413,15 +388,12 @@ const styles = StyleSheet.create({
   progressBg: { height: 8, backgroundColor: '#E2E8F0', borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
   progressFill: { height: '100%', backgroundColor: '#F59E0B' },
   quotaHint: { fontSize: 12, color: '#64748B' },
-
   primaryBtn: { backgroundColor: '#0F172A', padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 24 },
   primaryBtnText: { color: '#FFF', fontWeight: '700' },
   disabledBtn: { backgroundColor: '#94A3B8' },
-
   sectionHeader: { marginTop: 10, marginBottom: 12 },
   sectionTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
   sectionSubtitle: { fontSize: 14, color: '#64748B' },
-
   deviceCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
   deviceIconWrapper: { marginRight: 12 },
   deviceInfo: { flex: 1 },
@@ -433,37 +405,12 @@ const styles = StyleSheet.create({
   statusText: { fontSize: 11, fontWeight: '700' },
   onlineText: { color: '#15803D' },
   offlineText: { color: '#64748B' },
-
   addBtn: { flexDirection: 'row', padding: 16, borderStyle: 'dashed', borderWidth: 2, borderColor: '#CBD5E1', borderRadius: 12, alignItems: 'center', marginTop: 4, marginBottom: 24, justifyContent: 'center' },
   addBtnText: { fontWeight: '600', color: '#64748B' },
-  devicesLoadingWrap: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 16,
-    alignItems: 'center',
-    marginBottom: 10,
-  },
-  devicesLoadingText: {
-    marginTop: 8,
-    color: '#64748B',
-    fontSize: 13,
-  },
-  emptyDeviceWrap: {
-    backgroundColor: '#FFFFFF',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    borderRadius: 12,
-    padding: 16,
-    marginBottom: 10,
-  },
-  emptyDeviceText: {
-    color: '#64748B',
-    fontSize: 13,
-    textAlign: 'center',
-  },
-
+  devicesLoadingWrap: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 10 },
+  devicesLoadingText: { marginTop: 8, color: '#64748B', fontSize: 13 },
+  emptyDeviceWrap: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 16, marginBottom: 10 },
+  emptyDeviceText: { color: '#64748B', fontSize: 13, textAlign: 'center' },
   row: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
   toggleRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
   rowIconBox: { marginRight: 12, width: 24, alignItems: 'center' },
@@ -471,12 +418,10 @@ const styles = StyleSheet.create({
   rowTitle: { fontWeight: '600', color: '#1E293B' },
   rowSubtitle: { fontSize: 12, color: '#64748B' },
   spacer: { height: 10 },
-
   signOutBtn: { marginTop: 20, padding: 16, backgroundColor: '#FEF2F2', borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#FEE2E2' },
   signOutText: { color: '#EF4444', fontWeight: '700' },
-
   footer: { flexDirection: 'row', padding: 12, borderTopWidth: 1, borderTopColor: '#E2E8F0', backgroundColor: '#FFF', justifyContent: 'space-around', paddingBottom: 24 },
   navItem: { alignItems: 'center' },
   navLabel: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
-  activeNav: { color: '#4F46E5' }
+  activeNav: { color: '#4F46E5' },
 });

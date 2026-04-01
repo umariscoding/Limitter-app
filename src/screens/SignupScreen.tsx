@@ -51,7 +51,6 @@ const SignupScreen: React.FC = () => {
         name.trim() || email.split("@")[0],
       );
       setShowToast(true);
-      // Navigate to verify email screen after short delay for toast
       setTimeout(() => {
         navigation.navigate("VerifyEmail", { email: email.trim() });
       }, 1500);

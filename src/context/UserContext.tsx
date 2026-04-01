@@ -18,7 +18,6 @@ export interface AccountContext {
     deviceId: string;
     installationId: string;
   } | null;
-  // Backward-compat aliases for screens not yet migrated (Phase 9)
   name: string;
   plan: "free" | "pro" | "elite";
   overrides_left: number;
@@ -34,7 +33,6 @@ interface UserContextType {
   setFirebaseUser: (fbUser: FirebaseUser | null) => void;
   setIsLoading: (loading: boolean) => void;
   clearUser: () => void;
-  // Backward-compat for screens not yet migrated
   login: (userData: any) => void;
   logout: () => void;
   updateUser: (userData: Partial<AccountContext>) => void;
@@ -62,7 +60,6 @@ function parseAccountData(data: any): AccountContext | null {
     device: data.device
       ? { deviceId: data.device.deviceId, installationId: data.device.installationId }
       : null,
-    // Compat aliases
     name: displayName || data.user?.email?.split("@")[0] || "",
     plan: planCode,
     overrides_left:

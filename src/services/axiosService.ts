@@ -3,10 +3,6 @@ import axios from "axios";
 import { BASE_URL } from "../config/config";
 import { auth } from "../config/firebase";
 
-/**
- * API response envelope from the backend.
- * { data: T, message: string, status: number, success: boolean }
- */
 interface ApiEnvelope<T> {
   success: boolean;
   message: string;
@@ -62,10 +58,6 @@ class AxiosService {
     );
   }
 
-  /**
-   * All methods unwrap the API envelope and return the payload directly.
-   * Callers get T, not { success, message, data: T }.
-   */
   public async get<T>(url: string, config?: AxiosRequestConfig): Promise<T> {
     const response: RawAxiosResponse<ApiEnvelope<T>> =
       await this.axiosInstance.get(url, config);

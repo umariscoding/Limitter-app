@@ -164,7 +164,6 @@ export default function PoliciesScreen() {
 
     return (
       <View style={s.card}>
-        {/* Top row */}
         <View style={s.cardTop}>
           <View style={[s.iconBadge, { backgroundColor: color }]}>
             {getTypeIcon(item.target_type)}
@@ -193,7 +192,6 @@ export default function PoliciesScreen() {
           </View>
         </View>
 
-        {/* Progress */}
         <View style={s.progressSection}>
           <View style={s.progressLabels}>
             <Text style={s.progressLabel}>{formatUsageTime(item.time_used_minutes)} used</Text>
@@ -210,7 +208,6 @@ export default function PoliciesScreen() {
           </View>
         </View>
 
-        {/* Actions */}
         <View style={s.cardActions}>
           <TouchableOpacity style={s.actionBtn} onPress={() => openEditModal(item)} activeOpacity={0.6}>
             <Pencil size={14} color="#4F46E5" />
@@ -230,7 +227,6 @@ export default function PoliciesScreen() {
     <SafeAreaView style={s.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
-      {/* Header */}
       <View style={s.header}>
         <View>
           <Text style={s.headerTitle}>My Limits</Text>
@@ -241,7 +237,6 @@ export default function PoliciesScreen() {
         </TouchableOpacity>
       </View>
 
-      {/* Content */}
       {loading ? (
         <View style={s.center}>
           <ActivityIndicator size="large" color="#4F46E5" />
@@ -268,7 +263,6 @@ export default function PoliciesScreen() {
         />
       )}
 
-      {/* Edit Modal */}
       <Modal visible={editModalVisible} transparent animationType="slide">
         <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : 'height'} style={s.modalOverlay}>
           <View style={s.modalSheet}>
@@ -326,7 +320,6 @@ export default function PoliciesScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      {/* Bottom Nav */}
       <View style={s.bottomNav}>
         <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('DashboardScreen')}>
           <Home size={22} color="#94A3B8" />
@@ -351,14 +344,10 @@ export default function PoliciesScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-
-  // Header
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16 },
   headerTitle: { fontSize: 24, fontWeight: '900', color: '#0F172A' },
   headerSub: { fontSize: 13, color: '#94A3B8', marginTop: 2 },
   headerBtn: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center' },
-
-  // Card
   card: { backgroundColor: '#FFFFFF', borderRadius: 16, marginHorizontal: 16, marginBottom: 12, shadowColor: '#0F172A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },
   cardTop: { flexDirection: 'row', alignItems: 'center', padding: 16, paddingBottom: 12 },
   iconBadge: { width: 42, height: 42, borderRadius: 12, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
@@ -366,8 +355,6 @@ const s = StyleSheet.create({
   cardName: { fontSize: 15, fontWeight: '700', color: '#1E293B' },
   cardMeta: { flexDirection: 'row', alignItems: 'center', marginTop: 4 },
   cardMetaText: { fontSize: 12, color: '#94A3B8', marginLeft: 4, textTransform: 'capitalize' },
-
-  // Status pill
   statusPill: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 100 },
   statusActive: { backgroundColor: '#ECFDF5', borderWidth: 1, borderColor: '#A7F3D0' },
   statusInactive: { backgroundColor: '#F8FAFC', borderWidth: 1, borderColor: '#E2E8F0' },
@@ -376,8 +363,6 @@ const s = StyleSheet.create({
   statusActiveText: { color: '#059669' },
   statusInactiveText: { color: '#64748B' },
   statusBlockedText: { color: '#DC2626' },
-
-  // Progress
   progressSection: { paddingHorizontal: 16, paddingBottom: 12 },
   progressLabels: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 6 },
   progressLabel: { fontSize: 12, fontWeight: '600', color: '#64748B' },
@@ -386,15 +371,11 @@ const s = StyleSheet.create({
   progressFillActive: { backgroundColor: '#10B981' },
   progressFillInactive: { backgroundColor: '#94A3B8' },
   progressFillBlocked: { backgroundColor: '#EF4444' },
-
-  // Actions
   cardActions: { flexDirection: 'row', borderTopWidth: 1, borderTopColor: '#F1F5F9' },
   actionBtn: { flex: 1, flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 12 },
   actionDivider: { width: 1, backgroundColor: '#F1F5F9' },
   actionEdit: { fontSize: 13, fontWeight: '600', color: '#4F46E5', marginLeft: 6 },
   actionDelete: { fontSize: 13, fontWeight: '600', color: '#EF4444', marginLeft: 6 },
-
-  // Loading / Empty
   center: { flex: 1, alignItems: 'center', justifyContent: 'center' },
   loadingText: { fontSize: 13, color: '#94A3B8', marginTop: 12 },
   emptyWrap: { flex: 1, alignItems: 'center', justifyContent: 'center', paddingHorizontal: 40 },
@@ -403,36 +384,27 @@ const s = StyleSheet.create({
   emptySub: { fontSize: 14, color: '#94A3B8', textAlign: 'center', marginTop: 8, lineHeight: 20 },
   emptyCta: { marginTop: 24, backgroundColor: '#10B981', paddingHorizontal: 24, paddingVertical: 12, borderRadius: 100 },
   emptyCtaText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
-
-  // Modal
   modalOverlay: { flex: 1, justifyContent: 'flex-end', backgroundColor: 'rgba(0,0,0,0.5)' },
   modalSheet: { backgroundColor: '#FFF', borderTopLeftRadius: 24, borderTopRightRadius: 24, paddingHorizontal: 20, paddingTop: 12, paddingBottom: 40 },
   modalHandle: { width: 40, height: 4, backgroundColor: '#E2E8F0', borderRadius: 2, alignSelf: 'center', marginBottom: 16 },
   modalHeader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', marginBottom: 20 },
   modalTitle: { fontSize: 20, fontWeight: '900', color: '#0F172A' },
   modalClose: { width: 36, height: 36, borderRadius: 18, backgroundColor: '#F1F5F9', alignItems: 'center', justifyContent: 'center' },
-
   modalInfo: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, padding: 12, marginBottom: 20 },
   iconBadgeSm: { width: 36, height: 36, borderRadius: 10, alignItems: 'center', justifyContent: 'center', marginRight: 12 },
   modalInfoName: { fontSize: 14, fontWeight: '700', color: '#1E293B' },
   modalInfoMeta: { fontSize: 12, color: '#94A3B8', marginTop: 2, textTransform: 'capitalize' },
-
   fieldLabel: { fontSize: 13, fontWeight: '700', color: '#475569', marginBottom: 6 },
   fieldInput: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 14, fontSize: 15, color: '#0F172A', backgroundColor: '#FFF', marginBottom: 16 },
-
   warningBox: { flexDirection: 'row', alignItems: 'flex-start', backgroundColor: '#FFFBEB', borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#FDE68A' },
   warningText: { fontSize: 12, color: '#92400E', marginLeft: 8, flex: 1, lineHeight: 16 },
-
   errorBox: { backgroundColor: '#FEF2F2', borderRadius: 12, padding: 12, marginBottom: 12, borderWidth: 1, borderColor: '#FECACA' },
   errorText: { fontSize: 12, color: '#DC2626' },
-
   modalActions: { flexDirection: 'row', gap: 12, marginTop: 8 },
   modalCancel: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#F1F5F9', alignItems: 'center' },
   modalCancelText: { fontSize: 14, fontWeight: '700', color: '#64748B' },
   modalSave: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#4F46E5', alignItems: 'center' },
   modalSaveText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
-
-  // Bottom nav
   bottomNav: { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingVertical: 12, paddingHorizontal: 24, borderTopWidth: 1, borderTopColor: '#E2E8F0', justifyContent: 'space-around', position: 'absolute', bottom: 0, left: 0, right: 0 },
   navItem: { alignItems: 'center', justifyContent: 'center' },
   navLabelActive: { fontSize: 11, fontWeight: '600', color: '#4F46E5', marginTop: 4 },

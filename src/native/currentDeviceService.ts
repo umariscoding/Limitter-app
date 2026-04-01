@@ -22,7 +22,6 @@ export const resolveCurrentDeviceId = async (_userId?: string): Promise<string |
       return deviceId;
     }
 
-    // No devices — register one using the shared installation ID
     const installationId = await getOrCreateInstallationId();
     const deviceName = Platform.OS === "android" ? "Android Phone" : "iPhone";
     const osVersion = String(Platform.Version);
@@ -43,8 +42,7 @@ export const resolveCurrentDeviceId = async (_userId?: string): Promise<string |
     const deviceId = refreshedDevices[0].deviceId || refreshedDevices[0].id;
     await AsyncStorage.setItem(CURRENT_DEVICE_KEY, deviceId);
     return deviceId;
-  } catch (error) {
-    console.error("Failed to resolve current device id:", error);
+  } catch {
     return null;
   }
 };

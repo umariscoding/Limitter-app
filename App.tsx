@@ -10,6 +10,7 @@ import { UsageContextProvider } from "./src/context/UsageContext";
 import { PolicyContextProvider } from "./src/context/PolicyContext";
 import { onAuthStateChanged, bootstrap } from "./src/auth/firebaseAuthService";
 import { startTimerRealtimeTracking } from "./src/native/timerRealtimeService";
+
 const navigationRef = createNavigationContainerRef<any>();
 
 type OverrideLinkPayload = {
@@ -17,10 +18,6 @@ type OverrideLinkPayload = {
   appName: string;
 };
 
-/**
- * Inner component that has access to UserContext.
- * Handles Firebase Auth state listener and deep links.
- */
 function AppInner(): React.JSX.Element {
   const { setFirebaseUser, setAccountData, setIsLoading, clearUser } = useUser();
   const [bootstrapError, setBootstrapError] = React.useState<string | null>(null);
@@ -36,7 +33,7 @@ function AppInner(): React.JSX.Element {
         if (parsed.hostname === "override" && packageName) {
           return { packageName, appName };
         }
-      } catch (_) {}
+      } catch (_) { /* silenced */ }
 
       const overrideMatch = url.match(/limitter:\/\/override\?(.*)$/i);
       if (!overrideMatch) return null;
@@ -67,16 +64,13 @@ function AppInner(): React.JSX.Element {
       const accountData = await bootstrap();
       setAccountData(accountData);
     } catch (err: any) {
-      console.error("Bootstrap failed:", err);
       setBootstrapError(err?.message || "Failed to load account. Check your connection.");
     }
   }, [setAccountData]);
 
-  // Firebase Auth state listener — drives the whole auth flow
   React.useEffect(() => {
     const unsubscribe = onAuthStateChanged(async (fbUser) => {
       if (fbUser && !fbUser.emailVerified) {
-        // Unverified user — don't bootstrap, treat as logged out
         setFirebaseUser(null);
         clearUser();
         setIsLoading(false);
@@ -94,18 +88,16 @@ function AppInner(): React.JSX.Element {
     return unsubscribe;
   }, [loadAccount]);
 
-  // Start native timer event bridge so screens receive real-time ticks
   React.useEffect(() => {
     startTimerRealtimeTracking();
   }, []);
 
-  // Deep link listener
   React.useEffect(() => {
     const onDeepLink = ({ url }: { url: string }) => {
       try {
         const payload = parseOverrideLink(url);
         if (payload) openOverrideFlow(payload);
-      } catch {}
+      } catch { /* silenced */ }
     };
 
     const sub = Linking.addEventListener("url", onDeepLink);
@@ -155,7 +147,6 @@ function AppInner(): React.JSX.Element {
     </NavigationContainer>
   );
 }
-
 
 function App(): React.JSX.Element {
   return (

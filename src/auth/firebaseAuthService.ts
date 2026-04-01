@@ -57,7 +57,6 @@ export async function signUp(
     device: { installationId, ...deviceInfo },
   });
 
-  // Send verification email and sign out — user must verify before login
   await sendEmailVerification(credential.user);
   await fbSignOut(auth);
 
@@ -67,7 +66,6 @@ export async function signUp(
 export async function signIn(email: string, password: string) {
   const credential = await signInWithEmailAndPassword(auth, email, password);
 
-  // Block unverified users
   if (!credential.user.emailVerified) {
     await sendEmailVerification(credential.user);
     await fbSignOut(auth);
@@ -101,9 +99,7 @@ export async function getIdToken(): Promise<string | null> {
 export async function signOut() {
   try {
     await axiosService.post(API.Logout);
-  } catch {
-    // Best effort
-  }
+  } catch { /* silenced */ }
   await fbSignOut(auth);
 }
 

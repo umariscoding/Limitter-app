@@ -13,6 +13,7 @@ import { useNavigation } from '@react-navigation/native';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
 import { useNativeTimerSync } from '../hooks/useNativeTimerSync';
+import { formatLimitTime } from '../utils/policyMapper';
 
 export default function ActivityScreen() {
   const navigation = useNavigation<any>();
@@ -26,12 +27,6 @@ export default function ActivityScreen() {
     setRefreshing(true);
     await fetchPolicies();
     setRefreshing(false);
-  };
-
-  const formatMinutes = (mins: number) => {
-    const h = Math.floor(mins / 60);
-    const m = mins % 60;
-    return `${h}h ${m}m`;
   };
 
   if (loading && !refreshing) {
@@ -71,7 +66,7 @@ export default function ActivityScreen() {
             <View key={item.id} style={styles.card}>
               <Text style={styles.cardTitle}>{item.app_name || item.category || 'Untitled'}</Text>
               <Text style={styles.cardLine}>
-                Used: {formatMinutes(item.time_used_minutes || 0)} / {formatMinutes(item.max_time_minutes || 0)}
+                Used: {formatLimitTime(item.time_used_minutes || 0)} / {formatLimitTime(item.max_time_minutes || 0)}
               </Text>
               {item.created_at && (
                 <Text style={styles.cardDate}>
@@ -79,7 +74,7 @@ export default function ActivityScreen() {
                 </Text>
               )}
               <Text style={[styles.status, item.is_blocked ? styles.blocked : styles.active]}>
-                {item.is_blocked ? '🔴 BLOCKED' : '🟢 ACTIVE'}
+                {item.is_blocked ? 'BLOCKED' : 'ACTIVE'}
               </Text>
             </View>
           ))

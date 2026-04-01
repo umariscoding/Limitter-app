@@ -2,13 +2,6 @@ import { useEffect } from 'react';
 import { subscribeTimerTicks, subscribeTimerBlocked } from '../native/timerRealtimeService';
 import { getPolicyPackageKey } from '../utils/policyMapper';
 
-/**
- * Subscribes to native timer tick and blocked events and applies
- * real-time updates to a policy/limit state setter.
- *
- * Consolidates the 3 duplicate subscription implementations that were
- * previously scattered across DashboardScreen, PoliciesScreen, and ActivityScreen.
- */
 export function useNativeTimerSync(
   setState: React.Dispatch<React.SetStateAction<any[]>>,
 ) {

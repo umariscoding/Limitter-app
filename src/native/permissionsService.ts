@@ -8,7 +8,7 @@ import {
 
 import { LimitterModule, warnIfCustomNativeMissing } from "./limitterNativeModules";
 
-/** Must match android/app/src/main/res/values/strings.xml app_name (launcher + Usage access list). */
+// Must match android/app/src/main/res/values/strings.xml app_name (launcher + Usage access list).
 const ANDROID_APP_LABEL = "Limitter";
 
 const ANDROID_PACKAGE_ID = "com.limitter";
@@ -16,7 +16,6 @@ const ANDROID_PACKAGE_ID = "com.limitter";
 export interface PermissionStatus {
   overlay: boolean;
   usage: boolean;
-  /** True when app is exempt from battery optimization (recommended for timers). */
   battery: boolean;
   accessibility: boolean;
 }
@@ -73,7 +72,7 @@ function stepCopy(step: PermissionStep): { title: string; message: string } {
     return {
       title: 'Enable Usage Access',
       message:
-        'Find “' + ANDROID_APP_LABEL + '” in the list and turn ON usage access.\n\n' +
+        'Find "' + ANDROID_APP_LABEL + '" in the list and turn ON usage access.\n\n' +
         'Xiaomi (Redmi/POCO): Settings > Apps > Special app access > Usage data access > find ' + ANDROID_APP_LABEL + ' > turn ON.\n\n' +
         'If not there: Settings > Apps > Manage apps > find ' + ANDROID_APP_LABEL + ' > Other permissions > Usage access > Allow.\n\n' +
         'Package: ' + ANDROID_PACKAGE_ID,
@@ -100,7 +99,7 @@ function promptStep(step: PermissionStep): Promise<PromptChoice> {
   return new Promise((resolve) => {
     if (step === "usage") {
       Alert.alert(title, message, [
-        { text: "This app’s settings", onPress: () => resolve("appinfo") },
+        { text: "This app's settings", onPress: () => resolve("appinfo") },
         { text: "Usage access list", onPress: () => resolve("open") },
       ], { cancelable: false });
       return;
@@ -135,7 +134,6 @@ export const checkPermissions = async (): Promise<PermissionStatus> => {
 
   try {
     const res = await LimitterModule.checkPermissions();
-    // Native returns batteryOptimized=true when the app is still subject to optimization (not exempt).
     const batteryOptimized = !!res?.batteryOptimized;
     return {
       overlay: !!res?.overlay,
@@ -153,10 +151,6 @@ export const checkPermissions = async (): Promise<PermissionStatus> => {
   }
 };
 
-/**
- * Walks required Android special permissions one at a time.
- * After each settings screen, re-checks when the user returns to the app.
- */
 export const requestRequiredPermissions = async (): Promise<PermissionStatus> => {
   let status = await checkPermissions();
 

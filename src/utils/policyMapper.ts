@@ -1,8 +1,3 @@
-/**
- * Shared policy data mapping used by ALL screens.
- * Single source of truth for how API data → UI data.
- */
-
 import type { NativeTimerState } from '../native/appBlockerService';
 
 export interface UIPolicy {
@@ -19,19 +14,14 @@ export interface UIPolicy {
   status: 'active' | 'inactive' | 'blocked';
   blocked_until_timestamp: number;
   created_at: number;
-  /** Actual native timer budget in seconds — used for accurate tick display */
   _nativeBudgetSeconds?: number;
 }
 
-/**
- * Maps API response item { policy, policyState } → UIPolicy
- */
 export function mapPolicyToUI(item: any): UIPolicy {
   const p = item.policy || item;
   const state = item.policyState || {};
 
   const usedMinutes = Number(state.usageTodayMinutes) || 0;
-  // Can't be exhausted with zero usage
   const isExhausted = state.isExhaustedToday === true && usedMinutes > 0;
 
   let status: 'active' | 'inactive' | 'blocked' = 'inactive';
@@ -55,10 +45,6 @@ export function mapPolicyToUI(item: any): UIPolicy {
   };
 }
 
-/**
- * Format usage time with seconds precision.
- * Examples: "0s", "45s", "2m 30s", "1h 5m"
- */
 export function formatUsageTime(minutes: number): string {
   if (minutes === 0) return '0s';
   const totalSec = Math.round(minutes * 60);
@@ -70,10 +56,6 @@ export function formatUsageTime(minutes: number): string {
   return s > 0 ? `${m}m ${s}s` : `${m}m`;
 }
 
-/**
- * Format limit time (whole minutes).
- * Examples: "30m", "1h", "1h 30m"
- */
 export function formatLimitTime(minutes: number): string {
   const rounded = Math.round(minutes);
   if (rounded >= 60) {
@@ -85,9 +67,6 @@ export function formatLimitTime(minutes: number): string {
   return `${rounded}m`;
 }
 
-/**
- * Format remaining time with seconds precision.
- */
 export function formatRemainingTime(minutes: number): string {
   if (minutes <= 0) return '0s left';
   return `${formatUsageTime(minutes)} left`;
@@ -126,7 +105,6 @@ export function normalizeUiPolicy(item: UIPolicy): UIPolicy {
   };
 }
 
-/** Apply native timer blocked state on top of normalized policies. */
 export function mergeBlockedOverlaysIntoPolicies(
   normalizedPolicies: UIPolicy[],
   nativeBlockedPackages: Set<string>,
@@ -145,9 +123,6 @@ export type NativeTimerForLiveTimerUsageMerge = Pick<
   'package' | 'remainingSeconds' | 'liveTimerUsageBudgetSeconds' | 'status'
 >;
 
-/**
- * Add in-flight live timer usage consumption (liveTimerUsageBudget − remaining) to API usage for app limits.
- */
 export function mergeLiveTimerUsageIntoPolicies(
   policies: UIPolicy[],
   timers: NativeTimerForLiveTimerUsageMerge[],
@@ -174,16 +149,6 @@ export function mergeLiveTimerUsageIntoPolicies(
     const mergedUsed = used + liveTimerUsageSec / 60;
     const maxMin = Number(item.max_time_minutes) || 0;
 
-    console.log('[LiveTimerUsage]', {
-      package: key,
-      status: timer.status,
-      apiUsedMinutes: used,
-      liveTimerUsageBudgetSeconds: budget,
-      liveTimerRemainingSeconds: remaining,
-      liveTimerUsageSeconds: liveTimerUsageSec,
-      mergedUsedMinutes: mergedUsed,
-      maxLimitMinutes: maxMin,
-    });
     let is_blocked = item.is_blocked;
     let status = item.status;
     if (maxMin > 0 && mergedUsed >= maxMin) {
