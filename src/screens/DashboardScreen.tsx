@@ -30,6 +30,7 @@ import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
 import { useNativeTimerSync } from '../hooks/useNativeTimerSync';
 import { useDeviceResolver } from '../hooks/useDeviceResolver';
 import { useCreateLimit } from '../hooks/useCreateLimit';
+import { useUsageReporter } from '../hooks/useUsageReporter';
 import { hardDeleteAllPoliciesAPI } from '../services/policyService';
 import { updateBlockedApps } from '../services/appBlockerService';
 import { LimitterModule } from '../config/nativeModules';
@@ -79,6 +80,7 @@ export default function DashboardScreen() {
   }, []);
 
   useNativeTimerSync(setLimits);
+  useUsageReporter(limits, deviceId);
 
   const fetchLimits = async () => {
     if (!user?.uid || !deviceId) {
