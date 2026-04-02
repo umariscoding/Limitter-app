@@ -107,6 +107,15 @@ export default function DashboardScreen() {
     [limits],
   );
 
+  const existingTargetKeys = React.useMemo(() => {
+    const keys = new Set<string>();
+    for (const l of limits) {
+      const key = getPolicyPackageKey(l);
+      if (key) keys.add(key);
+    }
+    return keys;
+  }, [limits]);
+
   useFocusEffect(
     React.useCallback(() => {
       if (!deviceId) return;
@@ -198,6 +207,7 @@ export default function DashboardScreen() {
         visible={showCreateModal}
         onClose={() => setShowCreateModal(false)}
         onSubmit={handleCreateSubmit}
+        existingTargetKeys={existingTargetKeys}
       />
 
       <ScrollView

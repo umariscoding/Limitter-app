@@ -163,7 +163,13 @@ export function useCreateLimit(
       }
     } catch (error: any) {
       const msg = error?.message || 'Failed to create limit';
-      Alert.alert('Error', msg);
+      if (msg.includes('plan limit') || msg.includes('Plan limit')) {
+        Alert.alert('Plan Limit Reached', msg);
+      } else if (msg.includes('already exists')) {
+        Alert.alert('Already Added', 'A limit for this app/site already exists.');
+      } else {
+        Alert.alert('Error', msg);
+      }
       return false;
     } finally {
       setIsCreating(false);

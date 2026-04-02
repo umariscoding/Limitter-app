@@ -18,11 +18,12 @@ interface CreateLimitModalProps {
   visible: boolean;
   onClose: () => void;
   onSubmit: (state: CreateLimitState) => void;
+  existingTargetKeys?: Set<string>;
 }
 
 const CATEGORIES = ['Social Media', 'Video Streaming', 'Gaming', 'Productivity', 'Education'];
 
-export default function CreateLimitModal({ visible, onClose, onSubmit }: CreateLimitModalProps) {
+export default function CreateLimitModal({ visible, onClose, onSubmit, existingTargetKeys }: CreateLimitModalProps) {
   const [targetType, setTargetType] = useState<'app' | 'category' | 'website'>('app');
   const [timerType, setTimerType] = useState<'combined' | 'single' | 'clock'>('combined');
   const [createAppName, setCreateAppName] = useState('');
@@ -85,10 +86,13 @@ export default function CreateLimitModal({ visible, onClose, onSubmit }: CreateL
     }
   };
 
-  const filteredApps = React.useMemo(
-    () => filterInstalledApps(installedAppsList, appSearch),
-    [appSearch, installedAppsList],
-  );
+  const filteredApps = React.useMemo(() => {
+    const searched = filterInstalledApps(installedAppsList, appSearch);
+    if (!existingTargetKeys || existingTargetKeys.size === 0) return searched;
+    return searched.filter(
+      app => !existingTargetKeys.has(app.packageName.trim().toLowerCase()),
+    );
+  }, [appSearch, installedAppsList, existingTargetKeys]);
 
   const resetForm = () => {
     setCreateAppName('');
