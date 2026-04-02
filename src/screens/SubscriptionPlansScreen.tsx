@@ -27,6 +27,7 @@ import { grantTemporaryOverrideAccess } from '../services/appBlockerService';
 import { grantOverrideCreditsAPI, useOverrideAPI } from '../services/overrideService';
 import { getPoliciesAPI } from '../services/policyService';
 import { computeNextOverrides, getPlanOverrideLimit, normalizePlan } from '../utils/planRules';
+import { upgradePlanAPI } from '../services/planGuardService';
 
 const FeatureItem = React.memo(({ feature }: { feature: { text: string; enabled: boolean } }) => (
   <View style={styles.featureRow}>
@@ -108,13 +109,18 @@ export default function SubscriptionPlansScreen() {
     return 'free';
   };
 
-  const handleConfirmPay = () => {
+  const handleConfirmPay = async () => {
     Keyboard.dismiss();
-    setIsProcessing(true);
-    setTimeout(() => {
-      setIsProcessing(false);
+    const newPlan = mapPlanIdToUserPlan(selectedPlanId);
 
-      const newPlan = mapPlanIdToUserPlan(selectedPlanId);
+    if (newPlan === currentUserPlan) {
+      Alert.alert('Already Active', `You are already on the ${selectedPlan.name} plan.`);
+      return;
+    }
+
+    setIsProcessing(true);
+    try {
+      await upgradePlanAPI(newPlan);
       const updatedOverrides = getPlanOverrideLimit(newPlan);
       updateUser({ plan: newPlan, overrides_left: updatedOverrides });
 
@@ -126,10 +132,14 @@ export default function SubscriptionPlansScreen() {
           onPress: () =>
             navigation.navigate('DashboardScreen', {
               planUpdatedAt: Date.now(),
-            })
-        }]
+            }),
+        }],
       );
-    }, 1500);
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Failed to upgrade plan.');
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handleBuyPlan = () => {

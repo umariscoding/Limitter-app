@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { Alert } from 'react-native';
 import { createPolicyAPI } from '../services/policyService';
+import { enforceDailyLimitMinutes, invalidatePlanCache } from '../services/planGuardService';
 import {
   startAppClockTimer,
   startAppUsageTimer,
@@ -64,7 +65,8 @@ export function useCreateLimit(
       timerType, hours, minutes, seconds,
       singleTimerValue, singleTimerUnit, clockHour, clockMinute, clockPeriod,
     });
-    const parsedMinutes = Math.round(totalSeconds / 60) || 1;
+    const rawMinutes = Math.round(totalSeconds / 60) || 1;
+    const parsedMinutes = await enforceDailyLimitMinutes(rawMinutes);
 
     if (targetType === 'app') {
       if (!selectedInstalledApp || !appName) {
@@ -155,6 +157,7 @@ export function useCreateLimit(
             : targetType === 'category' ? category
               : websiteUrl;
 
+        invalidatePlanCache();
         onSuccess(label);
         return true;
       } else {

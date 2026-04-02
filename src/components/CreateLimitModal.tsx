@@ -14,16 +14,25 @@ import { getWebsiteBlockerStatus } from '../services/appBlockerService';
 import { filterInstalledApps } from '../helpers/helper';
 import type { CreateLimitState } from '../hooks/useCreateLimit';
 
+interface PlanLimitsData {
+  planCode: string;
+  maxPolicies: number | null;
+  currentPolicies: number;
+  policiesRemaining: number | null;
+  customTimers: boolean;
+}
+
 interface CreateLimitModalProps {
   visible: boolean;
   onClose: () => void;
   onSubmit: (state: CreateLimitState) => void;
   existingTargetKeys?: Set<string>;
+  planLimits?: PlanLimitsData | null;
 }
 
 const CATEGORIES = ['Social Media', 'Video Streaming', 'Gaming', 'Productivity', 'Education'];
 
-export default function CreateLimitModal({ visible, onClose, onSubmit, existingTargetKeys }: CreateLimitModalProps) {
+export default function CreateLimitModal({ visible, onClose, onSubmit, existingTargetKeys, planLimits }: CreateLimitModalProps) {
   const [targetType, setTargetType] = useState<'app' | 'category' | 'website'>('app');
   const [timerType, setTimerType] = useState<'combined' | 'single' | 'clock'>('combined');
   const [createAppName, setCreateAppName] = useState('');
@@ -124,7 +133,14 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
     <Modal visible={visible} transparent animationType="fade" onRequestClose={onClose}>
       <View style={s.overlay}>
         <View style={s.card}>
-          <Text style={s.title}>Create Limit</Text>
+          <View style={s.titleRow}>
+            <Text style={s.title}>Create Limit</Text>
+            {planLimits?.maxPolicies !== null && planLimits?.maxPolicies !== undefined && (
+              <Text style={s.limitCounter}>
+                {planLimits.currentPolicies}/{planLimits.maxPolicies}
+              </Text>
+            )}
+          </View>
           <Text style={s.subTitle}>Target Type</Text>
           <View style={s.selectorRow}>
             <TouchableOpacity
@@ -229,21 +245,30 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
           )}
 
           <Text style={s.subTitle}>Timer Type</Text>
-          <View style={s.selectorRow}>
-            {(['combined', 'single', 'clock'] as const).map(t => (
-              <TouchableOpacity
-                key={t}
-                style={[s.selectorBtn, timerType === t && s.selectorBtnActive]}
-                onPress={() => setTimerType(t)}
-              >
-                <Text style={[s.selectorBtnText, timerType === t && s.selectorBtnTextActive]}>
-                  {t === 'combined' ? 'H:M:S' : t === 'single' ? 'Single Unit' : 'Exact Time'}
-                </Text>
-              </TouchableOpacity>
-            ))}
-          </View>
+          {planLimits && !planLimits.customTimers && (
+            <View style={s.planRestrictionBanner}>
+              <Text style={s.planRestrictionText}>
+                {planLimits.planCode.toUpperCase()} plan: fixed 60-minute timer only. Upgrade for custom timers.
+              </Text>
+            </View>
+          )}
+          {(!planLimits || planLimits.customTimers) && (
+            <View style={s.selectorRow}>
+              {(['combined', 'single', 'clock'] as const).map(t => (
+                <TouchableOpacity
+                  key={t}
+                  style={[s.selectorBtn, timerType === t && s.selectorBtnActive]}
+                  onPress={() => setTimerType(t)}
+                >
+                  <Text style={[s.selectorBtnText, timerType === t && s.selectorBtnTextActive]}>
+                    {t === 'combined' ? 'H:M:S' : t === 'single' ? 'Single Unit' : 'Exact Time'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+          )}
 
-          {timerType === 'combined' ? (
+          {planLimits && !planLimits.customTimers ? null : timerType === 'combined' ? (
             <View style={s.timeRow}>
               {[{ label: 'H', val: hours, set: setHours }, { label: 'M', val: minutes, set: setMinutes }, { label: 'S', val: seconds, set: setSeconds }].map(f => (
                 <View key={f.label} style={s.timeBox}>
@@ -314,7 +339,11 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
 const s = StyleSheet.create({
   overlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', justifyContent: 'center', paddingHorizontal: 20 },
   card: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16 },
-  title: { fontSize: 18, fontWeight: '700', color: '#0F172A', marginBottom: 12 },
+  titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
+  title: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
+  limitCounter: { fontSize: 13, fontWeight: '700', color: '#6366F1', backgroundColor: '#EEF2FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, overflow: 'hidden' },
+  planRestrictionBanner: { backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A', borderRadius: 8, padding: 10, marginBottom: 10 },
+  planRestrictionText: { fontSize: 12, color: '#92400E', fontWeight: '600' },
   subTitle: { color: '#334155', fontWeight: '700', marginBottom: 8, marginTop: 4 },
   selectorRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   selectorBtn: { flex: 1, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, paddingVertical: 9, alignItems: 'center', backgroundColor: '#F8FAFC' },

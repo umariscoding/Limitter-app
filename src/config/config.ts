@@ -19,6 +19,7 @@ export const API = {
   UsageRemaining: "/api/usage/remaining",
 
   PlanLimits: "/api/account/plan-limits",
+  UpgradePlan: "/api/account/upgrade-plan",
 
   OverrideUse: "/api/overrides/use",
   OverrideGrant: "/api/overrides/grant",

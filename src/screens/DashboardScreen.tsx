@@ -33,6 +33,7 @@ import { useCreateLimit } from '../hooks/useCreateLimit';
 import { useUsageReporter } from '../hooks/useUsageReporter';
 import { hardDeleteAllPoliciesAPI } from '../services/policyService';
 import { updateBlockedApps } from '../services/appBlockerService';
+import { getPlanLimits, canCreatePolicy, invalidatePlanCache, type PlanLimits } from '../services/planGuardService';
 import { LimitterModule } from '../config/nativeModules';
 import { requestRequiredPermissions } from '../services/permissionsService';
 import { getPolicyPackageKey, formatUsageTime, formatLimitTime } from '../utils/policyMapper';
@@ -54,6 +55,7 @@ export default function DashboardScreen() {
   const [toastMessage, setToastMessage] = useState('');
   const [showToast, setShowToast] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
+  const [planLimits, setPlanLimits] = useState<PlanLimits | null>(null);
   const justOverriddenPackageRef = React.useRef<string | null>(null);
 
   const matchesLimitPackage = React.useCallback(
@@ -99,6 +101,11 @@ export default function DashboardScreen() {
         ? { overriddenPackage: overriddenPkg, matchesLimitPackage }
         : undefined,
     );
+
+    getPlanLimits(true)
+      .then(data => setPlanLimits(data))
+      .catch(() => {});
+
     setRefreshing(false);
   };
 
@@ -133,9 +140,27 @@ export default function DashboardScreen() {
     fetchLimits();
   };
 
+  const handleOpenCreateModal = async () => {
+    const check = await canCreatePolicy();
+    setPlanLimits(check.limits);
+    if (!check.allowed) {
+      Alert.alert(
+        'Plan Limit Reached',
+        check.reason || 'Upgrade for more limits.',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Upgrade', onPress: () => navigation.navigate('SubscriptionPlansScreen') },
+        ],
+      );
+      return;
+    }
+    setShowCreateModal(true);
+  };
+
   const handleCreateSubmit = async (state: CreateLimitState) => {
     const success = await createLimit(state);
     if (success) {
+      invalidatePlanCache();
       await new Promise<void>(r => setTimeout(r, 1500));
       await fetchLimits();
     }
@@ -208,6 +233,7 @@ export default function DashboardScreen() {
         onClose={() => setShowCreateModal(false)}
         onSubmit={handleCreateSubmit}
         existingTargetKeys={existingTargetKeys}
+        planLimits={planLimits}
       />
 
       <ScrollView
@@ -250,7 +276,7 @@ export default function DashboardScreen() {
         <View style={styles.section}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Active Limits</Text>
-            <TouchableOpacity onPress={() => setShowCreateModal(true)}>
+            <TouchableOpacity onPress={handleOpenCreateModal}>
               <PlusIcon size={20} color="#4F46E5" />
             </TouchableOpacity>
           </View>
@@ -259,7 +285,7 @@ export default function DashboardScreen() {
             <View style={styles.emptyState}>
               <AlertCircle size={48} color="#94A3B8" />
               <Text style={styles.emptyText}>No limits yet</Text>
-              <TouchableOpacity style={styles.createBtn} onPress={() => setShowCreateModal(true)}>
+              <TouchableOpacity style={styles.createBtn} onPress={handleOpenCreateModal}>
                 <Text style={styles.createBtnText}>Create First Limit</Text>
               </TouchableOpacity>
             </View>
