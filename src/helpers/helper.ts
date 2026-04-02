@@ -1,4 +1,4 @@
-import { getNativeTimerStates, nativeBlockedPackagesFromTimers } from "../native/appBlockerService";
+import { getNativeTimerStates, nativeBlockedPackagesFromTimers } from "../services/appBlockerService";
 import {
   mapPolicyToUI,
   normalizeUiPolicy,

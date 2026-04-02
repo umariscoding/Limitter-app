@@ -9,8 +9,8 @@ import {
   FlatList,
   Platform,
 } from 'react-native';
-import { getInstalledApps, InstalledApp } from '../native/appListService';
-import { getWebsiteBlockerStatus } from '../native/appBlockerService';
+import { getInstalledApps, InstalledApp } from '../services/appListService';
+import { getWebsiteBlockerStatus } from '../services/appBlockerService';
 import { filterInstalledApps } from '../helpers/helper';
 import type { CreateLimitState } from '../hooks/useCreateLimit';
 

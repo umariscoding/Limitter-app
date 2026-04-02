@@ -22,7 +22,7 @@ import {
   subscriptionLabels,
 } from '../data/appData';
 import { useUser } from '../context/UserContext';
-import { grantTemporaryOverrideAccess } from '../native/appBlockerService';
+import { grantTemporaryOverrideAccess } from '../services/appBlockerService';
 import { computeNextOverrides, getPlanOverrideLimit, normalizePlan } from '../utils/planRules';
 
 const FeatureItem = React.memo(({ feature }: { feature: { text: string; enabled: boolean } }) => (

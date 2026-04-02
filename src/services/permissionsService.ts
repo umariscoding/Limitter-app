@@ -6,7 +6,7 @@ import {
   type AppStateStatus,
 } from "react-native";
 
-import { LimitterModule, warnIfCustomNativeMissing } from "./limitterNativeModules";
+import { LimitterModule, warnIfCustomNativeMissing } from "../config/nativeModules";
 
 // Must match android/app/src/main/res/values/strings.xml app_name (launcher + Usage access list).
 const ANDROID_APP_LABEL = "Limitter";

@@ -6,7 +6,7 @@ import {
   startAppBlockerService,
   startAppUsageTimer,
   updateBlockedApps,
-} from '../native/appBlockerService';
+} from '../services/appBlockerService';
 import { hydratePoliciesForUi } from '../helpers/helper';
 import { getPolicyPackageKey } from '../utils/policyMapper';
 

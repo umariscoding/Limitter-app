@@ -7,7 +7,7 @@ import { useUsageContext } from '../context/UsageContext';
 import { WeeklyUsageGraph } from '../components/WeeklyUsageGraph';
 import { getPoliciesAPI } from '../services/policyService';
 import { useDeviceResolver } from '../hooks/useDeviceResolver';
-import { getNativeBlockedPackages } from '../native/appBlockerService';
+import { getNativeBlockedPackages } from '../services/appBlockerService';
 import { getPolicyPackageKey, formatLimitTime } from '../utils/policyMapper';
 
 interface BreakdownItem {

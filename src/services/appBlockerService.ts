@@ -1,4 +1,4 @@
-import { LimitterModule } from './limitterNativeModules';
+import { LimitterModule } from '../config/nativeModules';
 
 let blockedApps: Map<string, { blockedUntil: number; appName: string }> = new Map();
 

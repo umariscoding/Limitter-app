@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { subscribeTimerTicks, subscribeTimerBlocked } from '../native/timerRealtimeService';
+import { subscribeTimerTicks, subscribeTimerBlocked } from '../services/timerRealtimeService';
 import { getPolicyPackageKey } from '../utils/policyMapper';
 
 export function useNativeTimerSync(

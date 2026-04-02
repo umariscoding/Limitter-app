@@ -1,4 +1,4 @@
-import type { NativeTimerState } from '../native/appBlockerService';
+import type { NativeTimerState } from '../services/appBlockerService';
 
 export interface UIPolicy {
   id: string;

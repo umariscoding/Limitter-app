@@ -42,7 +42,7 @@ import { useUser } from '../context/UserContext';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
 import { useDeviceResolver } from '../hooks/useDeviceResolver';
-import { grantTemporaryOverrideAccess } from '../native/appBlockerService';
+import { grantTemporaryOverrideAccess } from '../services/appBlockerService';
 import { computeNextOverrides } from '../utils/planRules';
 
 export default function ConfirmOverrideScreen() {

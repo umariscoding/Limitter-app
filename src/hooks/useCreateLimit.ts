@@ -5,13 +5,13 @@ import {
   startAppClockTimer,
   startAppUsageTimer,
   startWebsiteTimer,
-} from '../native/appBlockerService';
+} from '../services/appBlockerService';
 import {
   calculateTotalSecondsFromInputs,
   clockTargetTimestampMs,
   toHour24,
 } from '../helpers/helper';
-import type { InstalledApp } from '../native/appListService';
+import type { InstalledApp } from '../services/appListService';
 
 export interface CreateLimitState {
   targetType: 'app' | 'category' | 'website';

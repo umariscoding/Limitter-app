@@ -9,7 +9,7 @@ import { UserContextProvider, useUser } from "./src/context/UserContext";
 import { UsageContextProvider } from "./src/context/UsageContext";
 import { PolicyContextProvider } from "./src/context/PolicyContext";
 import { onAuthStateChanged, bootstrap } from "./src/auth/firebaseAuthService";
-import { startTimerRealtimeTracking } from "./src/native/timerRealtimeService";
+import { startTimerRealtimeTracking } from "./src/services/timerRealtimeService";
 
 const navigationRef = createNavigationContainerRef<any>();
 

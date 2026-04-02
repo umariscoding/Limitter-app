@@ -1,5 +1,5 @@
 import { NativeEventEmitter } from 'react-native';
-import { TimerEventModule, warnIfCustomNativeMissing } from './limitterNativeModules';
+import { TimerEventModule, warnIfCustomNativeMissing } from '../config/nativeModules';
 
 export type TimerTickEvent = {
   package: string;

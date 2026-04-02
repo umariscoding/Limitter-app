@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { resolveCurrentDeviceId } from '../native/currentDeviceService';
+import { resolveCurrentDeviceId } from '../services/currentDeviceService';
 
 export function useDeviceResolver(uid: string | undefined) {
   const [deviceId, setDeviceId] = useState<string>('');
