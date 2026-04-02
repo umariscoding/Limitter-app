@@ -117,6 +117,13 @@ export function useUsageReporter(
   useEffect(() => {
     const unsubTick = subscribeTimerTicks(event => {
       if (!event?.package) return;
+
+      const isBlocked = event.isBlocked === true
+        || String(event.status || '').toLowerCase() === 'blocked'
+        || (event.remaining !== undefined && event.remaining <= 0);
+
+      if (isBlocked) return;
+
       const pkg = String(event.package).trim().toLowerCase();
       const policyId = policyIdByPackage.current.get(pkg);
       if (!policyId) return;

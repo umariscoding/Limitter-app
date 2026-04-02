@@ -134,14 +134,6 @@ export default function DashboardScreen() {
 
   const handleOverride = (limit: any) => {
     const pkg = limit.app_name || limit.package_name || limit.packageName;
-    if ((user?.overrides_left ?? 0) <= 0) {
-      navigation.navigate('SubscriptionPlansScreen', {
-        fromBlockingOverride: true,
-        packageName: pkg,
-        appName: pkg,
-      });
-      return;
-    }
     navigation.navigate('ConfirmOverrideScreen', {
       limitId: limit.id,
       packageName: pkg,

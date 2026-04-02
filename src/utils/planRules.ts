@@ -1,8 +1,8 @@
 export type NormalizedPlan = 'free' | 'pro' | 'elite';
 
 const PLAN_OVERRIDE_LIMITS: Record<NormalizedPlan, number> = {
-  free: 5,
-  pro: 12,
+  free: 0,
+  pro: 15,
   elite: 9999,
 };
 

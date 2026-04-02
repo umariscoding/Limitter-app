@@ -19,6 +19,7 @@ export const API = {
   UsageRemaining: "/api/usage/remaining",
 
   OverrideUse: "/api/overrides/use",
+  OverrideGrant: "/api/overrides/grant",
   OverrideHistory: "/api/overrides/history",
   OverrideBalance: "/api/overrides/balance",
 };

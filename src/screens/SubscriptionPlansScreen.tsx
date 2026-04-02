@@ -22,7 +22,10 @@ import {
   subscriptionLabels,
 } from '../data/appData';
 import { useUser } from '../context/UserContext';
+import { useDeviceResolver } from '../hooks/useDeviceResolver';
 import { grantTemporaryOverrideAccess } from '../services/appBlockerService';
+import { grantOverrideCreditsAPI, useOverrideAPI } from '../services/overrideService';
+import { getPoliciesAPI } from '../services/policyService';
 import { computeNextOverrides, getPlanOverrideLimit, normalizePlan } from '../utils/planRules';
 
 const FeatureItem = React.memo(({ feature }: { feature: { text: string; enabled: boolean } }) => (
@@ -48,6 +51,7 @@ export default function SubscriptionPlansScreen() {
   const route = useRoute<any>();
   const { user, updateUser } = useUser();
 
+  const { deviceId } = useDeviceResolver(user?.uid);
   const currentUserPlan = normalizePlan(user?.plan);
   const defaultSelectedPlanId =
     currentUserPlan === 'elite' ? '3' : currentUserPlan === 'pro' ? '2' : '1';
@@ -74,24 +78,7 @@ export default function SubscriptionPlansScreen() {
 
     const autoUseOverride = async () => {
       if ((user?.overrides_left ?? 0) > 0) {
-        setIsProcessing(true);
-        try {
-          const remainingAfterUse = computeNextOverrides(
-            user?.plan,
-            user?.overrides_left,
-            (user?.overrides_left || 1) - 1
-          );
-          updateUser({ overrides_left: remainingAfterUse });
-          await grantTemporaryOverrideAccess(blockingPackage!, blockingAppName || blockingPackage!, 5);
-          navigation.navigate('DashboardScreen', {
-            refreshAt: Date.now(),
-            justOverriddenPackage: blockingPackage,
-          });
-        } catch {
-          Alert.alert('Error', 'Failed to use override.');
-        } finally {
-          setIsProcessing(false);
-        }
+        setShowOverrideChoice(true);
       } else {
         setShowOverrideChoice(true);
       }
@@ -160,20 +147,42 @@ export default function SubscriptionPlansScreen() {
   };
 
   const handlePurchaseOverridePack = async (count: number) => {
-    if (!blockingPackage) return;
     setIsProcessing(true);
     try {
-      const newTotal = (user?.overrides_left ?? 0) + count;
-      const remainingAfterUse = Math.max(0, newTotal - 1);
-      updateUser({ overrides_left: remainingAfterUse });
-      await grantTemporaryOverrideAccess(blockingPackage, blockingAppName || blockingPackage, 5);
+      const result = await grantOverrideCreditsAPI(count);
+      updateUser({ overrides_left: result.grantedRemaining });
+
+      if (blockingPackage && deviceId) {
+        try {
+          const policies = await getPoliciesAPI() as any[];
+          const match = (policies || []).find((p: any) => {
+            const key = (p.policy || p).targetKey;
+            return key === blockingPackage;
+          });
+          const resolvedPolicyId = match ? (match.policy || match).policyId || match.id : undefined;
+
+          if (resolvedPolicyId) {
+            await useOverrideAPI(resolvedPolicyId, deviceId);
+            await grantTemporaryOverrideAccess(blockingPackage, blockingAppName || blockingPackage, 5);
+          }
+        } catch { /* silenced */ }
+      }
+
       setShowBuyOverridesModal(false);
-      navigation.navigate('DashboardScreen', {
-        refreshAt: Date.now(),
-        justOverriddenPackage: blockingPackage,
-      });
-    } catch {
-      Alert.alert('Error', 'Failed to process override purchase.');
+      Alert.alert(
+        'Overrides Added',
+        `${count} override credits purchased successfully.`,
+        [{
+          text: 'OK',
+          onPress: () =>
+            navigation.navigate('DashboardScreen', {
+              refreshAt: Date.now(),
+              justOverriddenPackage: blockingPackage || null,
+            }),
+        }],
+      );
+    } catch (error: any) {
+      Alert.alert('Error', error?.message || 'Failed to process override purchase.');
     } finally {
       setIsProcessing(false);
     }
