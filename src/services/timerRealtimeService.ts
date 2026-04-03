@@ -1,5 +1,7 @@
 import { NativeEventEmitter } from 'react-native';
 import { TimerEventModule, warnIfCustomNativeMissing } from '../config/nativeModules';
+import { realtimeDB } from '../config/firebase';
+import { ref, onValue, off } from 'firebase/database';
 
 export type TimerTickEvent = {
   package: string;
@@ -74,4 +76,44 @@ export const subscribeTimerBlocked = (listener: (event: TimerBlockedEvent) => vo
   return () => {
     blockedListeners.delete(listener);
   };
+};
+
+export interface LiveLockEvent {
+  policyId: string;
+  targetKey: string;
+  isLocked: boolean;
+  blockedUntil: number | null;
+  reason: string;
+}
+
+type LockChangeListener = (locks: Record<string, LiveLockEvent>) => void;
+
+let lockListenerUnsubscribe: (() => void) | null = null;
+
+export const subscribeLockState = (
+  accountId: string,
+  listener: LockChangeListener,
+): (() => void) => {
+  const locksRef = ref(realtimeDB, `live/accounts/${accountId}/locks`);
+
+  const handler = onValue(locksRef, (snapshot) => {
+    const val = snapshot.val();
+    if (!val) {
+      listener({});
+      return;
+    }
+    listener(val as Record<string, LiveLockEvent>);
+  });
+
+  const unsubscribe = () => {
+    off(locksRef);
+  };
+
+  lockListenerUnsubscribe = unsubscribe;
+  return unsubscribe;
+};
+
+export const unsubscribeLockState = () => {
+  lockListenerUnsubscribe?.();
+  lockListenerUnsubscribe = null;
 };

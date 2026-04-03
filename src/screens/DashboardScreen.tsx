@@ -34,6 +34,7 @@ import { useUsageReporter } from '../hooks/useUsageReporter';
 import { hardDeleteAllPoliciesAPI } from '../services/policyService';
 import { updateBlockedApps } from '../services/appBlockerService';
 import { getPlanLimits, canCreatePolicy, invalidatePlanCache, type PlanLimits } from '../services/planGuardService';
+import { useLockStateSync } from '../hooks/useLockStateSync';
 import { LimitterModule } from '../config/nativeModules';
 import { requestRequiredPermissions } from '../services/permissionsService';
 import { getPolicyPackageKey, formatUsageTime, formatLimitTime } from '../utils/policyMapper';
@@ -82,7 +83,8 @@ export default function DashboardScreen() {
   }, []);
 
   useNativeTimerSync(setLimits);
-  useUsageReporter(limits, deviceId);
+  useUsageReporter(limits, deviceId, user?.accountId);
+  useLockStateSync(user?.accountId);
 
   const fetchLimits = async () => {
     if (!user?.uid || !deviceId) {

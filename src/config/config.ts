@@ -13,6 +13,7 @@ export const API = {
 
   Policies: "/api/policies",
 
+  UsageTick: "/api/usage/tick",
   UsageRecord: "/api/usage/record",
   UsageDaily: "/api/usage/daily",
   UsageWeekly: "/api/usage/weekly",

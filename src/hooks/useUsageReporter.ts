@@ -1,114 +1,122 @@
 import { useEffect, useRef } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import { subscribeTimerTicks } from '../services/timerRealtimeService';
-import { recordUsageAPI, type UsageRecordResponse } from '../services/usageService';
+import { tickUsageAPI, recordUsageAPI } from '../services/usageService';
 import { startAppBlockerService, updateBlockedApps } from '../services/appBlockerService';
 import { usePolicyContext } from '../context/PolicyContext';
 import { getPolicyPackageKey } from '../utils/policyMapper';
 import type { UIPolicy } from '../utils/policyMapper';
 
-const FLUSH_INTERVAL_MS = 15_000;
-const SYNC_DRIFT_THRESHOLD_MINUTES = 3 / 60;
+const TICK_INTERVAL_MS = 15_000;
 
-interface PolicyAccumulator {
+const generateSessionId = () =>
+  `sess_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
+
+interface PolicySession {
   policyId: string;
   packageName: string;
+  targetKey: string;
+  sessionId: string;
+  startedAt: number;
   accumulatedSeconds: number;
-  localUsedMinutes: number;
+  lastSentSeconds: number;
+  limitSeconds: number;
+  unsentDelta: number;
 }
 
 export function useUsageReporter(
   policies: UIPolicy[],
   deviceId: string | undefined,
+  _accountId: string | undefined,
 ) {
   const { setPolicies } = usePolicyContext();
-  const accumulatorRef = useRef<Map<string, PolicyAccumulator>>(new Map());
+  const sessionsRef = useRef<Map<string, PolicySession>>(new Map());
   const deviceIdRef = useRef(deviceId);
-  const flushingRef = useRef(false);
   const setPoliciesRef = useRef(setPolicies);
+  const tickingRef = useRef(false);
+  const flushingRef = useRef(false);
 
   deviceIdRef.current = deviceId;
   setPoliciesRef.current = setPolicies;
 
-  const policyIdByPackage = useRef<Map<string, string>>(new Map());
+  const policyByPackage = useRef<Map<string, { policyId: string; maxMinutes: number }>>(new Map());
   useEffect(() => {
-    const map = new Map<string, string>();
+    const map = new Map<string, { policyId: string; maxMinutes: number }>();
     for (const p of policies) {
       const pkg = getPolicyPackageKey(p);
-      if (pkg && p.id) map.set(pkg, p.id);
+      if (pkg && p.id) map.set(pkg, { policyId: p.id, maxMinutes: p.max_time_minutes });
     }
-    policyIdByPackage.current = map;
+    policyByPackage.current = map;
   }, [policies]);
 
-  const flushRef = useRef(async () => {});
-  flushRef.current = async () => {
+  const sendTick = useRef(async () => {});
+  sendTick.current = async () => {
+    const currentDeviceId = deviceIdRef.current;
+    if (!currentDeviceId) return;
+    if (tickingRef.current) return;
+
+    const entries = Array.from(sessionsRef.current.entries());
+    const toTick = entries.filter(([_, s]) => s.unsentDelta > 0);
+    if (toTick.length === 0) return;
+
+    tickingRef.current = true;
+
+    for (const [pkg, session] of toTick) {
+      const delta = session.unsentDelta;
+      try {
+        const response = await tickUsageAPI({
+          policyId: session.policyId,
+          deviceId: currentDeviceId,
+          sessionId: session.sessionId,
+          accumulatedSeconds: session.accumulatedSeconds,
+          deltaSeconds: delta,
+          limitSeconds: session.limitSeconds,
+          targetKey: session.targetKey,
+          startedAt: session.startedAt,
+        });
+        session.lastSentSeconds = session.accumulatedSeconds;
+        session.unsentDelta = 0;
+
+        if (response.isExhausted) {
+          setPoliciesRef.current(prev =>
+            prev.map(item => {
+              if (getPolicyPackageKey(item) !== pkg) return item;
+              return { ...item, is_blocked: true, status: 'blocked' as const };
+            }),
+          );
+
+          startAppBlockerService([{ package_name: pkg, app_name: session.targetKey }]);
+          updateBlockedApps([{ package_name: pkg, app_name: session.targetKey }]);
+        }
+      } catch { /* retry next interval */ }
+    }
+
+    tickingRef.current = false;
+  };
+
+  const flushToFirestore = useRef(async () => {});
+  flushToFirestore.current = async () => {
     const currentDeviceId = deviceIdRef.current;
     if (!currentDeviceId) return;
     if (flushingRef.current) return;
 
-    const entries = Array.from(accumulatorRef.current.entries());
-    const toFlush = entries.filter(([_, acc]) => acc.accumulatedSeconds >= 1);
+    const entries = Array.from(sessionsRef.current.entries());
+    const toFlush = entries.filter(([_, s]) => s.accumulatedSeconds > 0);
     if (toFlush.length === 0) return;
 
     flushingRef.current = true;
 
-    const results: Array<{ packageName: string; response: UsageRecordResponse }> = [];
-
-    for (const [pkg, acc] of toFlush) {
-      const seconds = Math.floor(acc.accumulatedSeconds);
+    for (const [pkg, session] of toFlush) {
+      const seconds = session.accumulatedSeconds;
       if (seconds <= 0) continue;
 
       try {
-        const response = await recordUsageAPI(acc.policyId, currentDeviceId, seconds);
-        acc.accumulatedSeconds = Math.max(0, acc.accumulatedSeconds - seconds);
-        results.push({ packageName: pkg, response });
-      } catch {
-        // keep accumulated seconds for next flush
-      }
-    }
-
-    if (results.length > 0) {
-      setPoliciesRef.current(prev => {
-        let updated = [...prev];
-        const blockedPkgs: Array<{ package_name: string; app_name: string }> = [];
-
-        for (const { packageName, response } of results) {
-          updated = updated.map(item => {
-            if (getPolicyPackageKey(item) !== packageName) return item;
-
-            const serverMinutes = response.usageTodayMinutes;
-            const localMinutes = item.time_used_minutes || 0;
-
-            let resolvedUsed = localMinutes;
-            if (serverMinutes > localMinutes + SYNC_DRIFT_THRESHOLD_MINUTES) {
-              resolvedUsed = serverMinutes;
-            }
-
-            const isBlocked = response.isExhaustedToday;
-
-            if (isBlocked) {
-              blockedPkgs.push({
-                package_name: item.app_name || item.package_name,
-                app_name: item.target_label || item.app_name,
-              });
-            }
-
-            return {
-              ...item,
-              time_used_minutes: resolvedUsed,
-              is_blocked: isBlocked,
-              status: isBlocked ? 'blocked' as const : item.status,
-            };
-          });
-        }
-
-        if (blockedPkgs.length > 0) {
-          startAppBlockerService(blockedPkgs);
-          updateBlockedApps(blockedPkgs);
-        }
-
-        return updated;
-      });
+        await recordUsageAPI(session.policyId, currentDeviceId, seconds);
+        session.accumulatedSeconds = 0;
+        session.lastSentSeconds = 0;
+        session.sessionId = generateSessionId();
+        session.startedAt = Date.now();
+      } catch { /* retry next time */ }
     }
 
     flushingRef.current = false;
@@ -125,19 +133,24 @@ export function useUsageReporter(
       if (isBlocked) return;
 
       const pkg = String(event.package).trim().toLowerCase();
-      const policyId = policyIdByPackage.current.get(pkg);
-      if (!policyId) return;
+      const policyInfo = policyByPackage.current.get(pkg);
+      if (!policyInfo) return;
 
-      const existing = accumulatorRef.current.get(pkg);
+      const existing = sessionsRef.current.get(pkg);
       if (existing) {
         existing.accumulatedSeconds += 1;
-        existing.localUsedMinutes = (existing.localUsedMinutes || 0) + 1 / 60;
+        existing.unsentDelta += 1;
       } else {
-        accumulatorRef.current.set(pkg, {
-          policyId,
+        sessionsRef.current.set(pkg, {
+          policyId: policyInfo.policyId,
           packageName: pkg,
+          targetKey: pkg,
+          sessionId: generateSessionId(),
+          startedAt: Date.now(),
           accumulatedSeconds: 1,
-          localUsedMinutes: 1 / 60,
+          lastSentSeconds: 0,
+          limitSeconds: policyInfo.maxMinutes * 60,
+          unsentDelta: 1,
         });
       }
     });
@@ -146,14 +159,18 @@ export function useUsageReporter(
   }, []);
 
   useEffect(() => {
-    const interval = setInterval(() => flushRef.current(), FLUSH_INTERVAL_MS);
+    const interval = setInterval(() => sendTick.current(), TICK_INTERVAL_MS);
     return () => clearInterval(interval);
   }, []);
 
   useEffect(() => {
     const handleAppStateChange = (nextState: AppStateStatus) => {
-      if (nextState === 'background' || nextState === 'inactive' || nextState === 'active') {
-        flushRef.current();
+      if (nextState === 'background' || nextState === 'inactive') {
+        sendTick.current();
+        flushToFirestore.current();
+      }
+      if (nextState === 'active') {
+        sendTick.current();
       }
     };
 
