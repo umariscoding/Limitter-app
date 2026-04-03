@@ -1,20 +1,3 @@
-// ─── DASHBOARD SCREEN 
-export const userProfile = {
-  appName: "Limitter",
-  plan: "Pro",           // "Free" | "Pro" | "Elite"
-  overridesUsed: 3,
-  overridesTotal: 15,
-  totalUsageToday: "4h 20m",
-};
-
-export const categories = [
-  { id: "1", name: "Social Media", time: "1h 45m", color: "#6366F1", icon: "smartphone" },
-  { id: "2", name: "Gaming", time: "55m", color: "#EC4899", icon: "gamepad-2" },
-  { id: "3", name: "Productivity", time: "40m", color: "#10B981", icon: "trending-up" },
-  { id: "4", name: "Entertainment", time: "1h 00m", color: "#F59E0B", icon: "film" },
-];
-
-// ─── DEVICE MANAGEMENT 
 export const devices = [
   {
     id: "1", name: "iPhone 14 Pro", type: "phone",
@@ -34,38 +17,6 @@ export const devices = [
   },
 ];
 
-export const deviceLimit = {
-  plan: "Pro",
-  maxActiveDevices: 2,
-  infoText: "Pro Plan: 2 Active Devices Max. Lock one to activate another.",
-  sharedLimitNote: "Time limits are shared across all devices (account-wide)",
-};
-
-// ─── OVERRIDE LOGS 
-export const overrideLogs = [
-  {
-    id: "1", app: "Instagram", dateTime: "Jun 14, 2025 — 11:20 PM",
-    device: "iPhone 14 Pro"
-  },
-  {
-    id: "2", app: "YouTube", dateTime: "Jun 13, 2025 — 3:05 PM",
-    device: "iPad Mini"
-  },
-  {
-    id: "3", app: "Call of Duty", dateTime: "Jun 12, 2025 — 9:42 PM",
-    device: "MacBook Air"
-  },
-  {
-    id: "4", app: "TikTok", dateTime: "Jun 11, 2025 — 7:15 PM",
-    device: "iPhone 14 Pro"
-  },
-  {
-    id: "5", app: "Twitch", dateTime: "Jun 10, 2025 — 1:30 AM",
-    device: "MacBook Air"
-  },
-];
-
-// ─── MANAGED CONTENT (Apps & Websites) 
 export const managedContent = [
   {
     id: "1", name: "Instagram", category: "Social Media",
@@ -196,111 +147,14 @@ export const trustSignals = [
   },
 ];
 
-// ─── ANALYTICS SCREEN ────────────────────────────────────────
-export const todayUsage = {
-  totalTime: "5h 02m",
-  dailyLimitHours: 6,
-  dailyLimitLabel: "6h 00m",
-  usedMinutes: 302,
-  limitMinutes: 360,
-};
-
-export const hourlyChart = [
-  { label: "8am",  minutes: 20 },
-  { label: "9am",  minutes: 45 },
-  { label: "10am", minutes: 30 },
-  { label: "11am", minutes: 55 },
-  { label: "12pm", minutes: 70 },
-  { label: "1pm",  minutes: 40 },
-  { label: "2pm",  minutes: 25 },
-  { label: "3pm",  minutes: 60 },
-  { label: "4pm",  minutes: 35 },
-  { label: "5pm",  minutes: 15 },
-];
-
-export const thresholdAlert = {
-  warningPercent: 75,
-  criticalPercent: 90,
-  message: "Alerts trigger at 75% and 90% of your daily limit.",
-};
-
-export const appBreakdown = [
-  {
-    id: "1",
-    name: "Instagram",
-    category: "Social Media",
-    icon: "instagram",
-    color: "#E1306C",
-    usedMinutes: 85,
-    limitMinutes: 90,
-  },
-  {
-    id: "2",
-    name: "Roblox",
-    category: "Gaming",
-    icon: "gamepad-2",
-    color: "#EC4899",
-    usedMinutes: 60,
-    limitMinutes: 80,
-  },
-  {
-    id: "3",
-    name: "YouTube Kids",
-    category: "Entertainment",
-    icon: "youtube",
-    color: "#FF0000",
-    usedMinutes: 45,
-    limitMinutes: 60,
-  },
-  {
-    id: "4",
-    name: "Duolingo",
-    category: "Productivity",
-    icon: "book-open",
-    color: "#10B981",
-    usedMinutes: 20,
-    limitMinutes: 45,
-  },
-];
-
-export const quickInsights = {
-  mostUsedCategory: {
-    name: "Gaming",
-    totalTime: "1h 45m",
-    icon: "gamepad-2",
-    color: "#EC4899",
-  },
-  alertsTriggered: {
-    count: 7,
-    label: "Limit warnings today",
-    devicesAffected: 3,
-  },
-};
-
-export const analyticsLabels = {
-  headerTitle: "Usage Analytics",
-  headerSubtitle: "Today's breakdown",
-  usageLabel: "Today's Usage",
-  limitLabel: "Daily Limit: ",
-  resetsIn: "Resets in:",
-  hourlyActivity: "Hourly Activity",
-  appBreakdown: "App Breakdown",
-  viewAllLink: "View All Apps & Sites",
-  viewAllButton: "View All Apps & Sites ->",
-  quickInsights: "Quick Insights",
-  mostUsedCategory: "Most Used Category",
-  alertsTriggered: "Alerts Triggered",
-  todayAt: " today",
-};
-
 // ─── CONFIRM OVERRIDE SCREEN ─────────────────────────────────
 export const overrideConfig = {
   oneTimeFee: 1.99,
   feeLabel: "$1.99",
   overrideTitle: "Temporary Override",
   overrideDescription: "Temporarily unlocks the selected device",
-  expiresAt: "today at 4:30 PM",
-  expiresLabel: "Expires today at 4:30 PM",
+  expiresAt: "at midnight (daily reset)",
+  expiresLabel: "Override expires at midnight (daily reset)",
 };
 
 

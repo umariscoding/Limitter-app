@@ -31,7 +31,7 @@ import { useNativeTimerSync } from '../hooks/useNativeTimerSync';
 import { useDeviceResolver } from '../hooks/useDeviceResolver';
 import { useCreateLimit } from '../hooks/useCreateLimit';
 import { useUsageReporter } from '../hooks/useUsageReporter';
-import { hardDeleteAllPoliciesAPI } from '../services/policyService';
+import { archiveAllPoliciesAPI } from '../services/policyService';
 import { updateBlockedApps } from '../services/appBlockerService';
 import { getPlanLimits, canCreatePolicy, invalidatePlanCache, type PlanLimits } from '../services/planGuardService';
 import { useLockStateSync } from '../hooks/useLockStateSync';
@@ -42,6 +42,7 @@ import { formatTotalUsageFromLimits } from '../helpers/helper';
 import { Toast } from '../../components';
 import CreateLimitModal from '../components/CreateLimitModal';
 import PolicyCard from '../components/PolicyCard';
+import BottomNav from '../components/BottomNav';
 import type { CreateLimitState } from '../hooks/useCreateLimit';
 
 export default function DashboardScreen() {
@@ -193,7 +194,7 @@ export default function DashboardScreen() {
           onPress: async () => {
             setLoading(true);
             try {
-              await hardDeleteAllPoliciesAPI();
+              await archiveAllPoliciesAPI();
               try {
                 if (LimitterModule?.sendCommand) {
                   await LimitterModule.sendCommand('STOP', {});
@@ -327,24 +328,7 @@ export default function DashboardScreen() {
         </View>
       </ScrollView>
 
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem}>
-          <Home size={22} color="#4F46E5" />
-          <Text style={styles.navLabel}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('PoliciesScreen')}>
-          <Shield size={22} color="#94A3B8" />
-          <Text style={[styles.navLabel, styles.inactiveLabel]}>Limits</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('AnalyticsScreen')}>
-          <BarChart2 size={22} color="#94A3B8" />
-          <Text style={[styles.navLabel, styles.inactiveLabel]}>Analytics</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('SettingsScreen')}>
-          <SettingsIcon size={22} color="#94A3B8" />
-          <Text style={[styles.navLabel, styles.inactiveLabel]}>Settings</Text>
-        </TouchableOpacity>
-      </View>
+      <BottomNav active="home" />
     </SafeAreaView>
   );
 }
@@ -377,8 +361,4 @@ const styles = StyleSheet.create({
   actionContent: { marginLeft: 12, flex: 1 },
   actionTitle: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
   actionDesc: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
-  bottomNav: { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingVertical: 12, paddingHorizontal: 24, borderTopWidth: 1, borderTopColor: '#E2E8F0', justifyContent: 'space-around', position: 'absolute', bottom: 0, left: 0, right: 0 },
-  navItem: { alignItems: 'center', justifyContent: 'center' },
-  navLabel: { fontSize: 11, fontWeight: '600', color: '#4F46E5', marginTop: 4 },
-  inactiveLabel: { color: '#94A3B8' },
 });

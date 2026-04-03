@@ -19,10 +19,9 @@ import { useUser } from '../context/UserContext';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
 import { updatePolicyAPI, archivePolicyAPI } from '../services/policyService';
+import BottomNav from '../components/BottomNav';
 import {
   Home,
-  BarChart2,
-  Settings as SettingsIcon,
   Globe,
   Smartphone,
   Pencil,
@@ -320,24 +319,7 @@ export default function PoliciesScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <View style={s.bottomNav}>
-        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('DashboardScreen')}>
-          <Home size={22} color="#94A3B8" />
-          <Text style={s.navLabelInactive}>Home</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.navItem}>
-          <Shield size={22} color="#4F46E5" />
-          <Text style={s.navLabelActive}>Limits</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('AnalyticsScreen')}>
-          <BarChart2 size={22} color="#94A3B8" />
-          <Text style={s.navLabelInactive}>Analytics</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={s.navItem} onPress={() => navigation.navigate('SettingsScreen')}>
-          <SettingsIcon size={22} color="#94A3B8" />
-          <Text style={s.navLabelInactive}>Settings</Text>
-        </TouchableOpacity>
-      </View>
+      <BottomNav active="limits" />
     </SafeAreaView>
   );
 }
@@ -405,8 +387,4 @@ const s = StyleSheet.create({
   modalCancelText: { fontSize: 14, fontWeight: '700', color: '#64748B' },
   modalSave: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#4F46E5', alignItems: 'center' },
   modalSaveText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
-  bottomNav: { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingVertical: 12, paddingHorizontal: 24, borderTopWidth: 1, borderTopColor: '#E2E8F0', justifyContent: 'space-around', position: 'absolute', bottom: 0, left: 0, right: 0 },
-  navItem: { alignItems: 'center', justifyContent: 'center' },
-  navLabelActive: { fontSize: 11, fontWeight: '600', color: '#4F46E5', marginTop: 4 },
-  navLabelInactive: { fontSize: 11, fontWeight: '600', color: '#94A3B8', marginTop: 4 },
 });

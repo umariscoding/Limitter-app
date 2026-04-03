@@ -44,6 +44,14 @@ export const restorePolicyAPI = async (policyId: string) => {
   return await axiosService.post(`${API.Policies}/${policyId}/restore`);
 };
 
-export const hardDeleteAllPoliciesAPI = async () => {
-  return await axiosService.delete(`${API.Policies}/all/hard`);
+export const archiveAllPoliciesAPI = async () => {
+  const policies = await getPoliciesAPI() as any[];
+  const active = (policies || []).filter((p: any) => {
+    const policy = p.policy || p;
+    return policy.isActive && !policy.isArchived;
+  });
+  for (const p of active) {
+    const id = (p.policy || p).policyId || p.id;
+    if (id) await archivePolicyAPI(id);
+  }
 };

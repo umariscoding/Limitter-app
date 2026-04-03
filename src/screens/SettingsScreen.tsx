@@ -15,9 +15,9 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
 import { signOut } from '../auth/firebaseAuthService';
-import { dashboardLabels } from '../data/appData';
 import axiosService from '../services/axiosService';
 import { API } from '../config/config';
+import BottomNav from '../components/BottomNav';
 import {
   Home,
   BarChart2,
@@ -207,20 +207,7 @@ export default function SettingsScreen() {
         )}
       </ScrollView>
 
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('DashboardScreen')}>
-          <Home size={22} color="#94A3B8" />
-          <Text style={styles.navLabel}>{dashboardLabels.navHome}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('AnalyticsScreen')}>
-          <BarChart2 size={22} color="#94A3B8" />
-          <Text style={styles.navLabel}>{dashboardLabels.navUsage}</Text>
-        </TouchableOpacity>
-        <View style={styles.navItem}>
-          <SettingsIcon size={22} color="#6366F1" />
-          <Text style={[styles.navLabel, styles.activeNavText]}>{dashboardLabels.navSettings}</Text>
-        </View>
-      </View>
+      <BottomNav active="settings" />
     </SafeAreaView>
   );
 }
@@ -260,8 +247,4 @@ const styles = StyleSheet.create({
   errorText: { fontSize: 16, color: '#64748B', marginBottom: 12 },
   retryBtn: { paddingHorizontal: 20, paddingVertical: 10, backgroundColor: '#4F46E5', borderRadius: 8 },
   retryText: { color: '#FFFFFF', fontWeight: '700' },
-  bottomNav: { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingVertical: 12, paddingHorizontal: 24, borderTopWidth: 1, borderTopColor: '#E2E8F0', justifyContent: 'space-between', paddingBottom: Platform.OS === 'ios' ? 24 : 12 },
-  navItem: { alignItems: 'center', flex: 1 },
-  navLabel: { fontSize: 12, fontWeight: '600', color: '#94A3B8' },
-  activeNavText: { color: '#6366F1' },
 });

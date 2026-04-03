@@ -12,13 +12,9 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { overrideLogLabels, dashboardLabels } from '../data/appData';
-import {
-  Home,
-  BarChart2,
-  Settings as SettingsIcon,
-  ArrowLeft,
-} from 'lucide-react-native';
+import { overrideLogLabels } from '../data/appData';
+import { ArrowLeft } from 'lucide-react-native';
+import BottomNav from '../components/BottomNav';
 import { getOverrideHistoryAPI, type OverrideRecordResponse } from '../services/overrideService';
 
 export default function OverrideLogsScreen() {
@@ -102,20 +98,7 @@ export default function OverrideLogsScreen() {
         )}
       </ScrollView>
 
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('DashboardScreen')}>
-          <Home size={22} color="#94A3B8" />
-          <Text style={styles.navLabel}>{dashboardLabels.navHome}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('AnalyticsScreen')}>
-          <BarChart2 size={22} color="#94A3B8" />
-          <Text style={styles.navLabel}>{dashboardLabels.navUsage}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('SettingsScreen')}>
-          <SettingsIcon size={22} color="#94A3B8" />
-          <Text style={styles.navLabel}>{dashboardLabels.navSettings}</Text>
-        </TouchableOpacity>
-      </View>
+      <BottomNav active="settings" />
     </SafeAreaView>
   );
 }
@@ -137,7 +120,4 @@ const styles = StyleSheet.create({
   logMeta: { flexDirection: 'row', gap: 12 },
   logType: { fontSize: 12, color: '#94A3B8', fontWeight: '500' },
   logStatus: { fontSize: 12, color: '#10B981', fontWeight: '600' },
-  bottomNav: { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingVertical: 12, paddingHorizontal: 24, borderTopWidth: 1, borderTopColor: '#E2E8F0', justifyContent: 'space-between', paddingBottom: 24 },
-  navItem: { alignItems: 'center', flex: 1 },
-  navLabel: { fontSize: 12, fontWeight: '600', color: '#94A3B8' },
 });
