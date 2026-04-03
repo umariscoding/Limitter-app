@@ -1,4 +1,4 @@
-export const BASE_URL = "https://d76e-39-63-37-125.ngrok-free.app";
+export const BASE_URL = "https://8083-39-63-37-125.ngrok-free.app";
 
 export const API = {
   SetupAccount: "/api/auth/setup-account",
@@ -18,6 +18,7 @@ export const API = {
   UsageWeekly: "/api/usage/weekly",
   UsageRemaining: "/api/usage/remaining",
 
+  AccountProfile: "/api/account/profile",
   PlanLimits: "/api/account/plan-limits",
   UpgradePlan: "/api/account/upgrade-plan",
 
