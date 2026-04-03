@@ -12,6 +12,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
+import BottomNav from '../components/BottomNav';
 import { useNativeTimerSync } from '../hooks/useNativeTimerSync';
 import { formatLimitTime } from '../utils/policyMapper';
 
@@ -79,7 +80,9 @@ export default function ActivityScreen() {
             </View>
           ))
         )}
+        <View style={{ height: 80 }} />
       </ScrollView>
+      <BottomNav active="home" />
     </SafeAreaView>
   );
 }

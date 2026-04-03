@@ -4,6 +4,7 @@ import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft } from 'lucide-react-native';
 import { useUsageContext } from '../context/UsageContext';
 import { WeeklyUsageGraph } from '../components/WeeklyUsageGraph';
+import BottomNav from '../components/BottomNav';
 
 export default function UsageScreen() {
   const navigation = useNavigation<any>();
@@ -29,6 +30,7 @@ export default function UsageScreen() {
           onRefresh={() => {}}
         />
       </View>
+      <BottomNav active="analytics" />
     </SafeAreaView>
   );
 }

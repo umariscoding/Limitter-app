@@ -12,8 +12,8 @@ import {
   RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
-import { overrideLogLabels } from '../data/appData';
-import { ArrowLeft } from 'lucide-react-native';
+import { ChevronLeft, Zap, Clock, FileText } from 'lucide-react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import BottomNav from '../components/BottomNav';
 import { getOverrideHistoryAPI, type OverrideRecordResponse } from '../services/overrideService';
 
@@ -27,46 +27,34 @@ export default function OverrideLogsScreen() {
     try {
       const data = await getOverrideHistoryAPI(50, 0);
       setLogs(data.overrides || []);
-    } catch {
-      setLogs([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
+    } catch { setLogs([]); }
+    finally { setLoading(false); setRefreshing(false); }
   };
 
-  useEffect(() => {
-    fetchLogs();
-  }, []);
+  useEffect(() => { fetchLogs(); }, []);
 
-  const onRefresh = () => {
-    setRefreshing(true);
-    fetchLogs();
-  };
+  const onRefresh = () => { setRefreshing(true); fetchLogs(); };
 
   const formatDate = (timestamp: any): string => {
     if (!timestamp) return '';
     const seconds = timestamp._seconds || timestamp.seconds;
-    if (seconds) {
-      return new Date(seconds * 1000).toLocaleString();
-    }
+    if (seconds) return new Date(seconds * 1000).toLocaleString();
     return String(timestamp);
   };
 
-  const getModeLabel = (mode: string): string => {
-    if (mode === 'free_credit') return 'Free Credit';
-    if (mode === 'paid') return 'Paid';
-    return mode || 'Unknown';
-  };
+  const getModeLabel = (mode: string) => mode === 'free_credit' ? 'Free Credit' : mode === 'paid' ? 'Purchased' : mode || 'Unknown';
+  const getModeColors = (mode: string): [string, string] => mode === 'free_credit' ? ['#10B981', '#059669'] : ['#6366F1', '#4F46E5'];
 
   return (
     <SafeAreaView style={styles.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+
       <View style={styles.header}>
         <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={24} color="#0F172A" />
+          <ChevronLeft size={22} color="#0F172A" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{overrideLogLabels.headerTitle}</Text>
-        <View style={styles.headerSpacer} />
+        <Text style={styles.headerTitle}>Override History</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
@@ -75,27 +63,44 @@ export default function OverrideLogsScreen() {
       >
         {loading ? (
           <View style={styles.emptyState}>
-            <ActivityIndicator size="large" color="#4F46E5" />
+            <ActivityIndicator size="large" color="#6366F1" />
           </View>
         ) : logs.length === 0 ? (
           <View style={styles.emptyState}>
-            <Text style={styles.emptyStateText}>{overrideLogLabels.emptyState}</Text>
+            <View style={styles.emptyIconWrap}>
+              <FileText size={36} color="#CBD5E1" />
+            </View>
+            <Text style={styles.emptyTitle}>No overrides yet</Text>
+            <Text style={styles.emptyDesc}>Override history will appear here when you use override credits</Text>
           </View>
         ) : (
-          logs.map((log) => (
+          logs.map((log, index) => (
             <View key={log.overrideId} style={styles.logCard}>
-              <View style={styles.logHeader}>
-                <Text style={styles.appName}>{log.targetKey}</Text>
-                <Text style={styles.deviceBadge}>{getModeLabel(log.mode)}</Text>
+              <View style={styles.timelineRow}>
+                <View style={styles.timelineDot} />
+                {index < logs.length - 1 && <View style={styles.timelineLine} />}
               </View>
-              <Text style={styles.logDate}>{formatDate(log.createdAt)}</Text>
-              <View style={styles.logMeta}>
-                <Text style={styles.logType}>{log.type}</Text>
-                <Text style={styles.logStatus}>{log.status}</Text>
+              <View style={styles.logContent}>
+                <View style={styles.logHeader}>
+                  <Text style={styles.logTarget} numberOfLines={1}>{log.targetKey}</Text>
+                  <LinearGradient colors={getModeColors(log.mode)} style={styles.modeBadge}>
+                    <Text style={styles.modeBadgeText}>{getModeLabel(log.mode)}</Text>
+                  </LinearGradient>
+                </View>
+                <View style={styles.logMeta}>
+                  <Clock size={12} color="#94A3B8" />
+                  <Text style={styles.logDate}>{formatDate(log.createdAt)}</Text>
+                </View>
+                <View style={styles.logFooter}>
+                  <Text style={styles.logType}>{log.type}</Text>
+                  <Text style={styles.logStatus}>{log.status}</Text>
+                </View>
               </View>
             </View>
           ))
         )}
+
+        <View style={{ height: 100 }} />
       </ScrollView>
 
       <BottomNav active="settings" />
@@ -104,20 +109,29 @@ export default function OverrideLogsScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 20, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#FFFFFF' },
-  backButton: { padding: 8, marginRight: 10 },
-  headerTitle: { fontSize: 20, fontWeight: '700', color: '#0F172A', flex: 1, textAlign: 'center' },
-  headerSpacer: { width: 40 },
+  container: { flex: 1, backgroundColor: '#F1F5F9' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  backButton: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: '#0F172A' },
   scrollContent: { padding: 20 },
-  emptyState: { padding: 40, alignItems: 'center' },
-  emptyStateText: { color: '#64748B', fontSize: 16 },
-  logCard: { backgroundColor: '#FFFFFF', padding: 16, borderRadius: 12, marginBottom: 12, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#94A3B8', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.1, shadowRadius: 4, elevation: 2 },
+
+  emptyState: { alignItems: 'center', paddingVertical: 60 },
+  emptyIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#F8FAFC', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#334155', marginBottom: 6 },
+  emptyDesc: { fontSize: 13, color: '#94A3B8', textAlign: 'center', paddingHorizontal: 40 },
+
+  logCard: { flexDirection: 'row', marginBottom: 4 },
+  timelineRow: { width: 24, alignItems: 'center', paddingTop: 6 },
+  timelineDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#6366F1', borderWidth: 2, borderColor: '#C7D2FE' },
+  timelineLine: { width: 2, flex: 1, backgroundColor: '#E2E8F0', marginTop: 4 },
+  logContent: { flex: 1, backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, marginBottom: 8, marginLeft: 8, borderWidth: 1, borderColor: '#E8ECF4', shadowColor: '#64748B', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
   logHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 8 },
-  appName: { fontSize: 16, fontWeight: '700', color: '#1E293B' },
-  deviceBadge: { fontSize: 12, color: '#4F46E5', backgroundColor: '#EEF2FF', paddingHorizontal: 8, paddingVertical: 4, borderRadius: 8, overflow: 'hidden', fontWeight: '600' },
-  logDate: { fontSize: 14, color: '#64748B', marginBottom: 6 },
-  logMeta: { flexDirection: 'row', gap: 12 },
-  logType: { fontSize: 12, color: '#94A3B8', fontWeight: '500' },
-  logStatus: { fontSize: 12, color: '#10B981', fontWeight: '600' },
+  logTarget: { fontSize: 15, fontWeight: '700', color: '#0F172A', flex: 1, marginRight: 8 },
+  modeBadge: { paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12 },
+  modeBadgeText: { fontSize: 10, fontWeight: '800', color: '#FFFFFF' },
+  logMeta: { flexDirection: 'row', alignItems: 'center', gap: 6, marginBottom: 6 },
+  logDate: { fontSize: 12, color: '#94A3B8' },
+  logFooter: { flexDirection: 'row', gap: 12 },
+  logType: { fontSize: 11, color: '#94A3B8', fontWeight: '600', textTransform: 'uppercase' },
+  logStatus: { fontSize: 11, color: '#10B981', fontWeight: '700', textTransform: 'uppercase' },
 });

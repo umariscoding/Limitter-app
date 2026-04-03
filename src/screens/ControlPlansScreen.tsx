@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -7,421 +7,255 @@ import {
   ScrollView,
   SafeAreaView,
   Alert,
-  Switch,
-  Keyboard,
   Platform,
   StatusBar,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation } from '@react-navigation/native';
 import {
-  Home,
-  BarChart2,
-  Settings as SettingsIcon,
   Smartphone,
-  Monitor,
   Laptop,
   Tablet,
-  Clock,
-  Calendar,
-  Shield,
-  Zap,
-  Bell,
+  Monitor,
   ChevronRight,
-  Plus,
-  ArrowLeft,
+  ChevronLeft,
+  Zap,
+  Shield,
+  Clock,
 } from 'lucide-react-native';
-import {
-  planDetails,
-  usageControls,
-  featureToggles,
-  controlLabels,
-  dashboardLabels,
-} from '../data/appData';
 import { useUser } from '../context/UserContext';
-import { getDevicesAPI } from '../services/deviceService';
-import { Device as BackendDevice } from '../interface/Device';
-import { useDeviceResolver } from '../hooks/useDeviceResolver';
-import { normalizePlan } from '../utils/planRules';
+import axiosService from '../services/axiosService';
+import { API } from '../config/config';
+import BottomNav from '../components/BottomNav';
 
-type PlanTier = 'Free' | 'Pro' | 'Elite';
-type DeviceType = 'phone' | 'tablet' | 'laptop' | 'desktop';
-
-interface DisplayDevice {
-  id: string;
-  name: string;
-  type: DeviceType;
-  model: string;
-  status: string;
-  icon: string;
+interface ProfileData {
+  account: { planCode: string };
+  devices: {
+    count: number;
+    max: number;
+    list: Array<{ deviceId: string; deviceName: string; platform: string; lastSeenAt: any }>;
+  };
+  planLimits: { maxPolicies: number | null; currentPolicies: number; customTimers: boolean };
+  overrides: { totalAvailable: number };
 }
+
+const PLAN_COLORS: Record<string, [string, string]> = {
+  free: ['#64748B', '#475569'],
+  pro: ['#6366F1', '#4F46E5'],
+  elite: ['#F59E0B', '#D97706'],
+};
 
 export default function ControlPlansScreen() {
   const navigation = useNavigation<any>();
-  const route = useRoute<any>();
-  const { user, logout } = useUser();
-  const { deviceId: currentDeviceId } = useDeviceResolver(user?.uid);
+  const { user } = useUser();
+  const [profile, setProfile] = useState<ProfileData | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const planLabelMap: Record<'free' | 'pro' | 'elite', PlanTier> = {
-    free: 'Free',
-    pro: 'Pro',
-    elite: 'Elite',
-  };
-
-  const [currentPlan, setCurrentPlan] = useState<PlanTier>(
-    planLabelMap[normalizePlan(user?.plan)]
-  );
-
-  useEffect(() => {
-    if (route.params?.activePlan) {
-      setCurrentPlan(route.params.activePlan);
-    }
-  }, [route.params?.activePlan]);
-
-  useEffect(() => {
-    setCurrentPlan(planLabelMap[normalizePlan(user?.plan)]);
-  }, [user?.plan]);
-
-  const devicesTotal = planDetails.deviceSlotsTotal;
-  const [managedDevices, setManagedDevices] = useState<DisplayDevice[]>([]);
-  const [loadingDevices, setLoadingDevices] = useState(true);
-  const [refreshingDevices, setRefreshingDevices] = useState(false);
-
-  const [safeBrowsing, setSafeBrowsing] = useState(featureToggles.find(f => f.key === 'safeBrowsing')?.defaultValue ?? true);
-  const [smartOverride, setSmartOverride] = useState(featureToggles.find(f => f.key === 'smartOverride')?.defaultValue ?? true);
-
-  const devicesUsed = managedDevices.length;
-  const progressPercentage = devicesTotal > 0 ? (devicesUsed / devicesTotal) * 100 : 0;
-  const slotsRemaining = devicesTotal - devicesUsed;
-  const isTopPlan = currentPlan === 'Elite';
-
-  const mapDeviceType = (deviceOS: string): DeviceType => {
-    const os = deviceOS.toLowerCase();
-    if (os.includes('ios') || os.includes('android')) return 'phone';
-    if (os.includes('ipad') || os.includes('tablet')) return 'tablet';
-    if (os.includes('mac') || os.includes('windows') || os.includes('linux')) return 'laptop';
-    return 'desktop';
-  };
-
-  const mapDeviceIcon = (type: DeviceType) => {
-    if (type === 'phone') return 'smartphone';
-    if (type === 'tablet') return 'tablet';
-    if (type === 'laptop') return 'laptop';
-    return 'monitor';
-  };
-
-  const mapApiDeviceToDisplay = (device: BackendDevice): DisplayDevice => {
-    const type = mapDeviceType(device.device_os || 'unknown');
-    const lastActive = Number(device.last_active || 0);
-    const isRecentlyActive = Date.now() - lastActive < 5 * 60 * 1000;
-
-    return {
-      id: device.id,
-      name: device.device_name,
-      type,
-      model: device.device_os,
-      status: isRecentlyActive ? 'Active' : 'Idle',
-      icon: mapDeviceIcon(type),
-    };
-  };
-
-  const loadDevices = async () => {
-    if (!user?.uid) {
-      setLoadingDevices(false);
-      setRefreshingDevices(false);
-      return;
-    }
-
+  const fetchRef = useRef(async () => {});
+  fetchRef.current = async () => {
     try {
-      const response = await getDevicesAPI();
-      const list = Array.isArray(response?.data) ? response.data : [];
-      const sorted = [...list].sort(
-        (a, b) => Number(b.last_active || 0) - Number(a.last_active || 0)
-      );
-      setManagedDevices(sorted.map(mapApiDeviceToDisplay));
-    } catch {
-      setManagedDevices([]);
-    } finally {
-      setLoadingDevices(false);
-      setRefreshingDevices(false);
-    }
+      const data = await axiosService.get<ProfileData>(API.AccountProfile);
+      setProfile(data);
+    } catch {}
+    finally { setLoading(false); setRefreshing(false); }
   };
 
-  useEffect(() => {
-    const syncDevices = async () => {
-      setLoadingDevices(true);
-      await loadDevices();
-    };
+  useEffect(() => { fetchRef.current(); }, []);
 
-    syncDevices();
-  }, [user?.uid]);
+  const onRefresh = () => { setRefreshing(true); fetchRef.current(); };
 
-  const getDeviceIcon = (iconName: string, color = "#64748B") => {
-    switch(iconName) {
-      case 'smartphone': return <Smartphone size={22} color={color} />;
-      case 'monitor': return <Monitor size={22} color={color} />;
-      case 'laptop': return <Laptop size={22} color={color} />;
-      case 'tablet': return <Tablet size={22} color={color} />;
-      default: return null;
-    }
-  };
+  const planCode = profile?.account.planCode || 'free';
+  const planColors = PLAN_COLORS[planCode] || PLAN_COLORS.free;
+  const deviceCount = profile?.devices.count || 0;
+  const deviceMax = profile?.devices.max || 1;
+  const devicePct = Math.min(100, (deviceCount / deviceMax) * 100);
 
-  const handleSignOut = () => {
-    Alert.alert(controlLabels.signOut, controlLabels.signOutConfirm, [
-      { text: controlLabels.cancel, style: "cancel" },
-      {
-        text: controlLabels.signOut,
-        style: "destructive",
-        onPress: () => {
-          logout();
-          navigation.reset({
-            index: 0,
-            routes: [{ name: 'Login' }],
-          });
-        }
-      }
-    ]);
+  const getDeviceIcon = (platform: string) => {
+    const p = platform.toLowerCase();
+    if (p.includes('android') || p.includes('ios') || p === 'chrome') return <Smartphone size={20} color="#6366F1" />;
+    if (p.includes('tablet') || p.includes('ipad')) return <Tablet size={20} color="#6366F1" />;
+    if (p.includes('mac') || p.includes('windows')) return <Laptop size={20} color="#6366F1" />;
+    return <Monitor size={20} color="#6366F1" />;
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={s.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={24} color="#0F172A" />
+
+      <View style={s.header}>
+        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+          <ChevronLeft size={22} color="#0F172A" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>{controlLabels.headerTitle}</Text>
-        <View style={styles.headerSpacer} />
+        <Text style={s.headerTitle}>Devices & Plan</Text>
+        <View style={{ width: 40 }} />
       </View>
 
       <ScrollView
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-        refreshControl={
-          <RefreshControl
-            refreshing={refreshingDevices}
-            onRefresh={() => {
-              setRefreshingDevices(true);
-              loadDevices();
-            }}
-          />
-        }
+        contentContainerStyle={s.scrollContent}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
       >
-
-        <View style={styles.planCard}>
-          <View style={styles.planCardHeader}>
-            <Text style={styles.planTitle}>{currentPlan}{controlLabels.memberSuffix}</Text>
-            <View style={styles.activeBadge}>
-              <Text style={styles.activeBadgeText}>{planDetails.status}</Text>
-            </View>
+        {loading ? (
+          <View style={s.loadingWrap}>
+            <ActivityIndicator size="large" color="#6366F1" />
           </View>
-          <Text style={styles.planBenefits}>
-            {planDetails.benefits}
-          </Text>
-        </View>
+        ) : profile ? (
+          <>
+            <LinearGradient colors={planColors as [string, string]} style={s.planCard}>
+              <View style={s.planRow}>
+                <View>
+                  <Text style={s.planLabel}>Current Plan</Text>
+                  <Text style={s.planName}>{planCode.toUpperCase()}</Text>
+                </View>
+                <TouchableOpacity
+                  style={s.upgradeChip}
+                  onPress={() => navigation.navigate('SubscriptionPlansScreen')}
+                  activeOpacity={0.8}
+                >
+                  <Text style={s.upgradeChipText}>
+                    {planCode === 'elite' ? 'Top Plan' : 'Upgrade'}
+                  </Text>
+                </TouchableOpacity>
+              </View>
+              <View style={s.planStatsRow}>
+                <View style={s.planStat}>
+                  <Shield size={14} color="rgba(255,255,255,0.7)" />
+                  <Text style={s.planStatValue}>{profile.planLimits.currentPolicies}/{profile.planLimits.maxPolicies ?? '\u221E'}</Text>
+                  <Text style={s.planStatLabel}>Limits</Text>
+                </View>
+                <View style={s.planStat}>
+                  <Smartphone size={14} color="rgba(255,255,255,0.7)" />
+                  <Text style={s.planStatValue}>{deviceCount}/{deviceMax}</Text>
+                  <Text style={s.planStatLabel}>Devices</Text>
+                </View>
+                <View style={s.planStat}>
+                  <Zap size={14} color="rgba(255,255,255,0.7)" />
+                  <Text style={s.planStatValue}>{profile.overrides.totalAvailable}</Text>
+                  <Text style={s.planStatLabel}>Overrides</Text>
+                </View>
+              </View>
+            </LinearGradient>
 
-        <View style={styles.card}>
-          <View style={styles.quotaHeader}>
-            <Text style={styles.quotaLabel}>{controlLabels.deviceSlotsLabel}</Text>
-            <Text style={styles.quotaValue}>{devicesUsed} / {devicesTotal}</Text>
-          </View>
-          <View style={styles.progressBg}>
-            <View style={[styles.progressFill, { width: `${progressPercentage}%` }]} />
-          </View>
-          <Text style={styles.quotaHint}>
-            {slotsRemaining} {slotsRemaining === 1 ? controlLabels.slotRemaining : controlLabels.slotsRemaining}
-          </Text>
-        </View>
-
-        <TouchableOpacity
-          style={[styles.primaryBtn, isTopPlan && styles.disabledBtn]}
-          onPress={() => {
-            Keyboard.dismiss();
-            navigation.navigate('SubscriptionPlansScreen');
-          }}
-          disabled={isTopPlan}
-        >
-          <Text style={styles.primaryBtnText}>
-            {isTopPlan ? controlLabels.upgradeBtnActive : controlLabels.upgradeBtn}
-          </Text>
-        </TouchableOpacity>
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{controlLabels.managedDevicesTitle}</Text>
-          <Text style={styles.sectionSubtitle}>{controlLabels.managedDevicesSubtitle}</Text>
-        </View>
-
-        {loadingDevices ? (
-          <View style={styles.devicesLoadingWrap}>
-            <ActivityIndicator size="small" color="#4F46E5" />
-            <Text style={styles.devicesLoadingText}>Loading devices...</Text>
-          </View>
-        ) : managedDevices.length === 0 ? (
-          <View style={styles.emptyDeviceWrap}>
-            <Text style={styles.emptyDeviceText}>No devices registered yet</Text>
-          </View>
-        ) : managedDevices.map(device => (
-          <TouchableOpacity key={device.id} style={styles.deviceCard} onPress={() => Alert.alert(device.name)}>
-            <View style={styles.deviceIconWrapper}>
-              {getDeviceIcon(device.icon)}
-            </View>
-            <View style={styles.deviceInfo}>
-              <Text style={styles.deviceName}>{device.name}</Text>
-              <Text style={styles.deviceModel}>{device.model}</Text>
-            </View>
-            <View style={[styles.statusPill, device.status === 'Active' ? styles.onlinePill : styles.offlinePill]}>
-              <Text style={[styles.statusText, device.status === 'Active' ? styles.onlineText : styles.offlineText]}>
-                {device.status}
+            <Text style={s.sectionTitle}>Device Slots</Text>
+            <View style={s.card}>
+              <View style={s.quotaRow}>
+                <Text style={s.quotaLabel}>Used</Text>
+                <Text style={s.quotaValue}>{deviceCount} / {deviceMax}</Text>
+              </View>
+              <View style={s.progressTrack}>
+                <LinearGradient
+                  colors={devicePct >= 100 ? ['#EF4444', '#DC2626'] : ['#6366F1', '#818CF8']}
+                  start={{ x: 0, y: 0 }}
+                  end={{ x: 1, y: 0 }}
+                  style={[s.progressFill, { width: `${Math.max(devicePct, 4)}%` }]}
+                />
+              </View>
+              <Text style={s.quotaHint}>
+                {deviceMax - deviceCount > 0
+                  ? `${deviceMax - deviceCount} slot${deviceMax - deviceCount > 1 ? 's' : ''} remaining`
+                  : 'All slots used. Upgrade for more.'}
               </Text>
             </View>
-          </TouchableOpacity>
-        ))}
 
-        <TouchableOpacity style={styles.addBtn} onPress={() => Alert.alert(controlLabels.pairingAlert)}>
-          <Plus size={18} color="#64748B" style={{ marginRight: 8 }} />
-          <Text style={styles.addBtnText}>{controlLabels.addNewDevice}</Text>
-        </TouchableOpacity>
+            <Text style={s.sectionTitle}>Registered Devices</Text>
+            {profile.devices.list.length === 0 ? (
+              <View style={s.emptyCard}>
+                <Text style={s.emptyText}>No devices registered yet</Text>
+              </View>
+            ) : (
+              profile.devices.list.map(device => (
+                <View key={device.deviceId} style={s.deviceCard}>
+                  <View style={s.deviceIconWrap}>
+                    {getDeviceIcon(device.platform)}
+                  </View>
+                  <View style={s.deviceInfo}>
+                    <Text style={s.deviceName}>{device.deviceName}</Text>
+                    <Text style={s.devicePlatform}>{device.platform}</Text>
+                  </View>
+                  <View style={s.activeDot} />
+                </View>
+              ))
+            )}
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{controlLabels.usageControlsTitle}</Text>
-        </View>
+            <Text style={s.sectionTitle}>Quick Actions</Text>
+            <TouchableOpacity style={s.menuCard} onPress={() => navigation.navigate('PoliciesScreen')}>
+              <Shield size={20} color="#10B981" />
+              <View style={s.menuContent}>
+                <Text style={s.menuLabel}>Manage Limits</Text>
+              </View>
+              <ChevronRight size={18} color="#CBD5E1" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.menuCard} onPress={() => navigation.navigate('SubscriptionPlansScreen')}>
+              <Zap size={20} color="#F59E0B" />
+              <View style={s.menuContent}>
+                <Text style={s.menuLabel}>Upgrade Plan</Text>
+              </View>
+              <ChevronRight size={18} color="#CBD5E1" />
+            </TouchableOpacity>
+            <TouchableOpacity style={s.menuCard} onPress={() => navigation.navigate('AnalyticsScreen')}>
+              <Clock size={20} color="#6366F1" />
+              <View style={s.menuContent}>
+                <Text style={s.menuLabel}>Usage Analytics</Text>
+              </View>
+              <ChevronRight size={18} color="#CBD5E1" />
+            </TouchableOpacity>
 
-        {usageControls.map((control) => (
-          <TouchableOpacity
-            key={control.id}
-            style={styles.row}
-            onPress={() => {
-              if (control.icon === 'clock') {
-                navigation.navigate('DailyLimitsGraphScreen');
-                return;
-              }
-              Alert.alert(control.title);
-            }}
-          >
-            <View style={styles.rowIconBox}>
-              {control.icon === 'clock' ? <Clock size={20} color="#4F46E5" /> : <Calendar size={20} color="#4F46E5" />}
-            </View>
-            <View style={styles.rowContent}>
-              <Text style={styles.rowTitle}>{control.title}</Text>
-              <Text style={styles.rowSubtitle}>{control.description}</Text>
-            </View>
-            <ChevronRight size={20} color="#94A3B8" />
-          </TouchableOpacity>
-        ))}
-
-        <View style={styles.spacer} />
-
-        {featureToggles.map((toggle) => (
-          <View key={toggle.id} style={styles.toggleRow}>
-            <View style={styles.rowIconBox}>
-              {toggle.key === 'safeBrowsing' ? <Shield size={20} color="#4F46E5" /> : <Zap size={20} color="#4F46E5" />}
-            </View>
-            <View style={styles.rowContent}>
-              <Text style={styles.rowTitle}>{toggle.title}</Text>
-              <Text style={styles.rowSubtitle}>{toggle.description}</Text>
-            </View>
-            <Switch
-              value={toggle.key === 'safeBrowsing' ? safeBrowsing : smartOverride}
-              onValueChange={toggle.key === 'safeBrowsing' ? setSafeBrowsing : setSmartOverride}
-              trackColor={{ false: "#E2E8F0", true: "#4F46E5" }}
-            />
+            <View style={{ height: 100 }} />
+          </>
+        ) : (
+          <View style={s.loadingWrap}>
+            <Text style={s.emptyText}>Failed to load</Text>
           </View>
-        ))}
-
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{controlLabels.accountTitle}</Text>
-        </View>
-
-        <TouchableOpacity style={styles.row} onPress={() => Alert.alert(controlLabels.notificationSettings)}>
-          <View style={styles.rowIconBox}>
-            <Bell size={20} color="#4F46E5" />
-          </View>
-          <View style={styles.rowContent}>
-            <Text style={styles.rowTitle}>{controlLabels.notificationSettings}</Text>
-          </View>
-          <ChevronRight size={20} color="#94A3B8" />
-        </TouchableOpacity>
-
-        <TouchableOpacity style={styles.signOutBtn} onPress={handleSignOut}>
-          <Text style={styles.signOutText}>{controlLabels.signOut}</Text>
-        </TouchableOpacity>
-
+        )}
       </ScrollView>
 
-      <View style={styles.footer}>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('DashboardScreen')}>
-          <Home size={22} color="#94A3B8" />
-          <Text style={styles.navLabel}>{dashboardLabels.navHome}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('AnalyticsScreen')}>
-          <BarChart2 size={22} color="#94A3B8" />
-          <Text style={styles.navLabel}>{dashboardLabels.navUsage}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem}>
-          <SettingsIcon size={22} color="#4F46E5" />
-          <Text style={[styles.navLabel, styles.activeNav]}>{dashboardLabels.navSettings}</Text>
-        </TouchableOpacity>
-      </View>
-
+      <BottomNav active="settings" />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12, paddingBottom: 15, borderBottomWidth: 1, borderBottomColor: '#E2E8F0', backgroundColor: '#FFF' },
-  backButton: { padding: 8 },
-  headerTitle: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: '#0F172A' },
-  headerSpacer: { width: 40 },
-  scrollContent: { padding: 20, paddingBottom: 40 },
-  planCard: { backgroundColor: '#4F46E5', borderRadius: 16, padding: 20, marginBottom: 20 },
-  planCardHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 8 },
-  planTitle: { fontSize: 20, fontWeight: '800', color: '#FFF', marginRight: 10 },
-  activeBadge: { backgroundColor: '#10B981', paddingHorizontal: 8, paddingVertical: 2, borderRadius: 12 },
-  activeBadgeText: { color: '#FFF', fontSize: 10, fontWeight: 'bold' },
-  planBenefits: { color: '#E0E7FF', fontSize: 13 },
-  card: { backgroundColor: '#FFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E2E8F0', marginBottom: 20 },
-  quotaHeader: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 8 },
-  quotaLabel: { fontWeight: '600', color: '#1E293B' },
-  quotaValue: { fontWeight: '700' },
-  progressBg: { height: 8, backgroundColor: '#E2E8F0', borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
-  progressFill: { height: '100%', backgroundColor: '#F59E0B' },
-  quotaHint: { fontSize: 12, color: '#64748B' },
-  primaryBtn: { backgroundColor: '#0F172A', padding: 16, borderRadius: 12, alignItems: 'center', marginBottom: 24 },
-  primaryBtnText: { color: '#FFF', fontWeight: '700' },
-  disabledBtn: { backgroundColor: '#94A3B8' },
-  sectionHeader: { marginTop: 10, marginBottom: 12 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
-  sectionSubtitle: { fontSize: 14, color: '#64748B' },
-  deviceCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 12, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
-  deviceIconWrapper: { marginRight: 12 },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F1F5F9' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  backBtn: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: '#0F172A' },
+  scrollContent: { padding: 20 },
+  loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 },
+
+  planCard: { borderRadius: 20, padding: 20, marginBottom: 20 },
+  planRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
+  planLabel: { fontSize: 12, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
+  planName: { fontSize: 24, fontWeight: '900', color: '#FFFFFF', marginTop: 2 },
+  upgradeChip: { backgroundColor: 'rgba(255,255,255,0.2)', paddingHorizontal: 14, paddingVertical: 8, borderRadius: 20, borderWidth: 1, borderColor: 'rgba(255,255,255,0.15)' },
+  upgradeChipText: { color: '#FFFFFF', fontWeight: '700', fontSize: 12 },
+  planStatsRow: { flexDirection: 'row', gap: 10 },
+  planStat: { flex: 1, backgroundColor: 'rgba(255,255,255,0.12)', borderRadius: 12, padding: 10, alignItems: 'center', gap: 4 },
+  planStatValue: { fontSize: 16, fontWeight: '800', color: '#FFFFFF' },
+  planStatLabel: { fontSize: 10, color: 'rgba(255,255,255,0.6)', fontWeight: '600' },
+
+  sectionTitle: { fontSize: 13, fontWeight: '700', color: '#94A3B8', textTransform: 'uppercase', letterSpacing: 0.5, marginBottom: 10, marginTop: 8 },
+
+  card: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E8ECF4', marginBottom: 16 },
+  quotaRow: { flexDirection: 'row', justifyContent: 'space-between', marginBottom: 10 },
+  quotaLabel: { fontSize: 14, fontWeight: '600', color: '#475569' },
+  quotaValue: { fontSize: 14, fontWeight: '800', color: '#0F172A' },
+  progressTrack: { height: 8, backgroundColor: '#F1F5F9', borderRadius: 4, overflow: 'hidden', marginBottom: 8 },
+  progressFill: { height: '100%', borderRadius: 4 },
+  quotaHint: { fontSize: 12, color: '#94A3B8', fontWeight: '500' },
+
+  emptyCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#E8ECF4', marginBottom: 16 },
+  emptyText: { fontSize: 14, color: '#94A3B8', fontWeight: '500' },
+
+  deviceCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#E8ECF4', marginBottom: 8, gap: 12, shadowColor: '#64748B', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
+  deviceIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
   deviceInfo: { flex: 1 },
-  deviceName: { fontWeight: '600', color: '#1E293B' },
-  deviceModel: { fontSize: 12, color: '#64748B' },
-  statusPill: { paddingHorizontal: 8, paddingVertical: 4, borderRadius: 12 },
-  onlinePill: { backgroundColor: '#DCFCE7' },
-  offlinePill: { backgroundColor: '#F1F5F9' },
-  statusText: { fontSize: 11, fontWeight: '700' },
-  onlineText: { color: '#15803D' },
-  offlineText: { color: '#64748B' },
-  addBtn: { flexDirection: 'row', padding: 16, borderStyle: 'dashed', borderWidth: 2, borderColor: '#CBD5E1', borderRadius: 12, alignItems: 'center', marginTop: 4, marginBottom: 24, justifyContent: 'center' },
-  addBtnText: { fontWeight: '600', color: '#64748B' },
-  devicesLoadingWrap: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 16, alignItems: 'center', marginBottom: 10 },
-  devicesLoadingText: { marginTop: 8, color: '#64748B', fontSize: 13 },
-  emptyDeviceWrap: { backgroundColor: '#FFFFFF', borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, padding: 16, marginBottom: 10 },
-  emptyDeviceText: { color: '#64748B', fontSize: 13, textAlign: 'center' },
-  row: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
-  toggleRow: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFF', padding: 16, borderRadius: 12, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
-  rowIconBox: { marginRight: 12, width: 24, alignItems: 'center' },
-  rowContent: { flex: 1 },
-  rowTitle: { fontWeight: '600', color: '#1E293B' },
-  rowSubtitle: { fontSize: 12, color: '#64748B' },
-  spacer: { height: 10 },
-  signOutBtn: { marginTop: 20, padding: 16, backgroundColor: '#FEF2F2', borderRadius: 12, alignItems: 'center', borderWidth: 1, borderColor: '#FEE2E2' },
-  signOutText: { color: '#EF4444', fontWeight: '700' },
-  footer: { flexDirection: 'row', padding: 12, borderTopWidth: 1, borderTopColor: '#E2E8F0', backgroundColor: '#FFF', justifyContent: 'space-around', paddingBottom: 24 },
-  navItem: { alignItems: 'center' },
-  navLabel: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
-  activeNav: { color: '#4F46E5' },
+  deviceName: { fontSize: 14, fontWeight: '600', color: '#0F172A' },
+  devicePlatform: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
+  activeDot: { width: 10, height: 10, borderRadius: 5, backgroundColor: '#10B981' },
+
+  menuCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 16, borderRadius: 14, marginBottom: 8, borderWidth: 1, borderColor: '#E8ECF4', gap: 14 },
+  menuContent: { flex: 1 },
+  menuLabel: { fontSize: 15, fontWeight: '600', color: '#0F172A' },
 });

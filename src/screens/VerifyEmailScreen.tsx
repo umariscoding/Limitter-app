@@ -1,6 +1,7 @@
 import React, { useState } from "react";
-import { View, Text, TouchableOpacity, StyleSheet } from "react-native";
+import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { BaseButton, Toast } from "../../components";
 import { Mail } from "lucide-react-native";
@@ -28,27 +29,30 @@ const VerifyEmailScreen: React.FC = () => {
       setToastMessage(err?.message || "Failed to resend. Try again.");
       setToastType("error");
       setShowToast(true);
-    } finally {
-      setIsResending(false);
-    }
+    } finally { setIsResending(false); }
   };
 
   return (
     <SafeAreaView style={s.container}>
+      <StatusBar barStyle="light-content" backgroundColor="#4338CA" />
       <Toast visible={showToast} message={toastMessage} onHide={() => setShowToast(false)} type={toastType} />
-      <View style={s.content}>
-        <View style={s.iconWrap}>
-          <Mail size={48} color="#4F46E5" />
+
+      <LinearGradient colors={["#4338CA", "#6366F1"]} style={s.headerGradient}>
+        <View style={s.iconCircle}>
+          <Mail size={32} color="#FFFFFF" />
         </View>
-        <Text style={s.title}>Verify Your Email</Text>
+        <Text style={s.headerTitle}>Verify Your Email</Text>
+      </LinearGradient>
+
+      <View style={s.card}>
         <Text style={s.subtitle}>We've sent a verification link to</Text>
         <Text style={s.email}>{email}</Text>
         <Text style={s.instructions}>
-          Please check your inbox and tap the link to verify your account. Once verified, you can log in.
+          Check your inbox and tap the link to verify your account. Once verified, you can sign in.
         </Text>
 
-        <BaseButton variant="primary" fullWidth onPress={() => navigation.navigate("Login")} style={{ marginBottom: 20 }}>
-          Go to Login
+        <BaseButton variant="primary" fullWidth onPress={() => navigation.navigate("Login")} style={{ marginBottom: 16 }}>
+          Go to Sign In
         </BaseButton>
 
         <TouchableOpacity onPress={handleResend} disabled={isResending} activeOpacity={0.6} style={s.resendBtn}>
@@ -62,15 +66,16 @@ const VerifyEmailScreen: React.FC = () => {
 };
 
 const s = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#FFFFFF' },
-  content: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingHorizontal: 32 },
-  iconWrap: { width: 88, height: 88, borderRadius: 44, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center', marginBottom: 24 },
-  title: { fontSize: 26, fontWeight: '900', color: '#0F172A', marginBottom: 12 },
+  container: { flex: 1, backgroundColor: '#F1F5F9' },
+  headerGradient: { alignItems: "center", paddingTop: 60, paddingBottom: 40 },
+  iconCircle: { width: 72, height: 72, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", marginBottom: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" },
+  headerTitle: { fontSize: 26, fontWeight: "900", color: "#FFFFFF" },
+  card: { backgroundColor: "#FFFFFF", marginHorizontal: 20, marginTop: -16, borderRadius: 24, padding: 28, alignItems: "center", shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 24, elevation: 5 },
   subtitle: { fontSize: 15, color: '#64748B', textAlign: 'center' },
-  email: { fontSize: 16, fontWeight: '700', color: '#4F46E5', marginTop: 4, marginBottom: 20 },
-  instructions: { fontSize: 14, color: '#94A3B8', textAlign: 'center', lineHeight: 22, marginBottom: 40 },
+  email: { fontSize: 16, fontWeight: '700', color: '#6366F1', marginTop: 4, marginBottom: 20 },
+  instructions: { fontSize: 14, color: '#94A3B8', textAlign: 'center', lineHeight: 22, marginBottom: 32 },
   resendBtn: { padding: 8 },
-  resendText: { color: '#10B981', fontWeight: '700', fontSize: 14 },
+  resendText: { color: '#6366F1', fontWeight: '700', fontSize: 14 },
 });
 
 export default VerifyEmailScreen;

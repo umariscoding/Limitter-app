@@ -8,8 +8,10 @@ import {
   Platform,
   ScrollView,
   Keyboard,
+  StatusBar,
 } from "react-native";
 import { SafeAreaView } from "react-native-safe-area-context";
+import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import { useUser } from "../context/UserContext";
 import { signIn } from "../auth/firebaseAuthService";
@@ -27,10 +29,7 @@ const LoginScreen: React.FC = () => {
 
   const handleLogin = async () => {
     setError(null);
-    if (!email || !password) {
-      setError("Email and password are required");
-      return;
-    }
+    if (!email || !password) { setError("Email and password are required"); return; }
     Keyboard.dismiss();
     setIsLoading(true);
 
@@ -53,35 +52,26 @@ const LoginScreen: React.FC = () => {
       } else {
         setError(message || "Login failed");
       }
-    } finally {
-      setIsLoading(false);
-    }
+    } finally { setIsLoading(false); }
   };
 
   return (
     <SafeAreaView style={styles.container}>
-      <Toast
-        visible={showToast}
-        message="Logged in successfully"
-        onHide={() => setShowToast(false)}
-        type="success"
-      />
-      <KeyboardAvoidingView
-        behavior={Platform.OS === "ios" ? "padding" : "height"}
-        style={styles.flex}
-      >
-        <ScrollView
-          contentContainerStyle={styles.scrollContent}
-          showsVerticalScrollIndicator={false}
-        >
-          <View style={styles.header}>
-            <View style={styles.iconContainer}>
-              <Shield size={48} color="#4F46E5" />
+      <StatusBar barStyle="light-content" backgroundColor="#4338CA" />
+      <Toast visible={showToast} message="Logged in successfully" onHide={() => setShowToast(false)} type="success" />
+      <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex}>
+        <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
+          <LinearGradient colors={["#4338CA", "#6366F1"]} style={styles.headerGradient}>
+            <View style={styles.iconCircle}>
+              <Shield size={36} color="#FFFFFF" />
             </View>
-            <Text style={styles.title}>Login</Text>
-          </View>
+            <Text style={styles.appName}>Limitter</Text>
+            <Text style={styles.tagline}>Take control of your screen time</Text>
+          </LinearGradient>
 
-          <View style={styles.formContainer}>
+          <View style={styles.formCard}>
+            <Text style={styles.formTitle}>Welcome back</Text>
+
             <TextInput
               label="Email Address"
               placeholder="Enter your email"
@@ -101,11 +91,11 @@ const LoginScreen: React.FC = () => {
             />
 
             <TouchableOpacity
-              style={styles.forgotPasswordContainer}
+              style={styles.forgotContainer}
               onPress={() => navigation.navigate("ForgotPassword")}
               activeOpacity={0.6}
             >
-              <Text style={styles.forgotPasswordText}>Forgot Password?</Text>
+              <Text style={styles.forgotText}>Forgot Password?</Text>
             </TouchableOpacity>
 
             <BaseButton
@@ -115,16 +105,13 @@ const LoginScreen: React.FC = () => {
               disabled={isLoading}
               style={styles.loginButton}
             >
-              {isLoading ? "Signing in..." : "Login"}
+              {isLoading ? "Signing in..." : "Sign In"}
             </BaseButton>
           </View>
 
           <View style={styles.footer}>
             <Text style={styles.footerText}>Don't have an account? </Text>
-            <TouchableOpacity
-              onPress={() => navigation.navigate("Signup")}
-              activeOpacity={0.6}
-            >
+            <TouchableOpacity onPress={() => navigation.navigate("Signup")} activeOpacity={0.6}>
               <Text style={styles.signUpText}>Create one</Text>
             </TouchableOpacity>
           </View>
@@ -135,25 +122,24 @@ const LoginScreen: React.FC = () => {
 };
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: "#FFFFFF" },
+  container: { flex: 1, backgroundColor: "#F1F5F9" },
   flex: { flex: 1 },
-  scrollContent: { flexGrow: 1, paddingHorizontal: 24, paddingBottom: 40 },
-  header: { alignItems: "center", marginTop: 40, marginBottom: 48 },
-  iconContainer: {
-    width: 80, height: 80, borderRadius: 40, backgroundColor: "#F1F5F9",
-    alignItems: "center", justifyContent: "center", marginBottom: 20,
-  },
-  title: { fontSize: 28, fontWeight: "900", color: "#0F172A", textAlign: "center" },
-  formContainer: { width: "100%" },
-  forgotPasswordContainer: { alignSelf: "flex-end", marginTop: -8, marginBottom: 32, padding: 4 },
-  forgotPasswordText: { color: "#10B981", fontWeight: "700", fontSize: 14 },
-  loginButton: { marginBottom: 24 },
-  footer: {
-    flexDirection: "row", justifyContent: "center", alignItems: "center",
-    marginTop: "auto", paddingTop: 24,
-  },
-  footerText: { color: "#64748B", fontSize: 15 },
-  signUpText: { color: "#10B981", fontWeight: "800", fontSize: 15 },
+  scrollContent: { flexGrow: 1 },
+
+  headerGradient: { alignItems: "center", paddingTop: 48, paddingBottom: 40 },
+  iconCircle: { width: 72, height: 72, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", marginBottom: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" },
+  appName: { fontSize: 32, fontWeight: "900", color: "#FFFFFF", letterSpacing: -0.5 },
+  tagline: { fontSize: 14, color: "rgba(255,255,255,0.7)", marginTop: 6, fontWeight: "500" },
+
+  formCard: { backgroundColor: "#FFFFFF", marginHorizontal: 20, marginTop: -20, borderRadius: 24, padding: 24, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 24, elevation: 5 },
+  formTitle: { fontSize: 22, fontWeight: "800", color: "#0F172A", marginBottom: 24 },
+  forgotContainer: { alignSelf: "flex-end", marginTop: -8, marginBottom: 24, padding: 4 },
+  forgotText: { color: "#6366F1", fontWeight: "700", fontSize: 13 },
+  loginButton: { marginBottom: 8 },
+
+  footer: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: "auto", paddingVertical: 24 },
+  footerText: { color: "#64748B", fontSize: 14 },
+  signUpText: { color: "#6366F1", fontWeight: "800", fontSize: 14 },
 });
 
 export default LoginScreen;

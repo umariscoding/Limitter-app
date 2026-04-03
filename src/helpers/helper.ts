@@ -25,7 +25,7 @@ export function formatTotalUsageFromLimits(limits: Array<{ time_used_minutes?: n
     return sum + Math.max(0, Number(item?.time_used_minutes ?? item?.used_minutes ?? 0));
   }, 0);
   const hours = Math.floor(totalMinutes / 60);
-  const mins = totalMinutes % 60;
+  const mins = Math.round(totalMinutes % 60);
   return `${hours}h ${mins}m`;
 }
 

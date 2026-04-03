@@ -23,7 +23,7 @@ const TAB_ICONS: Record<ActiveTab, (color: string) => React.ReactNode> = {
   settings: (color) => <SettingsIcon size={22} color={color} />,
 };
 
-const ACTIVE_COLOR = '#4F46E5';
+const ACTIVE_COLOR = '#6366F1';
 const INACTIVE_COLOR = '#94A3B8';
 
 export default function BottomNav({ active }: BottomNavProps) {
@@ -42,7 +42,9 @@ export default function BottomNav({ active }: BottomNavProps) {
             onPress={isActive ? undefined : () => navigation.navigate(tab.screen)}
             activeOpacity={isActive ? 1 : 0.7}
           >
-            {TAB_ICONS[tab.key](color)}
+            <View style={[styles.iconWrap, isActive && styles.iconWrapActive]}>
+              {TAB_ICONS[tab.key](color)}
+            </View>
             <Text style={[styles.label, { color }]}>{tab.label}</Text>
           </TouchableOpacity>
         );
@@ -55,17 +57,32 @@ const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
     backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
+    paddingTop: 8,
+    paddingHorizontal: 16,
     borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
+    borderTopColor: '#F1F5F9',
     justifyContent: 'space-around',
     position: 'absolute',
     bottom: 0,
     left: 0,
     right: 0,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 12,
+    paddingBottom: Platform.OS === 'ios' ? 28 : 12,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: -2 },
+    shadowOpacity: 0.04,
+    shadowRadius: 8,
+    elevation: 8,
   },
-  item: { alignItems: 'center', justifyContent: 'center' },
-  label: { fontSize: 11, fontWeight: '600', marginTop: 4 },
+  item: { alignItems: 'center', justifyContent: 'center', paddingVertical: 4 },
+  iconWrap: {
+    width: 40,
+    height: 32,
+    borderRadius: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  iconWrapActive: {
+    backgroundColor: '#EEF2FF',
+  },
+  label: { fontSize: 11, fontWeight: '600', marginTop: 2 },
 });

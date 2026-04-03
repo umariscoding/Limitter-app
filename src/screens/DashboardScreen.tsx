@@ -11,17 +11,17 @@ import {
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect, useRoute } from '@react-navigation/native';
+import { LinearGradient } from 'expo-linear-gradient';
+import { useNavigation, useRoute } from '@react-navigation/native';
 import {
-  Home,
-  BarChart2,
-  Settings as SettingsIcon,
-  Smartphone,
   Plus as PlusIcon,
   AlertCircle,
-  Clock,
-  RefreshCw,
   Shield,
+  BarChart2,
+  Clock,
+  Smartphone,
+  Zap,
+  ChevronRight,
   Trash2,
 } from 'lucide-react-native';
 import { useUser } from '../context/UserContext';
@@ -37,7 +37,7 @@ import { getPlanLimits, canCreatePolicy, invalidatePlanCache, type PlanLimits } 
 import { useLockStateSync } from '../hooks/useLockStateSync';
 import { LimitterModule } from '../config/nativeModules';
 import { requestRequiredPermissions } from '../services/permissionsService';
-import { getPolicyPackageKey, formatUsageTime, formatLimitTime } from '../utils/policyMapper';
+import { getPolicyPackageKey } from '../utils/policyMapper';
 import { formatTotalUsageFromLimits } from '../helpers/helper';
 import { Toast } from '../../components';
 import CreateLimitModal from '../components/CreateLimitModal';
@@ -60,13 +60,12 @@ export default function DashboardScreen() {
   const [planLimits, setPlanLimits] = useState<PlanLimits | null>(null);
   const justOverriddenPackageRef = React.useRef<string | null>(null);
 
-  const matchesLimitPackage = React.useCallback(
+  const matchesLimitPackage = React.useRef(
     (item: any, packageName?: string) => {
       if (!packageName) return false;
       return getPolicyPackageKey(item) === String(packageName).trim().toLowerCase();
     },
-    [],
-  );
+  ).current;
 
   const { createLimit } = useCreateLimit(
     user?.uid,
@@ -79,9 +78,7 @@ export default function DashboardScreen() {
     setLoading,
   );
 
-  useEffect(() => {
-    requestRequiredPermissions();
-  }, []);
+  useEffect(() => { requestRequiredPermissions(); }, []);
 
   useNativeTimerSync(setLimits);
   useUsageReporter(limits, deviceId, user?.accountId);
@@ -95,27 +92,17 @@ export default function DashboardScreen() {
     }
 
     const overriddenPkg = justOverriddenPackageRef.current;
-    if (overriddenPkg) {
-      justOverriddenPackageRef.current = null;
-    }
+    if (overriddenPkg) justOverriddenPackageRef.current = null;
 
     await fetchPolicies(
-      overriddenPkg
-        ? { overriddenPackage: overriddenPkg, matchesLimitPackage }
-        : undefined,
+      overriddenPkg ? { overriddenPackage: overriddenPkg, matchesLimitPackage } : undefined,
     );
 
-    getPlanLimits(true)
-      .then(data => setPlanLimits(data))
-      .catch(() => {});
-
+    getPlanLimits(true).then(data => setPlanLimits(data)).catch(() => {});
     setRefreshing(false);
   };
 
-  const totalUsageText = React.useMemo(
-    () => formatTotalUsageFromLimits(limits),
-    [limits],
-  );
+  const totalUsageText = React.useMemo(() => formatTotalUsageFromLimits(limits), [limits]);
 
   const existingTargetKeys = React.useMemo(() => {
     const keys = new Set<string>();
@@ -126,35 +113,31 @@ export default function DashboardScreen() {
     return keys;
   }, [limits]);
 
-  useFocusEffect(
-    React.useCallback(() => {
-      if (!deviceId) return;
-      const overriddenPackage = route?.params?.justOverriddenPackage as string | undefined;
-      if (overriddenPackage) {
-        justOverriddenPackageRef.current = overriddenPackage;
-      }
-      setLoading(true);
-      fetchLimits();
-    }, [user?.uid, deviceId, route?.params?.refreshAt, matchesLimitPackage]),
-  );
+  const blockedCount = limits.filter(l => l.is_blocked).length;
 
-  const onRefresh = () => {
-    setRefreshing(true);
+  const focusHandlerRef = React.useRef(() => {});
+  focusHandlerRef.current = () => {
+    if (!deviceId) return;
+    const overriddenPackage = route?.params?.justOverriddenPackage as string | undefined;
+    if (overriddenPackage) justOverriddenPackageRef.current = overriddenPackage;
+    setLoading(true);
     fetchLimits();
   };
+
+  useEffect(() => {
+    focusHandlerRef.current();
+  }, [deviceId, route?.params?.refreshAt]);
+
+  const onRefresh = () => { setRefreshing(true); fetchLimits(); };
 
   const handleOpenCreateModal = async () => {
     const check = await canCreatePolicy();
     setPlanLimits(check.limits);
     if (!check.allowed) {
-      Alert.alert(
-        'Plan Limit Reached',
-        check.reason || 'Upgrade for more limits.',
-        [
-          { text: 'Cancel', style: 'cancel' },
-          { text: 'Upgrade', onPress: () => navigation.navigate('SubscriptionPlansScreen') },
-        ],
-      );
+      Alert.alert('Plan Limit Reached', check.reason || 'Upgrade for more limits.', [
+        { text: 'Cancel', style: 'cancel' },
+        { text: 'Upgrade', onPress: () => navigation.navigate('SubscriptionPlansScreen') },
+      ]);
       return;
     }
     setShowCreateModal(true);
@@ -171,55 +154,37 @@ export default function DashboardScreen() {
 
   const handleOverride = (limit: any) => {
     const pkg = limit.app_name || limit.package_name || limit.packageName;
-    navigation.navigate('ConfirmOverrideScreen', {
-      limitId: limit.id,
-      packageName: pkg,
-      appName: pkg,
-    });
+    navigation.navigate('ConfirmOverrideScreen', { limitId: limit.id, packageName: pkg, appName: pkg });
   };
 
   const handleResetAll = () => {
-    if (limits.length === 0) {
-      Alert.alert('Nothing to reset', 'No limits found.');
-      return;
-    }
-    Alert.alert(
-      'Reset All Limits',
-      'This will delete all limits and stop all timers. Are you sure?',
-      [
-        { text: 'Cancel', style: 'cancel' },
-        {
-          text: 'Reset All',
-          style: 'destructive',
-          onPress: async () => {
-            setLoading(true);
-            try {
-              await archiveAllPoliciesAPI();
-              try {
-                if (LimitterModule?.sendCommand) {
-                  await LimitterModule.sendCommand('STOP', {});
-                }
-              } catch { /* silenced */ }
-              updateBlockedApps([]);
-              setLimits([]);
-              setToastMessage('All limits removed');
-              setShowToast(true);
-            } catch (error: any) {
-              Alert.alert('Error', error?.message || 'Failed to reset limits');
-            } finally {
-              setLoading(false);
-            }
-          },
+    if (limits.length === 0) { Alert.alert('Nothing to reset', 'No limits found.'); return; }
+    Alert.alert('Reset All Limits', 'This will archive all limits and stop all timers. Are you sure?', [
+      { text: 'Cancel', style: 'cancel' },
+      {
+        text: 'Reset All', style: 'destructive',
+        onPress: async () => {
+          setLoading(true);
+          try {
+            await archiveAllPoliciesAPI();
+            try { if (LimitterModule?.sendCommand) await LimitterModule.sendCommand('STOP', {}); } catch {}
+            updateBlockedApps([]);
+            setLimits([]);
+            setToastMessage('All limits archived');
+            setShowToast(true);
+          } catch (error: any) {
+            Alert.alert('Error', error?.message || 'Failed to reset limits');
+          } finally { setLoading(false); }
         },
-      ],
-    );
+      },
+    ]);
   };
 
   if (loading && !refreshing) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color="#4F46E5" />
+          <ActivityIndicator size="large" color="#6366F1" />
           <Text style={styles.loadingText}>Loading your limits...</Text>
         </View>
       </SafeAreaView>
@@ -228,7 +193,7 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
+      <StatusBar barStyle="light-content" backgroundColor="#4338CA" />
       <Toast visible={showToast} message={toastMessage} onHide={() => setShowToast(false)} type="success" />
 
       <CreateLimitModal
@@ -241,90 +206,105 @@ export default function DashboardScreen() {
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
-        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" />}
       >
-        <View style={styles.header}>
-          <View>
-            <Text style={styles.logoText}>Limitter</Text>
-            <Text style={styles.subtitle}>Welcome, {user?.name || 'User'}</Text>
+        <LinearGradient colors={['#4338CA', '#6366F1', '#818CF8']} style={styles.headerGradient}>
+          <View style={styles.headerRow}>
+            <View>
+              <Text style={styles.greeting}>Welcome back,</Text>
+              <Text style={styles.userName}>{user?.name || 'User'}</Text>
+            </View>
+            <View style={styles.headerActions}>
+              <TouchableOpacity style={styles.headerBtn} onPress={handleResetAll}>
+                <Trash2 size={18} color="rgba(255,255,255,0.7)" />
+              </TouchableOpacity>
+            </View>
           </View>
-          <View style={{ flexDirection: 'row', gap: 8, alignItems: 'center' }}>
-            <TouchableOpacity style={styles.settingsBtn} onPress={handleResetAll}>
-              <Trash2 size={22} color="#EF4444" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.settingsBtn} onPress={() => fetchLimits()}>
-              <RefreshCw size={22} color="#4F46E5" />
-            </TouchableOpacity>
-            <TouchableOpacity style={styles.settingsBtn} onPress={() => navigation.navigate('SettingsScreen')}>
-              <SettingsIcon size={24} color="#4F46E5" />
-            </TouchableOpacity>
-          </View>
-        </View>
 
-        <View style={styles.statsContainer}>
-          <TouchableOpacity style={styles.statCard} activeOpacity={0.8} onPress={() => navigation.navigate('SubscriptionPlansScreen')}>
-            <Text style={styles.statLabel}>Plan</Text>
-            <Text style={styles.statValue}>{user?.plan?.toUpperCase() || 'FREE'}</Text>
-          </TouchableOpacity>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Overrides</Text>
-            <Text style={styles.statValue}>{user?.overrides_left || 0}</Text>
-          </View>
-          <View style={styles.statCard}>
-            <Text style={styles.statLabel}>Total Usage</Text>
-            <Text style={styles.statValue}>{loading ? 'Loading...' : totalUsageText}</Text>
-          </View>
-        </View>
+          <View style={styles.statsRow}>
+            <TouchableOpacity style={styles.statCard} activeOpacity={0.85} onPress={() => navigation.navigate('SubscriptionPlansScreen')}>
+              <View style={styles.statIconWrap}>
+                <Zap size={16} color="#F59E0B" />
+              </View>
+              <Text style={styles.statValue}>{user?.plan?.toUpperCase() || 'FREE'}</Text>
+              <Text style={styles.statLabel}>Plan</Text>
+            </TouchableOpacity>
 
-        <View style={styles.section}>
+            <View style={styles.statCard}>
+              <View style={styles.statIconWrap}>
+                <Shield size={16} color="#10B981" />
+              </View>
+              <Text style={styles.statValue}>{limits.length}</Text>
+              <Text style={styles.statLabel}>Limits</Text>
+            </View>
+
+            <View style={styles.statCard}>
+              <View style={styles.statIconWrap}>
+                <Clock size={16} color="#6366F1" />
+              </View>
+              <Text style={styles.statValue}>{totalUsageText}</Text>
+              <Text style={styles.statLabel}>Usage</Text>
+            </View>
+          </View>
+
+          {blockedCount > 0 && (
+            <View style={styles.alertBanner}>
+              <AlertCircle size={16} color="#FEF2F2" />
+              <Text style={styles.alertText}>{blockedCount} app{blockedCount > 1 ? 's' : ''} blocked</Text>
+            </View>
+          )}
+        </LinearGradient>
+
+        <View style={styles.body}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Active Limits</Text>
-            <TouchableOpacity onPress={handleOpenCreateModal}>
-              <PlusIcon size={20} color="#4F46E5" />
+            <TouchableOpacity style={styles.addBtn} onPress={handleOpenCreateModal} activeOpacity={0.8}>
+              <PlusIcon size={16} color="#FFFFFF" />
             </TouchableOpacity>
           </View>
 
           {limits.length === 0 ? (
             <View style={styles.emptyState}>
-              <AlertCircle size={48} color="#94A3B8" />
-              <Text style={styles.emptyText}>No limits yet</Text>
-              <TouchableOpacity style={styles.createBtn} onPress={handleOpenCreateModal}>
-                <Text style={styles.createBtnText}>Create First Limit</Text>
+              <View style={styles.emptyIconWrap}>
+                <Shield size={40} color="#CBD5E1" />
+              </View>
+              <Text style={styles.emptyTitle}>No limits yet</Text>
+              <Text style={styles.emptyDesc}>Create your first limit to start tracking app usage</Text>
+              <TouchableOpacity onPress={handleOpenCreateModal} activeOpacity={0.8}>
+                <LinearGradient colors={['#6366F1', '#4F46E5']} style={styles.emptyBtn}>
+                  <PlusIcon size={16} color="#FFFFFF" />
+                  <Text style={styles.emptyBtnText}>Create First Limit</Text>
+                </LinearGradient>
               </TouchableOpacity>
             </View>
           ) : (
-            <ScrollView style={styles.limitsScrollWrap} contentContainerStyle={styles.limitsScrollContent} nestedScrollEnabled showsVerticalScrollIndicator>
+            <>
               {limits.slice(0, 5).map((limit: any) => (
                 <PolicyCard key={limit.id} limit={limit} onOverride={handleOverride} />
               ))}
               {limits.length > 5 && (
-                <TouchableOpacity style={styles.moreItemsNote} onPress={() => navigation.navigate('PoliciesScreen')}>
-                  <Text style={styles.moreItemsText}>
-                    +{limits.length - 5} more limit{limits.length - 5 > 1 ? 's' : ''} · Tap to manage all
-                  </Text>
+                <TouchableOpacity style={styles.moreCard} onPress={() => navigation.navigate('PoliciesScreen')} activeOpacity={0.8}>
+                  <Text style={styles.moreText}>+{limits.length - 5} more · View all limits</Text>
+                  <ChevronRight size={16} color="#6366F1" />
                 </TouchableOpacity>
               )}
-            </ScrollView>
+            </>
           )}
-        </View>
 
-        <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Quick Actions</Text>
-          {[
-            { icon: <Shield size={24} color="#10B981" />, title: 'My Limits', desc: 'Edit or delete your limits', screen: 'PoliciesScreen' },
-            { icon: <BarChart2 size={24} color="#4F46E5" />, title: 'View Activity', desc: 'See usage breakdown', screen: 'ActivityScreen' },
-            { icon: <Clock size={24} color="#4F46E5" />, title: '7-Day Analytics', desc: 'View Monday-Sunday usage graph', screen: 'AnalyticsScreen' },
-            { icon: <Smartphone size={24} color="#4F46E5" />, title: 'Manage Devices', desc: 'Configure your devices', screen: 'ControlPlansScreen' },
-            { icon: <PlusIcon size={24} color="#4F46E5" />, title: 'Upgrade Plan', desc: 'Get more overrides', screen: 'SubscriptionPlansScreen' },
-          ].map(action => (
-            <TouchableOpacity key={action.screen} style={styles.actionCard} onPress={() => navigation.navigate(action.screen)}>
-              {action.icon}
-              <View style={styles.actionContent}>
-                <Text style={styles.actionTitle}>{action.title}</Text>
-                <Text style={styles.actionDesc}>{action.desc}</Text>
-              </View>
-            </TouchableOpacity>
-          ))}
+          <Text style={[styles.sectionTitle, { marginTop: 28, marginBottom: 12 }]}>Quick Actions</Text>
+          <View style={styles.actionsGrid}>
+            {[
+              { icon: <Shield size={22} color="#10B981" />, title: 'My Limits', bg: '#F0FDF4', screen: 'PoliciesScreen' },
+              { icon: <BarChart2 size={22} color="#6366F1" />, title: 'Analytics', bg: '#EEF2FF', screen: 'AnalyticsScreen' },
+              { icon: <Smartphone size={22} color="#0EA5E9" />, title: 'Devices', bg: '#F0F9FF', screen: 'ControlPlansScreen' },
+              { icon: <Zap size={22} color="#F59E0B" />, title: 'Upgrade', bg: '#FFFBEB', screen: 'SubscriptionPlansScreen' },
+            ].map(action => (
+              <TouchableOpacity key={action.screen} style={[styles.actionTile, { backgroundColor: action.bg }]} onPress={() => navigation.navigate(action.screen)} activeOpacity={0.8}>
+                {action.icon}
+                <Text style={styles.actionTileText}>{action.title}</Text>
+              </TouchableOpacity>
+            ))}
+          </View>
         </View>
       </ScrollView>
 
@@ -334,31 +314,43 @@ export default function DashboardScreen() {
 }
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
+  container: { flex: 1, backgroundColor: '#F1F5F9' },
   centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 12, color: '#64748B', fontSize: 14 },
+  loadingText: { marginTop: 12, color: '#64748B', fontSize: 14, fontWeight: '500' },
   scrollContent: { paddingBottom: 100 },
-  header: { backgroundColor: '#FFFFFF', padding: 20, flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
-  logoText: { fontSize: 28, fontWeight: '800', color: '#0F172A' },
-  subtitle: { fontSize: 12, color: '#64748B', marginTop: 2 },
-  settingsBtn: { padding: 8 },
-  statsContainer: { flexDirection: 'row', padding: 20, gap: 12 },
-  statCard: { flex: 1, backgroundColor: '#FFFFFF', padding: 12, borderRadius: 12, borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center' },
-  statLabel: { fontSize: 11, color: '#94A3B8', fontWeight: '600' },
-  statValue: { fontSize: 18, fontWeight: '700', color: '#0F172A', marginTop: 4 },
-  section: { padding: 20 },
+
+  headerGradient: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
+  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  greeting: { fontSize: 14, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
+  userName: { fontSize: 24, fontWeight: '800', color: '#FFFFFF', marginTop: 2 },
+  headerActions: { flexDirection: 'row', gap: 8 },
+  headerBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
+
+  statsRow: { flexDirection: 'row', gap: 10 },
+  statCard: { flex: 1, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
+  statIconWrap: { width: 32, height: 32, borderRadius: 16, backgroundColor: 'rgba(255,255,255,0.2)', alignItems: 'center', justifyContent: 'center', marginBottom: 8 },
+  statValue: { fontSize: 16, fontWeight: '800', color: '#FFFFFF' },
+  statLabel: { fontSize: 11, color: 'rgba(255,255,255,0.6)', fontWeight: '600', marginTop: 2 },
+
+  alertBanner: { flexDirection: 'row', alignItems: 'center', gap: 8, backgroundColor: 'rgba(239,68,68,0.2)', borderRadius: 10, paddingHorizontal: 14, paddingVertical: 10, marginTop: 16 },
+  alertText: { fontSize: 13, color: '#FEF2F2', fontWeight: '600' },
+
+  body: { padding: 20, marginTop: -12, borderTopLeftRadius: 20, borderTopRightRadius: 20, backgroundColor: '#F1F5F9' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
-  sectionTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
-  limitsScrollWrap: { maxHeight: 320 },
-  limitsScrollContent: { paddingRight: 6 },
-  moreItemsNote: { backgroundColor: '#EEF2FF', borderLeftWidth: 4, borderLeftColor: '#4F46E5', padding: 12, borderRadius: 8, marginTop: 8 },
-  moreItemsText: { color: '#3730A3', fontSize: 13, fontWeight: '600' },
-  emptyState: { alignItems: 'center', paddingVertical: 40, backgroundColor: '#FFFFFF', borderRadius: 12 },
-  emptyText: { marginTop: 12, color: '#64748B', fontSize: 14, fontWeight: '500' },
-  createBtn: { marginTop: 16, backgroundColor: '#4F46E5', paddingHorizontal: 20, paddingVertical: 10, borderRadius: 8 },
-  createBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
-  actionCard: { backgroundColor: '#FFFFFF', padding: 14, borderRadius: 12, flexDirection: 'row', alignItems: 'center', marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0' },
-  actionContent: { marginLeft: 12, flex: 1 },
-  actionTitle: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
-  actionDesc: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
+  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
+  addBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#6366F1', alignItems: 'center', justifyContent: 'center', shadowColor: '#6366F1', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+
+  emptyState: { alignItems: 'center', paddingVertical: 40, backgroundColor: '#FFFFFF', borderRadius: 20, borderWidth: 1, borderColor: '#E8ECF4' },
+  emptyIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#F8FAFC', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  emptyTitle: { fontSize: 18, fontWeight: '700', color: '#334155', marginBottom: 6 },
+  emptyDesc: { fontSize: 13, color: '#94A3B8', textAlign: 'center', paddingHorizontal: 40, marginBottom: 20 },
+  emptyBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
+  emptyBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+
+  moreCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#EEF2FF', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#C7D2FE', marginTop: 4 },
+  moreText: { color: '#4338CA', fontSize: 13, fontWeight: '700' },
+
+  actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
+  actionTile: { width: '48%' as any, padding: 16, borderRadius: 16, alignItems: 'center', gap: 10, borderWidth: 1, borderColor: 'rgba(0,0,0,0.04)' },
+  actionTileText: { fontSize: 13, fontWeight: '700', color: '#334155' },
 });

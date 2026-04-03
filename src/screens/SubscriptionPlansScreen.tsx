@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -10,98 +10,58 @@ import {
   Alert,
   ActivityIndicator,
   Keyboard,
-  Platform,
   Modal,
 } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { ChevronLeft, Check, X, Smartphone, Plus, Minus, ShieldCheck, Lock } from 'lucide-react-native';
-import {
-  subscriptionPlans,
-  addonPricing,
-  trustSignals,
-  subscriptionLabels,
-} from '../data/appData';
+import { ChevronLeft, Check, X, Zap, Shield, ShieldCheck } from 'lucide-react-native';
+import { subscriptionPlans } from '../data/appData';
 import { useUser } from '../context/UserContext';
 import { useDeviceResolver } from '../hooks/useDeviceResolver';
 import { grantTemporaryOverrideAccess } from '../services/appBlockerService';
 import { grantOverrideCreditsAPI, useOverrideAPI } from '../services/overrideService';
 import { getPoliciesAPI } from '../services/policyService';
-import { computeNextOverrides, getPlanOverrideLimit, normalizePlan } from '../utils/planRules';
+import { getPlanOverrideLimit, normalizePlan } from '../utils/planRules';
 import { upgradePlanAPI } from '../services/planGuardService';
+import BottomNav from '../components/BottomNav';
 
-const FeatureItem = React.memo(({ feature }: { feature: { text: string; enabled: boolean } }) => (
-  <View style={styles.featureRow}>
-    {feature.enabled ? (
-      <Check size={18} color="#10B981" strokeWidth={3} />
-    ) : (
-      <X size={18} color="#94A3B8" strokeWidth={3} />
-    )}
-    <Text
-      style={[
-        styles.featureText,
-        !feature.enabled && styles.disabledFeatureText,
-      ]}
-    >
-      {feature.text}
-    </Text>
-  </View>
-));
+const PLAN_GRADIENTS: Record<string, [string, string]> = {
+  '1': ['#64748B', '#475569'],
+  '2': ['#6366F1', '#4F46E5'],
+  '3': ['#F59E0B', '#D97706'],
+};
+
+const OVERRIDE_PACKS = [
+  { count: 2, total: 3.98 },
+  { count: 5, total: 9.95 },
+  { count: 10, total: 19.90 },
+];
 
 export default function SubscriptionPlansScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user, updateUser } = useUser();
-
   const { deviceId } = useDeviceResolver(user?.uid);
   const currentUserPlan = normalizePlan(user?.plan);
-  const defaultSelectedPlanId =
-    currentUserPlan === 'elite' ? '3' : currentUserPlan === 'pro' ? '2' : '1';
 
+  const defaultSelectedPlanId = currentUserPlan === 'elite' ? '3' : currentUserPlan === 'pro' ? '2' : '1';
   const [selectedPlanId, setSelectedPlanId] = useState(defaultSelectedPlanId);
-  const [extraDevices, setExtraDevices] = useState(0);
   const [isProcessing, setIsProcessing] = useState(false);
   const [showOverrideChoice, setShowOverrideChoice] = useState(false);
   const [showBuyOverridesModal, setShowBuyOverridesModal] = useState(false);
 
-  const OVERRIDE_PRICE = 1.99;
-  const OVERRIDE_PACKS = [
-    { count: 2, total: +(2 * 1.99).toFixed(2) },
-    { count: 5, total: +(5 * 1.99).toFixed(2) },
-    { count: 10, total: +(10 * 1.99).toFixed(2) },
-  ];
-
   const blockingPackage = route?.params?.packageName as string | undefined;
   const blockingAppName = route?.params?.appName as string | undefined;
   const fromBlockingOverride = Boolean(route?.params?.fromBlockingOverride && blockingPackage);
+  const showBuyOverridesParam = Boolean(route?.params?.showBuyOverrides);
 
-  React.useEffect(() => {
-    if (!fromBlockingOverride) return;
-
-    const autoUseOverride = async () => {
-      if ((user?.overrides_left ?? 0) > 0) {
-        setShowOverrideChoice(true);
-      } else {
-        setShowOverrideChoice(true);
-      }
-    };
-
-    autoUseOverride();
-  }, [fromBlockingOverride]);
+  useEffect(() => {
+    if (fromBlockingOverride) setShowOverrideChoice(true);
+    if (showBuyOverridesParam) setShowBuyOverridesModal(true);
+  }, [fromBlockingOverride, showBuyOverridesParam]);
 
   const selectedPlan = subscriptionPlans.find(p => p.id === selectedPlanId) || subscriptionPlans[1];
-  const extraDevicesCost = extraDevices * addonPricing.extraDevicePricePerUnit;
-  const totalMonthly = selectedPlan.price + extraDevicesCost;
-
-  const currentPlanLabel =
-    currentUserPlan === 'elite' ? 'Elite' : currentUserPlan === 'pro' ? 'Pro' : 'Free';
-
-  const currentIndex = subscriptionPlans.findIndex(
-    p => p.name === currentPlanLabel
-  );
-  const nextPlan = subscriptionPlans[currentIndex + 1];
-  const upgradeLabel = nextPlan
-    ? subscriptionLabels.upgradePrefix + nextPlan.name
-    : subscriptionLabels.topPlanBadge;
+  const isCurrentPlan = normalizePlan(selectedPlan.name) === currentUserPlan;
 
   const mapPlanIdToUserPlan = (planId: string): 'free' | 'pro' | 'elite' => {
     if (planId === '3') return 'elite';
@@ -112,48 +72,19 @@ export default function SubscriptionPlansScreen() {
   const handleConfirmPay = async () => {
     Keyboard.dismiss();
     const newPlan = mapPlanIdToUserPlan(selectedPlanId);
-
-    if (newPlan === currentUserPlan) {
-      Alert.alert('Already Active', `You are already on the ${selectedPlan.name} plan.`);
-      return;
-    }
+    if (newPlan === currentUserPlan) { Alert.alert('Already Active', `You are already on the ${selectedPlan.name} plan.`); return; }
 
     setIsProcessing(true);
     try {
       await upgradePlanAPI(newPlan);
-      const updatedOverrides = getPlanOverrideLimit(newPlan);
-      updateUser({ plan: newPlan, overrides_left: updatedOverrides });
-
-      Alert.alert(
-        subscriptionLabels.alertActivatedTitle,
-        `${subscriptionLabels.alertActivatedMsg}${selectedPlan.name} plan.`,
-        [{
-          text: subscriptionLabels.btnDashboard,
-          onPress: () =>
-            navigation.navigate('DashboardScreen', {
-              planUpdatedAt: Date.now(),
-            }),
-        }],
-      );
+      updateUser({ plan: newPlan, overrides_left: getPlanOverrideLimit(newPlan) });
+      Alert.alert('Plan Activated!', `You are now on the ${selectedPlan.name} plan.`, [{
+        text: 'Go to Dashboard',
+        onPress: () => navigation.navigate('DashboardScreen', { planUpdatedAt: Date.now() }),
+      }]);
     } catch (error: any) {
       Alert.alert('Error', error?.message || 'Failed to upgrade plan.');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
-  const handleBuyPlan = () => {
-    setShowOverrideChoice(false);
-  };
-
-  const handleBuyOverrides = () => {
-    setShowOverrideChoice(false);
-    setShowBuyOverridesModal(true);
-  };
-
-  const handleCloseOverrideChoice = () => {
-    setShowOverrideChoice(false);
-    navigation.goBack();
+    } finally { setIsProcessing(false); }
   };
 
   const handlePurchaseOverridePack = async (count: number) => {
@@ -165,322 +96,236 @@ export default function SubscriptionPlansScreen() {
       if (blockingPackage && deviceId) {
         try {
           const policies = await getPoliciesAPI() as any[];
-          const match = (policies || []).find((p: any) => {
-            const key = (p.policy || p).targetKey;
-            return key === blockingPackage;
-          });
+          const match = (policies || []).find((p: any) => (p.policy || p).targetKey === blockingPackage);
           const resolvedPolicyId = match ? (match.policy || match).policyId || match.id : undefined;
-
           if (resolvedPolicyId) {
             await useOverrideAPI(resolvedPolicyId, deviceId);
             await grantTemporaryOverrideAccess(blockingPackage, blockingAppName || blockingPackage, 5);
           }
-        } catch { /* silenced */ }
+        } catch {}
       }
 
       setShowBuyOverridesModal(false);
-      Alert.alert(
-        'Overrides Added',
-        `${count} override credits purchased successfully.`,
-        [{
-          text: 'OK',
-          onPress: () =>
-            navigation.navigate('DashboardScreen', {
-              refreshAt: Date.now(),
-              justOverriddenPackage: blockingPackage || null,
-            }),
-        }],
-      );
+      Alert.alert('Overrides Added', `${count} override credits purchased.`, [{
+        text: 'OK',
+        onPress: () => navigation.navigate('DashboardScreen', { refreshAt: Date.now(), justOverriddenPackage: blockingPackage || null }),
+      }]);
     } catch (error: any) {
-      Alert.alert('Error', error?.message || 'Failed to process override purchase.');
-    } finally {
-      setIsProcessing(false);
-    }
+      Alert.alert('Error', error?.message || 'Failed to purchase overrides.');
+    } finally { setIsProcessing(false); }
   };
 
   return (
-    <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+    <SafeAreaView style={s.container}>
+      <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
-      <Modal
-        visible={showOverrideChoice}
-        transparent
-        animationType="fade"
-        onRequestClose={handleCloseOverrideChoice}
-      >
-        <View style={styles.overrideModalOverlay}>
-          <View style={styles.overrideModalCard}>
-            <Text style={styles.overrideModalTitle}>No Overrides Left</Text>
-            <Text style={styles.overrideModalSubTitle}>
-              {blockingAppName || 'Selected app'} reached its daily limit.
+      <Modal visible={showOverrideChoice} transparent animationType="fade" onRequestClose={() => { setShowOverrideChoice(false); navigation.goBack(); }}>
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <View style={s.modalIconWrap}>
+              <Zap size={28} color="#F59E0B" />
+            </View>
+            <Text style={s.modalTitle}>No Overrides Left</Text>
+            <Text style={s.modalBody}>
+              {blockingAppName || 'Selected app'} reached its daily limit. Buy overrides or upgrade your plan.
             </Text>
-            <Text style={styles.overrideModalBody}>
-              You have no overrides remaining. Buy a plan or purchase overrides to continue.
-            </Text>
-
-            <TouchableOpacity
-              style={[styles.overrideModalBtn, styles.overridePlanBtn]}
-              onPress={handleBuyPlan}
-            >
-              <Text style={styles.overrideModalBtnText}>Buy a Plan</Text>
+            <TouchableOpacity style={s.modalBtnPrimary} onPress={() => { setShowOverrideChoice(false); setShowBuyOverridesModal(true); }}>
+              <Text style={s.modalBtnPrimaryText}>Buy Overrides</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.overrideModalBtn, styles.overrideSpendBtn]}
-              onPress={handleBuyOverrides}
-            >
-              <Text style={styles.overrideModalBtnText}>Buy Overrides</Text>
+            <TouchableOpacity style={s.modalBtnSecondary} onPress={() => setShowOverrideChoice(false)}>
+              <Text style={s.modalBtnSecondaryText}>Browse Plans</Text>
             </TouchableOpacity>
-
-            <TouchableOpacity
-              style={[styles.overrideModalBtn, styles.overrideCloseBtn]}
-              onPress={handleCloseOverrideChoice}
-            >
-              <Text style={styles.overrideCloseBtnText}>Close</Text>
+            <TouchableOpacity style={s.modalBtnGhost} onPress={() => { setShowOverrideChoice(false); navigation.goBack(); }}>
+              <Text style={s.modalBtnGhostText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      <Modal
-        visible={showBuyOverridesModal}
-        transparent
-        animationType="fade"
-        onRequestClose={() => setShowBuyOverridesModal(false)}
-      >
-        <View style={styles.overrideModalOverlay}>
-          <View style={styles.overrideModalCard}>
-            <Text style={styles.overrideModalTitle}>Buy Overrides</Text>
-            <Text style={styles.overrideModalSubTitle}>
-              Each override is ${OVERRIDE_PRICE.toFixed(2)}
-            </Text>
-
-            {OVERRIDE_PACKS.map((pack) => (
+      <Modal visible={showBuyOverridesModal} transparent animationType="fade" onRequestClose={() => setShowBuyOverridesModal(false)}>
+        <View style={s.modalOverlay}>
+          <View style={s.modalCard}>
+            <View style={s.modalIconWrap}>
+              <Zap size={28} color="#6366F1" />
+            </View>
+            <Text style={s.modalTitle}>Buy Overrides</Text>
+            <Text style={s.modalBody}>Each override is $1.99. Choose a pack:</Text>
+            {OVERRIDE_PACKS.map(pack => (
               <TouchableOpacity
                 key={pack.count}
-                style={[styles.overrideModalBtn, styles.overridePackBtn, isProcessing && styles.payButtonDisabled]}
+                style={[s.packBtn, isProcessing && s.packBtnDisabled]}
                 disabled={isProcessing}
                 onPress={() => handlePurchaseOverridePack(pack.count)}
+                activeOpacity={0.8}
               >
-                <Text style={styles.overrideModalBtnText}>
-                  {pack.count} Overrides — ${pack.total.toFixed(2)}
-                </Text>
+                <LinearGradient colors={['#6366F1', '#4F46E5']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.packGradient}>
+                  <Zap size={16} color="#FFFFFF" />
+                  <Text style={s.packText}>{pack.count} Overrides</Text>
+                  <Text style={s.packPrice}>${pack.total.toFixed(2)}</Text>
+                </LinearGradient>
               </TouchableOpacity>
             ))}
-
-            <TouchableOpacity
-              style={[styles.overrideModalBtn, styles.overrideCloseBtn]}
-              disabled={isProcessing}
-              onPress={() => setShowBuyOverridesModal(false)}
-            >
-              <Text style={styles.overrideCloseBtnText}>Close</Text>
+            <TouchableOpacity style={s.modalBtnGhost} disabled={isProcessing} onPress={() => setShowBuyOverridesModal(false)}>
+              <Text style={s.modalBtnGhostText}>Cancel</Text>
             </TouchableOpacity>
           </View>
         </View>
       </Modal>
 
-      <View style={styles.header}>
-        <TouchableOpacity
-          style={styles.backButton}
-          onPress={() => navigation.goBack()}
-        >
-          <ChevronLeft size={28} color="#0F172A" />
+      <View style={s.header}>
+        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+          <ChevronLeft size={22} color="#0F172A" />
         </TouchableOpacity>
-        <View style={styles.headerTitleContainer}>
-          <Text style={styles.headerTitle}>{subscriptionLabels.headerTitle}</Text>
-          <Text style={styles.headerSubtitle}>{subscriptionLabels.headerSubtitle}</Text>
-        </View>
-        <View style={{ width: 36 }} />
+        <Text style={s.headerTitle}>Choose Your Plan</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView
-        style={styles.scrollContainer}
-        contentContainerStyle={styles.scrollContent}
-        showsVerticalScrollIndicator={false}
-      >
-        {subscriptionPlans.map((plan) => {
+      <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
+        {subscriptionPlans.map(plan => {
           const isSelected = selectedPlanId === plan.id;
+          const isCurrent = normalizePlan(plan.name) === currentUserPlan;
+          const gradientColors = PLAN_GRADIENTS[plan.id] || PLAN_GRADIENTS['1'];
+
           return (
             <TouchableOpacity
               key={plan.id}
               activeOpacity={0.9}
               onPress={() => setSelectedPlanId(plan.id)}
-              style={[
-                styles.planCard,
-                isSelected ? styles.selectedCard : styles.unselectedCard,
-                plan.id === '3' && { overflow: 'visible' }
-              ]}
+              style={[s.planCard, isSelected && s.planCardSelected]}
             >
               {plan.badge && (
-                <View style={styles.eliteBadge}>
-                  <Text style={styles.badgeText}>{plan.badge}</Text>
-                </View>
+                <LinearGradient colors={['#F59E0B', '#D97706']} style={s.planBadge}>
+                  <Text style={s.planBadgeText}>{plan.badge}</Text>
+                </LinearGradient>
               )}
 
-              <Text style={styles.planTitle}>{plan.name}</Text>
-              <Text style={styles.planPrice}>{plan.priceLabel}</Text>
+              <View style={s.planHeader}>
+                <LinearGradient colors={gradientColors as [string, string]} style={s.planIconWrap}>
+                  <Shield size={18} color="#FFFFFF" />
+                </LinearGradient>
+                <View style={s.planTitleWrap}>
+                  <Text style={s.planName}>{plan.name}</Text>
+                  <Text style={s.planPrice}>{plan.priceLabel}</Text>
+                </View>
+                {isCurrent && (
+                  <View style={s.currentBadge}>
+                    <Text style={s.currentBadgeText}>Current</Text>
+                  </View>
+                )}
+              </View>
 
-              <View style={styles.divider} />
-
-              <View style={styles.featuresList}>
-                {plan.features.map((f) => (
-                  <FeatureItem key={f.text} feature={f} />
+              <View style={s.featuresList}>
+                {plan.features.map(f => (
+                  <View key={f.text} style={s.featureRow}>
+                    {f.enabled ? <Check size={16} color="#10B981" strokeWidth={3} /> : <X size={16} color="#CBD5E1" strokeWidth={3} />}
+                    <Text style={[s.featureText, !f.enabled && s.featureDisabled]}>{f.text}</Text>
+                  </View>
                 ))}
               </View>
             </TouchableOpacity>
           );
         })}
 
-        <View style={styles.sectionHeader}>
-          <Text style={styles.sectionTitle}>{subscriptionLabels.addOnsTitle}</Text>
-        </View>
-
-        <View style={styles.addOnCard}>
-          <View style={styles.addOnLeft}>
-            <View style={styles.addOnIconContainer}>
-              <Smartphone size={24} color="#4F46E5" />
-            </View>
-            <View>
-              <Text style={styles.addOnLabel}>{addonPricing.extraDeviceLabel}</Text>
-              <Text style={styles.addOnSubtext}>${addonPricing.extraDevicePricePerUnit}{subscriptionLabels.deviceMo}</Text>
-            </View>
+        <TouchableOpacity style={s.buyOverridesCard} onPress={() => setShowBuyOverridesModal(true)} activeOpacity={0.8}>
+          <Zap size={20} color="#F59E0B" />
+          <View style={s.buyOverridesContent}>
+            <Text style={s.buyOverridesTitle}>Need overrides?</Text>
+            <Text style={s.buyOverridesDesc}>Purchase override packs at $1.99 each</Text>
           </View>
+          <ChevronLeft size={16} color="#CBD5E1" style={{ transform: [{ rotate: '180deg' }] }} />
+        </TouchableOpacity>
 
-          <View style={styles.counterContainer}>
-            <TouchableOpacity
-              style={[styles.counterBtn, (extraDevices === 0 || isProcessing) && styles.counterBtnDisabled]}
-              onPress={() => setExtraDevices(Math.max(0, extraDevices - 1))}
-              disabled={extraDevices === 0 || isProcessing}
-            >
-              <Minus size={20} color={extraDevices === 0 ? "#94A3B8" : "#4F46E5"} />
-            </TouchableOpacity>
-
-            <View style={styles.countValueContainer}>
-              <Text style={styles.countValue}>{extraDevices}</Text>
-            </View>
-
-            <TouchableOpacity
-              style={[styles.counterBtn, (extraDevices === addonPricing.maxExtraDevices || isProcessing) && styles.counterBtnDisabled]}
-              onPress={() => setExtraDevices(Math.min(addonPricing.maxExtraDevices, extraDevices + 1))}
-              disabled={extraDevices === addonPricing.maxExtraDevices || isProcessing}
-            >
-              <Plus size={20} color={extraDevices === addonPricing.maxExtraDevices ? "#94A3B8" : "#4F46E5"} />
-            </TouchableOpacity>
-          </View>
+        <View style={s.trustRow}>
+          <ShieldCheck size={16} color="#10B981" />
+          <Text style={s.trustText}>30-day money back guarantee</Text>
         </View>
 
-        <View style={styles.trustSection}>
-          {trustSignals.map((signal) => (
-            <View
-              key={signal.id}
-              style={[styles.trustBannerShared, { backgroundColor: signal.bgColor, borderColor: signal.bgColor }]}
-            >
-              {signal.icon === 'shield-check' ? (
-                <ShieldCheck size={20} color={signal.iconColor} />
-              ) : (
-                <Lock size={20} color={signal.iconColor} />
-              )}
-              <View style={styles.trustContent}>
-                <Text style={[styles.trustTitleShared, { color: signal.iconColor }]}>{signal.title}</Text>
-                <Text style={styles.trustSubtitle}>{signal.subtitle}</Text>
-              </View>
-            </View>
-          ))}
-        </View>
-
-        <View style={{ height: 40 }} />
+        <View style={{ height: 140 }} />
       </ScrollView>
 
-      <View style={styles.pricingFooter}>
-        <View style={styles.pricingRow}>
+      <View style={s.footer}>
+        <View style={s.footerRow}>
           <View>
-            <Text style={styles.totalLabel}>{subscriptionLabels.totalMonthlyLabel}</Text>
-            <Text style={styles.breakdownText}>
-              {selectedPlan.name} Plan ${selectedPlan.price.toFixed(2)}
-              {extraDevices > 0 ? `${subscriptionLabels.extraDevicesSuffix}${extraDevices} $${extraDevicesCost.toFixed(2)}` : ''}
-            </Text>
+            <Text style={s.footerPlan}>{selectedPlan.name} Plan</Text>
+            <Text style={s.footerPrice}>{selectedPlan.priceLabel}</Text>
           </View>
-          <Text style={styles.totalAmount}>${totalMonthly.toFixed(2)}{subscriptionLabels.mo}</Text>
+          <TouchableOpacity
+            onPress={handleConfirmPay}
+            disabled={isProcessing || isCurrentPlan}
+            activeOpacity={0.8}
+          >
+            <LinearGradient
+              colors={isCurrentPlan ? ['#94A3B8', '#64748B'] : ['#6366F1', '#4F46E5']}
+              style={[s.footerBtn, (isProcessing || isCurrentPlan) && s.footerBtnDisabled]}
+            >
+              {isProcessing ? (
+                <ActivityIndicator color="#FFFFFF" size="small" />
+              ) : (
+                <Text style={s.footerBtnText}>{isCurrentPlan ? 'Current Plan' : 'Upgrade Now'}</Text>
+              )}
+            </LinearGradient>
+          </TouchableOpacity>
         </View>
-
-        <TouchableOpacity
-          style={[styles.payButton, isProcessing && styles.payButtonDisabled]}
-          onPress={handleConfirmPay}
-          disabled={isProcessing}
-          activeOpacity={0.8}
-        >
-          {isProcessing ? (
-            <ActivityIndicator color="#FFF" />
-          ) : (
-            <>
-              <ShieldCheck size={20} color="#FFF" style={{ marginRight: 8 }} />
-              <Text style={styles.payButtonText}>{upgradeLabel}</Text>
-              <Text style={styles.arrowIcon}>→</Text>
-            </>
-          )}
-        </TouchableOpacity>
       </View>
+
+      <BottomNav active="settings" />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 16, paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12, paddingBottom: 15, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#E2E8F0' },
-  backButton: { padding: 4, zIndex: 10 },
-  headerTitleContainer: { flex: 1, alignItems: 'center', justifyContent: 'center' },
-  headerTitle: { fontSize: 20, fontWeight: '800', color: '#0F172A', textAlign: 'center' },
-  headerSubtitle: { fontSize: 13, color: '#64748B', marginTop: 2, textAlign: 'center' },
-  scrollContainer: { flex: 1 },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F1F5F9' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  backBtn: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: '#0F172A' },
   scrollContent: { padding: 20 },
-  planCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24, marginBottom: 20, borderWidth: 2, position: 'relative', shadowColor: '#000', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 2 },
-  selectedCard: { borderColor: '#4F46E5', backgroundColor: '#F5F3FF' },
-  unselectedCard: { borderColor: '#E2E8F0' },
-  planTitle: { fontSize: 24, fontWeight: '800', color: '#1E293B', marginBottom: 4 },
-  planPrice: { fontSize: 20, fontWeight: '600', color: '#4F46E5', marginBottom: 16 },
-  divider: { height: 1, backgroundColor: '#F1F5F9', marginBottom: 16 },
-  featuresList: { gap: 12 },
-  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  featureText: { fontSize: 15, color: '#334155', fontWeight: '500' },
-  disabledFeatureText: { textDecorationLine: 'line-through', color: '#94A3B8' },
-  eliteBadge: { position: 'absolute', top: -10, right: -10, backgroundColor: '#8B5CF6', paddingHorizontal: 12, paddingVertical: 6, borderRadius: 12, zIndex: 20, shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.2, shadowRadius: 4, elevation: 5 },
-  badgeText: { color: '#FFFFFF', fontSize: 11, fontWeight: '800', textTransform: 'uppercase' },
-  sectionHeader: { marginTop: 10, marginBottom: 16 },
-  sectionTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
-  addOnCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', borderWidth: 1, borderColor: '#E2E8F0' },
-  addOnLeft: { flexDirection: 'row', alignItems: 'center', gap: 12 },
-  addOnIconContainer: { width: 44, height: 44, borderRadius: 12, backgroundColor: '#F5F3FF', alignItems: 'center', justifyContent: 'center' },
-  addOnLabel: { fontSize: 16, fontWeight: '700', color: '#1E293B' },
-  addOnSubtext: { fontSize: 13, color: '#64748B' },
-  counterContainer: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#F8FAFC', borderRadius: 12, padding: 4, borderWidth: 1, borderColor: '#E2E8F0' },
-  counterBtn: { width: 32, height: 32, alignItems: 'center', justifyContent: 'center', backgroundColor: '#FFFFFF', borderRadius: 8, shadowColor: '#000', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.1, shadowRadius: 2, elevation: 1 },
-  counterBtnDisabled: { backgroundColor: '#F1F5F9', opacity: 0.5 },
-  countValueContainer: { paddingHorizontal: 12 },
-  countValue: { fontSize: 16, fontWeight: '800', color: '#0F172A' },
-  trustSection: { marginTop: 24, gap: 12 },
-  trustBannerShared: { flexDirection: 'row', alignItems: 'center', padding: 16, borderRadius: 16, borderWidth: 1, gap: 12 },
-  trustContent: { flex: 1 },
-  trustTitleShared: { fontSize: 15, fontWeight: '700' },
-  trustSubtitle: { fontSize: 13, color: '#64748B', marginTop: 2 },
-  pricingFooter: { backgroundColor: '#FFFFFF', padding: 20, borderTopLeftRadius: 24, borderTopRightRadius: 24, borderWidth: 1, borderColor: '#E2E8F0', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 20 },
-  pricingRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
-  totalLabel: { fontSize: 14, fontWeight: '600', color: '#64748B', textTransform: 'uppercase' },
-  totalAmount: { fontSize: 20, fontWeight: '800', color: '#0F172A' },
-  breakdownText: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
-  payButton: { backgroundColor: '#4F46E5', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', paddingVertical: 16, borderRadius: 16, gap: 8 },
-  payButtonDisabled: { backgroundColor: '#94A3B8' },
-  payButtonText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
-  arrowIcon: { color: '#FFFFFF', fontSize: 20, fontWeight: 'bold', marginLeft: 4 },
-  overrideModalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', justifyContent: 'center', paddingHorizontal: 20 },
-  overrideModalCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 18 },
-  overrideModalTitle: { fontSize: 20, fontWeight: '800', color: '#0F172A', marginBottom: 6 },
-  overrideModalSubTitle: { fontSize: 14, color: '#334155', marginBottom: 8 },
-  overrideModalBody: { fontSize: 13, color: '#64748B', marginBottom: 14 },
-  overrideModalBtn: { borderRadius: 10, paddingVertical: 12, alignItems: 'center', marginTop: 8 },
-  overrideSpendBtn: { backgroundColor: '#0EA5E9' },
-  overridePlanBtn: { backgroundColor: '#16A34A' },
-  overridePackBtn: { backgroundColor: '#4F46E5' },
-  overrideCloseBtn: { backgroundColor: '#E2E8F0' },
-  overrideModalBtnText: { color: '#FFFFFF', fontWeight: '700' },
-  overrideCloseBtnText: { color: '#334155', fontWeight: '700' },
+
+  planCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 14, borderWidth: 2, borderColor: '#E8ECF4', position: 'relative', shadowColor: '#64748B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
+  planCardSelected: { borderColor: '#6366F1', backgroundColor: '#FAFAFF' },
+  planBadge: { position: 'absolute', top: -8, right: 16, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10, zIndex: 10 },
+  planBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
+  planHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 12 },
+  planIconWrap: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  planTitleWrap: { flex: 1 },
+  planName: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
+  planPrice: { fontSize: 14, fontWeight: '600', color: '#6366F1', marginTop: 1 },
+  currentBadge: { backgroundColor: '#F0FDF4', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 12, borderWidth: 1, borderColor: '#BBF7D0' },
+  currentBadgeText: { fontSize: 10, fontWeight: '800', color: '#059669' },
+  featuresList: { gap: 8 },
+  featureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
+  featureText: { fontSize: 13, color: '#334155', fontWeight: '500' },
+  featureDisabled: { textDecorationLine: 'line-through', color: '#CBD5E1' },
+
+  buyOverridesCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFBEB', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#FDE68A', gap: 12, marginTop: 4, marginBottom: 12 },
+  buyOverridesContent: { flex: 1 },
+  buyOverridesTitle: { fontSize: 14, fontWeight: '700', color: '#92400E' },
+  buyOverridesDesc: { fontSize: 12, color: '#B45309', marginTop: 2 },
+
+  trustRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 },
+  trustText: { fontSize: 12, color: '#10B981', fontWeight: '600' },
+
+  footer: { position: 'absolute', bottom: 56, left: 0, right: 0, backgroundColor: '#FFFFFF', paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#F1F5F9', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10 },
+  footerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  footerPlan: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
+  footerPrice: { fontSize: 18, fontWeight: '800', color: '#0F172A', marginTop: 2 },
+  footerBtn: { paddingHorizontal: 28, paddingVertical: 14, borderRadius: 14 },
+  footerBtnDisabled: { opacity: 0.7 },
+  footerBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 15 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.5)', justifyContent: 'center', paddingHorizontal: 24 },
+  modalCard: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 24, alignItems: 'center' },
+  modalIconWrap: { width: 56, height: 56, borderRadius: 18, backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
+  modalTitle: { fontSize: 20, fontWeight: '800', color: '#0F172A', marginBottom: 8 },
+  modalBody: { fontSize: 14, color: '#64748B', textAlign: 'center', lineHeight: 20, marginBottom: 20 },
+  modalBtnPrimary: { width: '100%', backgroundColor: '#6366F1', paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginBottom: 8 },
+  modalBtnPrimaryText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
+  modalBtnSecondary: { width: '100%', backgroundColor: '#EEF2FF', paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginBottom: 8 },
+  modalBtnSecondaryText: { color: '#4F46E5', fontWeight: '700', fontSize: 15 },
+  modalBtnGhost: { width: '100%', paddingVertical: 12, alignItems: 'center' },
+  modalBtnGhostText: { color: '#94A3B8', fontWeight: '600', fontSize: 14 },
+  packBtn: { width: '100%', marginBottom: 8 },
+  packBtnDisabled: { opacity: 0.6 },
+  packGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 14, borderRadius: 14 },
+  packText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14, flex: 1, marginLeft: 10 },
+  packPrice: { color: 'rgba(255,255,255,0.8)', fontWeight: '800', fontSize: 14 },
 });

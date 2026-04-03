@@ -14,6 +14,7 @@ import { ChevronLeft } from 'lucide-react-native';
 import { useUser } from '../context/UserContext';
 import { useDeviceResolver } from '../hooks/useDeviceResolver';
 import { getPoliciesAPI } from '../services/policyService';
+import BottomNav from '../components/BottomNav';
 
 type LimitItem = {
   id: string;
@@ -153,7 +154,9 @@ export default function DailyLimitsGraphScreen() {
             ))}
           </>
         )}
+        <View style={{ height: 80 }} />
       </ScrollView>
+      <BottomNav active="analytics" />
     </SafeAreaView>
   );
 }

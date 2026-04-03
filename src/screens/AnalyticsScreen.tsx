@@ -1,7 +1,8 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, Platform, ScrollView } from 'react-native';
+import React, { useState, useEffect, useRef } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, Platform, ScrollView, RefreshControl } from 'react-native';
+import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
-import { ChevronLeft } from 'lucide-react-native';
+import { ChevronLeft, BarChart2 } from 'lucide-react-native';
 import { useUser } from '../context/UserContext';
 import { useUsageContext } from '../context/UsageContext';
 import { WeeklyUsageGraph } from '../components/WeeklyUsageGraph';
@@ -9,15 +10,14 @@ import { getPoliciesAPI } from '../services/policyService';
 import { useDeviceResolver } from '../hooks/useDeviceResolver';
 import { getNativeBlockedPackages } from '../services/appBlockerService';
 import { getPolicyPackageKey, formatLimitTime } from '../utils/policyMapper';
+import BottomNav from '../components/BottomNav';
 
 interface BreakdownItem {
   id: string;
   name: string;
-  category: string;
   usedMinutes: number;
   limitMinutes: number;
   isBlocked: boolean;
-  timerSetAt: number;
 }
 
 export default function AnalyticsScreen() {
@@ -25,293 +25,147 @@ export default function AnalyticsScreen() {
   const { user } = useUser();
   const { weeklyUsage, isLoadingWeekly, weeklyError } = useUsageContext();
   const { deviceId } = useDeviceResolver(user?.uid);
-  const [breakdown, setBreakdown] = React.useState<BreakdownItem[]>([]);
+  const [breakdown, setBreakdown] = useState<BreakdownItem[]>([]);
+  const [refreshing, setRefreshing] = useState(false);
 
-  const fetchBreakdown = React.useCallback(async () => {
-    if (!user?.uid || !deviceId) {
-      setBreakdown([]);
-      return;
-    }
+  const fetchBreakdownRef = useRef(async () => {});
+  fetchBreakdownRef.current = async () => {
+    if (!user?.uid || !deviceId) { setBreakdown([]); return; }
 
     try {
       const policiesResult = await getPoliciesAPI();
       const policiesData = Array.isArray(policiesResult) ? policiesResult : [];
-      const rows = policiesData.map((item: any) => {
-        const p = item.policy || item;
-        const state = item.policyState || p.policyState || {};
-        return {
-          id: p.policyId,
-          app_name: p.targetKey,
-          package_name: p.targetKey,
-          packageName: p.targetKey,
-          target_label: p.targetLabel,
-          category: p.type === 'category' ? p.targetLabel : null,
-          max_time_minutes: p.dailyLimitMinutes,
-          time_used_minutes: state.usageTodayMinutes || 0,
-          is_blocked: state.isExhaustedToday || false,
-          created_at: p.createdAt?._seconds ? p.createdAt._seconds * 1000 : Date.now(),
-        };
-      });
+      const nativeBlocked = await getNativeBlockedPackages();
 
-      const nativeBlockedPackages = await getNativeBlockedPackages();
-
-      const normalized: BreakdownItem[] = rows
-        .map((row: any, idx: number) => {
-          const appName = String(row?.app_name || row?.package_name || row?.packageName || '').trim();
-          if (!appName) return null;
-
-          const packageKey = getPolicyPackageKey(row);
-
-          const usedMinutes = Math.max(0, Number(row?.time_used_minutes ?? row?.used_minutes ?? 0));
-          const limitMinutes = Math.max(0, Number(row?.max_time_minutes ?? row?.limit_minutes ?? 0));
-          const blockedRaw = row?.is_blocked;
-          const statusText = String(row?.status_text || row?.status || '').toLowerCase();
-          const isBlocked =
-            typeof blockedRaw === 'boolean'
-              ? blockedRaw
-              : statusText.includes('block') || statusText.includes('blocked');
-
-          const blockedByUsage = limitMinutes > 0 && usedMinutes >= limitMinutes;
-          const blockedUntil = Number(row?.blocked_until_timestamp || 0);
-          const blockedByUntil = blockedUntil > Date.now();
-          const blockedByNative = packageKey ? nativeBlockedPackages.has(packageKey) : false;
-
-          let resolvedBlocked = isBlocked || blockedByUsage || blockedByUntil || blockedByNative;
-
-          const timerSetAt = Math.max(
-            Number(new Date(row?.created_at || 0).getTime() || 0),
-            Number(new Date(row?.updated_at || 0).getTime() || 0)
-          );
+      const items: BreakdownItem[] = policiesData
+        .map((item: any, idx: number) => {
+          const p = item.policy || item;
+          const state = item.policyState || {};
+          const targetKey = p.targetKey || '';
+          const packageKey = getPolicyPackageKey({ app_name: targetKey, package_name: targetKey });
+          const usedMinutes = state.usageTodayMinutes || 0;
+          const limitMinutes = p.dailyLimitMinutes || 0;
+          const isBlocked = state.isExhaustedToday || (limitMinutes > 0 && usedMinutes >= limitMinutes) || nativeBlocked.has(packageKey);
 
           return {
-            id: String(row?.id || row?.limit_id || `${appName}-${idx}`),
-            name: appName,
-            category: String(row?.category || row?.category_name || 'General').trim(),
+            id: p.policyId || `item-${idx}`,
+            name: p.targetLabel || targetKey,
             usedMinutes,
             limitMinutes,
-            isBlocked: resolvedBlocked,
-            timerSetAt,
-          } as BreakdownItem;
+            isBlocked,
+          };
         })
-        .filter((item: BreakdownItem | null): item is BreakdownItem => !!item);
+        .filter((i: BreakdownItem) => i.name)
+        .slice(0, 8);
 
-      const latestByApp = new Map<string, BreakdownItem>();
-      normalized.forEach((item: BreakdownItem) => {
-        const key = item.name.trim().toLowerCase();
-        const existing = latestByApp.get(key);
-        if (!existing || item.timerSetAt > existing.timerSetAt) {
-          latestByApp.set(key, item);
-        }
-      });
+      setBreakdown(items);
+    } catch { setBreakdown([]); }
+  };
 
-      const mapped = Array.from(latestByApp.values())
-        .sort((a: BreakdownItem, b: BreakdownItem) => {
-          if (b.timerSetAt !== a.timerSetAt) return b.timerSetAt - a.timerSetAt;
-          return b.limitMinutes - a.limitMinutes;
-        })
-        .slice(0, 6);
+  useEffect(() => { fetchBreakdownRef.current(); }, [deviceId]);
 
-      setBreakdown(mapped);
-    } catch {
-      setBreakdown([]);
-    }
-  }, [user?.uid, deviceId]);
-
-  React.useEffect(() => {
-    void fetchBreakdown();
-  }, [fetchBreakdown]);
-
-  const onRefreshAll = React.useCallback(async () => {
-    await fetchBreakdown();
-  }, [fetchBreakdown]);
+  const onRefresh = async () => {
+    setRefreshing(true);
+    await fetchBreakdownRef.current();
+    setRefreshing(false);
+  };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={s.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-      <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <ChevronLeft size={24} color="#0F172A" />
+      <View style={s.header}>
+        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
+          <ChevronLeft size={22} color="#0F172A" />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Analytics</Text>
-        <View style={styles.rightSpace} />
+        <Text style={s.headerTitle}>Analytics</Text>
+        <View style={{ width: 40 }} />
       </View>
 
-      <ScrollView contentContainerStyle={styles.content} showsVerticalScrollIndicator={false}>
+      <ScrollView
+        contentContainerStyle={s.content}
+        showsVerticalScrollIndicator={false}
+        refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} />}
+      >
         <WeeklyUsageGraph
-          title="My Activity - 7 Day Usage"
+          title="7-Day Usage"
           data={weeklyUsage}
           isLoading={isLoadingWeekly}
           error={weeklyError}
-          onRefresh={() => {
-            void onRefreshAll();
-          }}
+          onRefresh={onRefresh}
         />
 
-        <View style={styles.breakdownSection}>
-          <Text style={styles.breakdownTitle}>App Breakdown (Recent Timers)</Text>
-          {breakdown.length === 0 ? (
-            <View style={styles.breakdownCard}>
-              <Text style={styles.emptyText}>No app usage breakdown available yet.</Text>
-            </View>
-          ) : (
-            <ScrollView
-              style={styles.breakdownScroll}
-              contentContainerStyle={styles.breakdownScrollContent}
-              nestedScrollEnabled
-              showsVerticalScrollIndicator
-            >
-              {breakdown.map(item => {
-                const pct = item.limitMinutes > 0 ? Math.min(100, (item.usedMinutes / item.limitMinutes) * 100) : 0;
-                return (
-                  <View key={item.id} style={styles.breakdownCard}>
-                    <View style={styles.breakdownRow}>
-                      <Text style={styles.appName}>{item.name}</Text>
-                      <View style={[styles.statusBadge, item.isBlocked ? styles.statusBlocked : styles.statusActive]}>
-                        <Text style={[styles.statusText, item.isBlocked ? styles.statusTextBlocked : styles.statusTextActive]}>
-                          {item.isBlocked ? 'Blocked' : 'Active'}
-                        </Text>
-                      </View>
-                    </View>
-                    <View style={styles.breakdownRow}>
-                      <Text style={styles.appCategory}>{item.category}</Text>
-                      <Text style={styles.appTime}>{formatLimitTime(item.usedMinutes)}</Text>
-                    </View>
-                    <View style={styles.track}>
-                      <View style={[styles.fill, { width: `${pct}%` }]} />
-                    </View>
-                    <View style={styles.breakdownRow}>
-                      <Text style={styles.metaText}>Used: {formatLimitTime(item.usedMinutes)}</Text>
-                      <Text style={styles.metaText}>Limit: {formatLimitTime(item.limitMinutes)}</Text>
-                    </View>
-                  </View>
-                );
-              })}
-            </ScrollView>
-          )}
+        <View style={s.sectionHeader}>
+          <BarChart2 size={18} color="#6366F1" />
+          <Text style={s.sectionTitle}>App Breakdown</Text>
         </View>
+
+        {breakdown.length === 0 ? (
+          <View style={s.emptyCard}>
+            <Text style={s.emptyText}>No usage data available yet</Text>
+          </View>
+        ) : (
+          breakdown.map(item => {
+            const pct = item.limitMinutes > 0 ? Math.min(100, (item.usedMinutes / item.limitMinutes) * 100) : 0;
+            const progressColors: [string, string] = item.isBlocked
+              ? ['#EF4444', '#DC2626']
+              : pct >= 75
+                ? ['#F59E0B', '#D97706']
+                : ['#10B981', '#059669'];
+
+            return (
+              <View key={item.id} style={s.breakdownCard}>
+                <View style={s.breakdownRow}>
+                  <Text style={s.appName} numberOfLines={1}>{item.name}</Text>
+                  <View style={[s.statusPill, item.isBlocked ? s.pillBlocked : s.pillActive]}>
+                    <View style={[s.statusDot, item.isBlocked ? s.dotBlocked : s.dotActive]} />
+                    <Text style={[s.statusText, item.isBlocked ? s.textBlocked : s.textActive]}>
+                      {item.isBlocked ? 'Blocked' : 'Active'}
+                    </Text>
+                  </View>
+                </View>
+                <View style={s.progressTrack}>
+                  <LinearGradient colors={progressColors} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={[s.progressFill, { width: `${Math.max(pct, 2)}%` }]} />
+                </View>
+                <View style={s.breakdownRow}>
+                  <Text style={s.metaText}>{formatLimitTime(item.usedMinutes)} used</Text>
+                  <Text style={s.metaText}>{formatLimitTime(item.limitMinutes)} limit</Text>
+                </View>
+              </View>
+            );
+          })
+        )}
+
+        <View style={{ height: 100 }} />
       </ScrollView>
+
+      <BottomNav active="analytics" />
     </SafeAreaView>
   );
 }
 
-const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
-    paddingBottom: 12,
-    backgroundColor: '#FFFFFF',
-    borderBottomWidth: 1,
-    borderBottomColor: '#E2E8F0',
-  },
-  backButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#F1F5F9',
-  },
-  rightSpace: {
-    width: 40,
-    height: 40,
-  },
-  headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0F172A',
-  },
-  content: {
-    padding: 16,
-    paddingBottom: 30,
-  },
-  breakdownSection: {
-    marginTop: 16,
-  },
-  breakdownScroll: {
-    maxHeight: 360,
-  },
-  breakdownScrollContent: {
-    paddingBottom: 6,
-  },
-  breakdownTitle: {
-    fontSize: 18,
-    fontWeight: '800',
-    color: '#0F172A',
-    marginBottom: 10,
-  },
-  breakdownCard: {
-    backgroundColor: '#FFFFFF',
-    borderRadius: 12,
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
-    padding: 12,
-    marginBottom: 10,
-  },
-  breakdownRow: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-  },
-  appName: {
-    fontSize: 15,
-    fontWeight: '700',
-    color: '#0F172A',
-  },
-  appTime: {
-    fontSize: 14,
-    fontWeight: '700',
-    color: '#1D4ED8',
-  },
-  statusBadge: {
-    paddingHorizontal: 8,
-    paddingVertical: 4,
-    borderRadius: 10,
-  },
-  statusActive: {
-    backgroundColor: '#DCFCE7',
-  },
-  statusBlocked: {
-    backgroundColor: '#FEE2E2',
-  },
-  statusText: {
-    fontSize: 10,
-    fontWeight: '800',
-  },
-  statusTextActive: {
-    color: '#166534',
-  },
-  statusTextBlocked: {
-    color: '#991B1B',
-  },
-  appCategory: {
-    marginTop: 4,
-    fontSize: 12,
-    color: '#64748B',
-  },
-  track: {
-    marginTop: 8,
-    height: 8,
-    borderRadius: 5,
-    backgroundColor: '#E2E8F0',
-    overflow: 'hidden',
-  },
-  fill: {
-    height: '100%',
-    backgroundColor: '#2563EB',
-  },
-  metaText: {
-    marginTop: 8,
-    fontSize: 11,
-    color: '#64748B',
-    fontWeight: '600',
-  },
-  emptyText: {
-    fontSize: 13,
-    color: '#64748B',
-    fontWeight: '600',
-  },
+const s = StyleSheet.create({
+  container: { flex: 1, backgroundColor: '#F1F5F9' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  backBtn: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: '#0F172A' },
+  content: { padding: 16 },
+  sectionHeader: { flexDirection: 'row', alignItems: 'center', gap: 8, marginTop: 20, marginBottom: 12 },
+  sectionTitle: { fontSize: 17, fontWeight: '800', color: '#0F172A' },
+  emptyCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 24, alignItems: 'center', borderWidth: 1, borderColor: '#E8ECF4' },
+  emptyText: { fontSize: 14, color: '#94A3B8', fontWeight: '500' },
+  breakdownCard: { backgroundColor: '#FFFFFF', borderRadius: 14, padding: 14, marginBottom: 10, borderWidth: 1, borderColor: '#E8ECF4', shadowColor: '#64748B', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
+  breakdownRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
+  appName: { fontSize: 14, fontWeight: '700', color: '#0F172A', flex: 1, marginRight: 8 },
+  statusPill: { flexDirection: 'row', alignItems: 'center', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 20, gap: 5 },
+  pillActive: { backgroundColor: '#F0FDF4' },
+  pillBlocked: { backgroundColor: '#FEF2F2' },
+  statusDot: { width: 6, height: 6, borderRadius: 3 },
+  dotActive: { backgroundColor: '#10B981' },
+  dotBlocked: { backgroundColor: '#EF4444' },
+  statusText: { fontSize: 10, fontWeight: '700' },
+  textActive: { color: '#059669' },
+  textBlocked: { color: '#DC2626' },
+  progressTrack: { height: 6, backgroundColor: '#F1F5F9', borderRadius: 3, overflow: 'hidden', marginVertical: 10 },
+  progressFill: { height: '100%', borderRadius: 3 },
+  metaText: { fontSize: 11, color: '#94A3B8', fontWeight: '600' },
 });

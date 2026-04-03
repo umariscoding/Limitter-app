@@ -2,17 +2,15 @@ import React, { useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
-import { managedContent, addContentLabels, dashboardLabels } from '../data/appData';
-import { 
-  Home, 
-  BarChart2, 
-  Settings as SettingsIcon, 
-  Smartphone, 
-  Gamepad2, 
-  Film, 
+import { managedContent, addContentLabels } from '../data/appData';
+import {
+  Smartphone,
+  Gamepad2,
+  Film,
   TrendingUp,
   ArrowLeft
 } from 'lucide-react-native';
+import BottomNav from '../components/BottomNav';
 
 type ContentItem = {
   id: string;
@@ -87,23 +85,9 @@ export default function AddContentScreen() {
         <TouchableOpacity style={styles.addButton} onPress={handleAddNew}>
           <Text style={styles.addButtonText}>{addContentLabels.addNew}</Text>
         </TouchableOpacity>
+        <View style={{ height: 80 }} />
       </ScrollView>
-
-      {/* Bottom Nav */}
-      <View style={styles.bottomNav}>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('DashboardScreen')}>
-          <Home size={22} color="#94A3B8" />
-          <Text style={styles.navLabel}>{dashboardLabels.navHome}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('AnalyticsScreen')}>
-          <BarChart2 size={22} color="#94A3B8" />
-          <Text style={styles.navLabel}>{dashboardLabels.navUsage}</Text>
-        </TouchableOpacity>
-        <TouchableOpacity style={styles.navItem} onPress={() => navigation.navigate('SettingsScreen')}>
-          <SettingsIcon size={22} color="#94A3B8" />
-          <Text style={styles.navLabel}>{dashboardLabels.navSettings}</Text>
-        </TouchableOpacity>
-      </View>
+      <BottomNav active="home" />
     </SafeAreaView>
   );
 }
@@ -221,29 +205,5 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontSize: 16,
     fontWeight: '700',
-  },
-  bottomNav: {
-    flexDirection: 'row',
-    backgroundColor: '#FFFFFF',
-    paddingVertical: 12,
-    paddingHorizontal: 24,
-    borderTopWidth: 1,
-    borderTopColor: '#E2E8F0',
-    justifyContent: 'space-between',
-    paddingBottom: 24,
-  },
-  navItem: {
-    alignItems: 'center',
-    flex: 1,
-  },
-  navIcon: {
-    fontSize: 20,
-    marginBottom: 4,
-    color: '#94A3B8',
-  },
-  navLabel: {
-    fontSize: 12,
-    fontWeight: '600',
-    color: '#94A3B8',
   },
 });

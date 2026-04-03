@@ -1,4 +1,4 @@
-import React, { useState, useCallback } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -14,7 +14,7 @@ import {
   StyleSheet,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
-import { useNavigation, useFocusEffect } from '@react-navigation/native';
+import { useNavigation } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
@@ -53,11 +53,12 @@ export default function PoliciesScreen() {
   const [editError, setEditError] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState(false);
 
-  useFocusEffect(
-    useCallback(() => {
-      fetchPolicies();
-    }, [fetchPolicies]),
-  );
+  const fetchRef = useRef(fetchPolicies);
+  fetchRef.current = fetchPolicies;
+
+  useEffect(() => {
+    fetchRef.current();
+  }, []);
 
   useNativeTimerSync(setPolicies);
 
