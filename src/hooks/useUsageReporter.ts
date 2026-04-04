@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { subscribeTimerTicks } from '../services/timerRealtimeService';
 import { tickUsageAPI, recordUsageAPI } from '../services/usageService';
 import { startAppBlockerService, updateBlockedApps } from '../services/appBlockerService';
@@ -8,6 +9,8 @@ import { getPolicyPackageKey } from '../utils/policyMapper';
 import type { UIPolicy } from '../utils/policyMapper';
 
 const TICK_INTERVAL_MS = 15_000;
+const FLUSH_INTERVAL_MS = 2 * 60 * 1000; // flush to Firestore every 2 minutes
+const STORAGE_KEY = 'limitter_unflushed_sessions';
 
 const generateSessionId = () =>
   `sess_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
@@ -23,6 +26,45 @@ interface PolicySession {
   limitSeconds: number;
   unsentDelta: number;
 }
+
+// ─── AsyncStorage backup (crash protection) ───
+
+async function saveSessionsToStorage(sessions: Map<string, PolicySession>) {
+  const entries = Array.from(sessions.entries())
+    .filter(([_, s]) => s.accumulatedSeconds > 0)
+    .map(([pkg, s]) => ({
+      pkg,
+      policyId: s.policyId,
+      accumulatedSeconds: s.accumulatedSeconds,
+      targetKey: s.targetKey,
+    }));
+
+  if (entries.length === 0) {
+    await AsyncStorage.removeItem(STORAGE_KEY);
+    return;
+  }
+
+  await AsyncStorage.setItem(STORAGE_KEY, JSON.stringify(entries));
+}
+
+async function recoverAndFlushStaleSessions(deviceId: string) {
+  const raw = await AsyncStorage.getItem(STORAGE_KEY);
+  if (!raw) return;
+
+  await AsyncStorage.removeItem(STORAGE_KEY);
+
+  try {
+    const entries: { pkg: string; policyId: string; accumulatedSeconds: number }[] = JSON.parse(raw);
+    for (const entry of entries) {
+      if (entry.accumulatedSeconds <= 0) continue;
+      try {
+        await recordUsageAPI(entry.policyId, deviceId, entry.accumulatedSeconds);
+      } catch { /* best effort */ }
+    }
+  } catch { /* corrupted data, ignore */ }
+}
+
+// ─── Hook ───
 
 export function useUsageReporter(
   policies: UIPolicy[],
@@ -48,6 +90,14 @@ export function useUsageReporter(
     }
     policyByPackage.current = map;
   }, [policies]);
+
+  // Recover crashed sessions on mount
+  useEffect(() => {
+    if (!deviceId) return;
+    recoverAndFlushStaleSessions(deviceId);
+  }, [deviceId]);
+
+  // ─── Send tick to Realtime DB (every 15s) ───
 
   const sendTick = useRef(async () => {});
   sendTick.current = async () => {
@@ -94,6 +144,8 @@ export function useUsageReporter(
     tickingRef.current = false;
   };
 
+  // ─── Flush to Firestore (every 2 min + on background) ───
+
   const flushToFirestore = useRef(async () => {});
   flushToFirestore.current = async () => {
     const currentDeviceId = deviceIdRef.current;
@@ -106,7 +158,7 @@ export function useUsageReporter(
 
     flushingRef.current = true;
 
-    for (const [pkg, session] of toFlush) {
+    for (const [_, session] of toFlush) {
       const seconds = session.accumulatedSeconds;
       if (seconds <= 0) continue;
 
@@ -114,13 +166,17 @@ export function useUsageReporter(
         await recordUsageAPI(session.policyId, currentDeviceId, seconds);
         session.accumulatedSeconds = 0;
         session.lastSentSeconds = 0;
+        session.unsentDelta = 0;
         session.sessionId = generateSessionId();
         session.startedAt = Date.now();
       } catch { /* retry next time */ }
     }
 
+    await AsyncStorage.removeItem(STORAGE_KEY);
     flushingRef.current = false;
   };
+
+  // ─── Native timer tick listener ───
 
   useEffect(() => {
     const unsubTick = subscribeTimerTicks(event => {
@@ -153,16 +209,27 @@ export function useUsageReporter(
           unsentDelta: 1,
         });
       }
+
+      // Save to AsyncStorage on every tick for crash protection
+      saveSessionsToStorage(sessionsRef.current);
     });
 
     return unsubTick;
   }, []);
 
+  // Tick interval (15s → Realtime DB)
   useEffect(() => {
     const interval = setInterval(() => sendTick.current(), TICK_INTERVAL_MS);
     return () => clearInterval(interval);
   }, []);
 
+  // Flush interval (2 min → Firestore)
+  useEffect(() => {
+    const interval = setInterval(() => flushToFirestore.current(), FLUSH_INTERVAL_MS);
+    return () => clearInterval(interval);
+  }, []);
+
+  // App state changes
   useEffect(() => {
     const handleAppStateChange = (nextState: AppStateStatus) => {
       if (nextState === 'background' || nextState === 'inactive') {

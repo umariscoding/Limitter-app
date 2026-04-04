@@ -144,10 +144,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 10,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: '#ECFDF5',
+    backgroundColor: '#EEF2FF',
   },
   refreshText: {
-    color: '#166534',
+    color: '#4338CA',
     fontWeight: '700',
     fontSize: 12,
   },
@@ -187,27 +187,27 @@ const styles = StyleSheet.create({
     marginBottom: 4,
   },
   barMinuteSelected: {
-    color: '#166534',
+    color: '#3730A3',
     fontWeight: '800',
   },
   barTrack: {
     width: 30,
     height: 130,
     borderRadius: 8,
-    backgroundColor: '#E2E8F0',
+    backgroundColor: '#F1F5F9',
     justifyContent: 'flex-end',
   },
   barTrackSelected: {
     borderWidth: 1,
-    borderColor: '#16A34A',
+    borderColor: '#6366F1',
   },
   barFill: {
     width: '100%',
-    backgroundColor: '#86EFAC',
+    backgroundColor: '#C7D2FE',
     borderRadius: 8,
   },
   barFillSelected: {
-    backgroundColor: '#16A34A',
+    backgroundColor: '#6366F1',
   },
   barLabel: {
     marginTop: 8,
@@ -216,7 +216,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   barLabelSelected: {
-    color: '#166534',
+    color: '#3730A3',
     fontWeight: '800',
   },
 });

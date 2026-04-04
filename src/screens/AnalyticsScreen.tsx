@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, Platform, ScrollView, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
@@ -7,6 +7,7 @@ import { useUser } from '../context/UserContext';
 import { useUsageContext } from '../context/UsageContext';
 import { WeeklyUsageGraph } from '../components/WeeklyUsageGraph';
 import { getPoliciesAPI } from '../services/policyService';
+import { getWeeklyUsageAPI } from '../services/usageService';
 import { useDeviceResolver } from '../hooks/useDeviceResolver';
 import { getNativeBlockedPackages } from '../services/appBlockerService';
 import { getPolicyPackageKey, formatLimitTime } from '../utils/policyMapper';
@@ -20,18 +21,39 @@ interface BreakdownItem {
   isBlocked: boolean;
 }
 
+const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+
 export default function AnalyticsScreen() {
   const navigation = useNavigation<any>();
   const { user } = useUser();
-  const { weeklyUsage, isLoadingWeekly, weeklyError } = useUsageContext();
+  const { weeklyUsage, isLoadingWeekly, weeklyError, setWeeklyUsage, setIsLoadingWeekly, setWeeklyError } = useUsageContext();
   const { deviceId } = useDeviceResolver(user?.uid);
   const [breakdown, setBreakdown] = useState<BreakdownItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
 
-  const fetchBreakdownRef = useRef(async () => {});
-  fetchBreakdownRef.current = async () => {
-    if (!user?.uid || !deviceId) { setBreakdown([]); return; }
+  const fetchWeekly = async () => {
+    setIsLoadingWeekly(true);
+    setWeeklyError(null);
+    try {
+      const days = await getWeeklyUsageAPI(user?.accountId);
+      const points = days.map(day => {
+        const date = new Date(day.dateKey + 'T00:00:00');
+        return {
+          dateKey: day.dateKey,
+          label: DAY_NAMES[date.getDay()],
+          totalMinutes: Math.round(day.totalMinutes || 0),
+        };
+      });
+      setWeeklyUsage(points);
+    } catch {
+      setWeeklyError('Failed to load weekly usage');
+    } finally {
+      setIsLoadingWeekly(false);
+    }
+  };
 
+  const fetchBreakdown = async () => {
+    if (!user?.uid || !deviceId) { setBreakdown([]); return; }
     try {
       const policiesResult = await getPoliciesAPI();
       const policiesData = Array.isArray(policiesResult) ? policiesResult : [];
@@ -62,11 +84,14 @@ export default function AnalyticsScreen() {
     } catch { setBreakdown([]); }
   };
 
-  useEffect(() => { fetchBreakdownRef.current(); }, [deviceId]);
+  useEffect(() => {
+    fetchWeekly();
+    fetchBreakdown();
+  }, [deviceId]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await fetchBreakdownRef.current();
+    await Promise.all([fetchWeekly(), fetchBreakdown()]);
     setRefreshing(false);
   };
 
@@ -145,7 +170,7 @@ export default function AnalyticsScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F1F5F9' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 40, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   backBtn: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' },
   headerTitle: { fontSize: 17, fontWeight: '700', color: '#0F172A' },
   content: { padding: 16 },
