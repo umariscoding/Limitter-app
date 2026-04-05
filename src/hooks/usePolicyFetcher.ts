@@ -5,6 +5,7 @@ import {
   getNativeTimerStates,
   startAppBlockerService,
   startAppUsageTimer,
+  startBulkWebsiteTimers,
   updateBlockedApps,
 } from '../services/appBlockerService';
 import { hydratePoliciesForUi } from '../helpers/helper';
@@ -18,14 +19,16 @@ export function usePolicyFetcher() {
     matchesLimitPackage?: (item: any, pkg: string) => boolean;
   }) => {
     let policiesResult: any;
-    for (let attempt = 0; attempt < 2; attempt++) {
+    const MAX_RETRIES = 3;
+    for (let attempt = 0; attempt < MAX_RETRIES; attempt++) {
       try {
         policiesResult = await getPoliciesAPI();
         break;
       } catch (error: any) {
         const status = error?.response?.status;
-        if (attempt === 0 && (status === 503 || status === 502)) {
-          await new Promise<void>(r => setTimeout(r, 2000));
+        if (attempt < MAX_RETRIES - 1 && (status === 503 || status === 502)) {
+          const delayMs = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s
+          await new Promise<void>(r => setTimeout(r, delayMs));
           continue;
         }
         setIsLoading(false);
@@ -94,6 +97,29 @@ export function usePolicyFetcher() {
         if (remainingSeconds <= 0) continue;
         try {
           await startAppUsageTimer(pkg, limit.target_label || pkg, remainingSeconds);
+        } catch (_) { /* silenced */ }
+      }
+
+      // Start website timers for active website policies
+      const websiteTimersToStart: Array<{ domain: string; durationSeconds: number }> = [];
+      for (const limit of reconciledLimits) {
+        if (limit.is_blocked) continue;
+        if (limit.target_type !== 'website') continue;
+        const domain = limit.app_name || limit.package_name || (limit as any).packageName;
+        if (!domain) continue;
+        const key = `website:${String(domain).trim().toLowerCase()}`;
+        if (activePackages.has(key)) continue;
+
+        const remainingSeconds = Math.max(
+          0,
+          (limit.max_time_minutes - (limit.time_used_minutes || 0)) * 60,
+        );
+        if (remainingSeconds <= 0) continue;
+        websiteTimersToStart.push({ domain, durationSeconds: remainingSeconds });
+      }
+      if (websiteTimersToStart.length > 0) {
+        try {
+          await startBulkWebsiteTimers(websiteTimersToStart);
         } catch (_) { /* silenced */ }
       }
 

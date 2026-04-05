@@ -73,9 +73,13 @@ export function formatRemainingTime(minutes: number): string {
 }
 
 export function getPolicyPackageKey(item: any): string {
-  return String(item?.app_name || item?.package_name || item?.packageName || '')
+  const raw = String(item?.app_name || item?.package_name || item?.packageName || '')
     .trim()
     .toLowerCase();
+  if (item?.target_type === 'website' && !raw.startsWith('website:')) {
+    return `website:${raw}`;
+  }
+  return raw;
 }
 
 export function resolvePolicyBlockedState(item: any): boolean {
@@ -136,7 +140,7 @@ export function mergeLiveTimerUsageIntoPolicies(
   });
 
   return policies.map(item => {
-    if (item.target_type !== 'app') return item;
+    if (item.target_type !== 'app' && item.target_type !== 'website') return item;
     const key = getPolicyPackageKey(item);
     const timer = byPkg.get(key);
     if (!timer) return item;

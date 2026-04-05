@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Alert, Platform, StatusBar } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, ScrollView, Platform, StatusBar } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { managedContent, addContentLabels } from '../data/appData';
@@ -45,10 +45,6 @@ export default function AddContentScreen() {
     );
   };
 
-  const handleAddNew = () => {
-    Alert.alert(addContentLabels.comingSoonTitle, addContentLabels.comingSoonMsg);
-  };
-
   return (
     <SafeAreaView style={styles.container}>
       {/* Header */}
@@ -82,8 +78,8 @@ export default function AddContentScreen() {
           </View>
         ))}
 
-        <TouchableOpacity style={styles.addButton} onPress={handleAddNew}>
-          <Text style={styles.addButtonText}>{addContentLabels.addNew}</Text>
+        <TouchableOpacity style={[styles.addButton, styles.addButtonDisabled]} disabled activeOpacity={0.6}>
+          <Text style={styles.addButtonText}>{addContentLabels.addNew} (Coming Soon)</Text>
         </TouchableOpacity>
         <View style={{ height: 80 }} />
       </ScrollView>
@@ -200,6 +196,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 12,
     marginBottom: 20,
+  },
+  addButtonDisabled: {
+    opacity: 0.5,
+    backgroundColor: '#94A3B8',
   },
   addButtonText: {
     color: '#FFFFFF',

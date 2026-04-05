@@ -33,6 +33,7 @@ export interface OverrideRecordResponse {
 export interface OverrideHistoryResponse {
   overrides: OverrideRecordResponse[];
   count: number;
+  nextCursor: string | null;
 }
 
 export const useOverrideAPI = async (
@@ -57,9 +58,11 @@ export const getOverrideBalanceAPI = async (): Promise<OverrideBalanceResponse> 
 
 export const getOverrideHistoryAPI = async (
   limit = 50,
-  offset = 0,
+  cursor?: string,
 ): Promise<OverrideHistoryResponse> => {
+  const params = new URLSearchParams({ limit: String(limit) });
+  if (cursor) params.set("cursor", cursor);
   return await axiosService.get<OverrideHistoryResponse>(
-    `${API.OverrideHistory}?limit=${limit}&offset=${offset}`,
+    `${API.OverrideHistory}?${params.toString()}`,
   );
 };

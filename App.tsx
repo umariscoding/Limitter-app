@@ -9,7 +9,7 @@ import { UserContextProvider, useUser } from "./src/context/UserContext";
 import { UsageContextProvider } from "./src/context/UsageContext";
 import { PolicyContextProvider } from "./src/context/PolicyContext";
 import { onAuthStateChanged, bootstrap } from "./src/auth/firebaseAuthService";
-import { startTimerRealtimeTracking } from "./src/services/timerRealtimeService";
+import { startTimerRealtimeTracking, stopTimerRealtimeTracking } from "./src/services/timerRealtimeService";
 
 const navigationRef = createNavigationContainerRef<any>();
 
@@ -30,7 +30,7 @@ function AppInner(): React.JSX.Element {
         const parsed = new URL(url);
         const packageName = parsed.searchParams.get("package") || "";
         const appName = parsed.searchParams.get("appName") || packageName;
-        if (parsed.hostname === "override" && packageName) {
+        if (parsed.hostname?.toLowerCase() === "override" && packageName) {
           return { packageName, appName };
         }
       } catch (_) { /* silenced */ }
@@ -90,6 +90,9 @@ function AppInner(): React.JSX.Element {
 
   React.useEffect(() => {
     startTimerRealtimeTracking();
+    return () => {
+      stopTimerRealtimeTracking();
+    };
   }, []);
 
   React.useEffect(() => {

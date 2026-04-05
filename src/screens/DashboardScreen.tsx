@@ -59,6 +59,7 @@ export default function DashboardScreen() {
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [planLimits, setPlanLimits] = useState<PlanLimits | null>(null);
   const justOverriddenPackageRef = React.useRef<string | null>(null);
+  const fetchInProgressRef = React.useRef(false);
 
   const matchesLimitPackage = React.useRef(
     (item: any, packageName?: string) => {
@@ -91,15 +92,22 @@ export default function DashboardScreen() {
       return;
     }
 
-    const overriddenPkg = justOverriddenPackageRef.current;
-    if (overriddenPkg) justOverriddenPackageRef.current = null;
+    if (fetchInProgressRef.current) return;
+    fetchInProgressRef.current = true;
 
-    await fetchPolicies(
-      overriddenPkg ? { overriddenPackage: overriddenPkg, matchesLimitPackage } : undefined,
-    );
+    try {
+      const overriddenPkg = justOverriddenPackageRef.current;
+      if (overriddenPkg) justOverriddenPackageRef.current = null;
 
-    getPlanLimits(true).then(data => setPlanLimits(data)).catch(() => {});
-    setRefreshing(false);
+      await fetchPolicies(
+        overriddenPkg ? { overriddenPackage: overriddenPkg, matchesLimitPackage } : undefined,
+      );
+
+      getPlanLimits(true).then(data => setPlanLimits(data)).catch(() => {});
+    } finally {
+      fetchInProgressRef.current = false;
+      setRefreshing(false);
+    }
   };
 
   const totalUsageText = React.useMemo(() => formatTotalUsageFromLimits(limits), [limits]);

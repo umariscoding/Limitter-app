@@ -9,8 +9,12 @@ export const resolveCurrentDeviceId = async (_userId?: string): Promise<string |
   try {
     const cachedId = await AsyncStorage.getItem(CURRENT_DEVICE_KEY);
 
-    const devicesData = await getDevicesAPI();
-    const devices = Array.isArray(devicesData) ? devicesData : [];
+    const devicesData: any = await getDevicesAPI();
+    const devices = Array.isArray(devicesData)
+      ? devicesData
+      : Array.isArray(devicesData?.devices)
+        ? devicesData.devices
+        : [];
 
     if (cachedId && devices.some((d: any) => d.deviceId === cachedId)) {
       return cachedId;
@@ -34,8 +38,12 @@ export const resolveCurrentDeviceId = async (_userId?: string): Promise<string |
       osVersion,
     );
 
-    const refreshedData = await getDevicesAPI();
-    const refreshedDevices = Array.isArray(refreshedData) ? refreshedData : [];
+    const refreshedData: any = await getDevicesAPI();
+    const refreshedDevices = Array.isArray(refreshedData)
+      ? refreshedData
+      : Array.isArray(refreshedData?.devices)
+        ? refreshedData.devices
+        : [];
 
     if (refreshedDevices.length === 0) return null;
 

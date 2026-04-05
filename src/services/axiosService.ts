@@ -36,7 +36,7 @@ class AxiosService {
       async (config) => {
         const user = auth.currentUser;
         if (user) {
-          const token = await user.getIdToken(false);
+          const token = await user.getIdToken(true);
           if (token) {
             config.headers["Authorization"] = `Bearer ${token}`;
           }

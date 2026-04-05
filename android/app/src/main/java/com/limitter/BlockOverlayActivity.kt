@@ -98,7 +98,8 @@ class BlockOverlayActivity : Activity() {
     }
 
     private fun useOverride() {
-        val pkg = intent.getStringExtra("package_name") ?: ""
+        val rawPkg = intent.getStringExtra("package_name") ?: ""
+        val pkg = rawPkg.removePrefix("website:")
         val name = intent.getStringExtra("app_name") ?: ""
         val deepLink = Uri.parse(
             "limitter://override?package=${Uri.encode(pkg)}&appName=${Uri.encode(name)}"

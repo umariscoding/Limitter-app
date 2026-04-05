@@ -120,6 +120,24 @@ export const startWebsiteTimer = async ({
   }
 };
 
+export const startBulkWebsiteTimers = async (
+  websites: Array<{ domain: string; durationSeconds: number }>,
+): Promise<boolean> => {
+  try {
+    if (!LimitterModule?.sendCommand || websites.length === 0) return false;
+
+    const websitesMaps = websites.map(w => ({
+      domain: w.domain,
+      duration: String(w.durationSeconds),
+    }));
+
+    await LimitterModule.sendCommand('START_WEBSITE_TIMERS', { websites: websitesMaps });
+    return true;
+  } catch {
+    return false;
+  }
+};
+
 export const getWebsiteBlockerStatus = async (): Promise<WebsiteBlockerStatus> => {
   try {
     if (!LimitterModule?.getWebsiteBlockerStatus) {

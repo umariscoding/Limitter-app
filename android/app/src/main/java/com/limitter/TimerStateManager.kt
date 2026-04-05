@@ -58,6 +58,43 @@ object TimerStateManager {
         }
     }
 
+    fun addWebsiteTimers(websitesJson: String) {
+        try {
+            val arr = JSONArray(websitesJson)
+            val today = todayDate()
+
+            for (i in 0 until arr.length()) {
+                val obj = arr.getJSONObject(i)
+                val domain = obj.getString("domain").trim().lowercase()
+                val duration = obj.optString("duration", "0").toIntOrNull() ?: 0
+
+                if (duration <= 0 || domain.isEmpty()) continue
+
+                val key = "website:$domain"
+                val existing = activeTimers[key]
+                if (existing != null && existing.startDate == today && existing.durationSeconds == duration) {
+                    Log.w(TAG, "KEEP website timer: $domain ${duration}s, used=${existing.usedSeconds}s [${existing.status}]")
+                } else {
+                    activeTimers[key] = TimerEntry(
+                        packageName = key,
+                        appName = domain,
+                        durationSeconds = duration
+                    )
+                    blockedPackages.remove(key)
+                    Log.w(TAG, "NEW website timer: $domain ${duration}s")
+                }
+            }
+
+            Log.w(TAG, "Total active timers (apps + websites): ${activeTimers.size}")
+        } catch (e: Exception) {
+            Log.e(TAG, "Failed to parse website timers JSON", e)
+        }
+    }
+
+    fun isWebsiteTimer(key: String): Boolean = key.startsWith("website:")
+
+    fun getWebsiteDomain(key: String): String = key.removePrefix("website:")
+
     fun markBlocked(pkg: String) {
         blockedPackages.add(pkg)
     }

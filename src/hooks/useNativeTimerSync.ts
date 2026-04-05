@@ -1,6 +1,7 @@
 import { useEffect } from 'react';
 import { subscribeTimerTicks, subscribeTimerBlocked } from '../services/timerRealtimeService';
 import { getPolicyPackageKey } from '../utils/policyMapper';
+import { setLastNativeUpdateAt } from './useLockStateSync';
 
 export function useNativeTimerSync(
   setState: React.Dispatch<React.SetStateAction<any[]>>,
@@ -9,6 +10,7 @@ export function useNativeTimerSync(
     const unsubTick = subscribeTimerTicks(event => {
       if (!event?.package) return;
       const eventPkg = String(event.package).trim().toLowerCase();
+      setLastNativeUpdateAt(Date.now());
 
       setState(prev =>
         prev.map(item => {
@@ -40,6 +42,7 @@ export function useNativeTimerSync(
     const unsubBlocked = subscribeTimerBlocked(event => {
       if (!event?.package) return;
       const eventPkg = String(event.package).trim().toLowerCase();
+      setLastNativeUpdateAt(Date.now());
 
       setState(prev =>
         prev.map(item =>

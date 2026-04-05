@@ -11,6 +11,7 @@ import type { UIPolicy } from '../utils/policyMapper';
 const TICK_INTERVAL_MS = 15_000;
 const FLUSH_INTERVAL_MS = 2 * 60 * 1000; // flush to Firestore every 2 minutes
 const STORAGE_KEY = 'limitter_unflushed_sessions';
+const SAVE_DEBOUNCE_MS = 5_000;
 
 const generateSessionId = () =>
   `sess_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
@@ -81,6 +82,7 @@ export function useUsageReporter(
   deviceIdRef.current = deviceId;
   setPoliciesRef.current = setPolicies;
 
+  const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const policyByPackage = useRef<Map<string, { policyId: string; maxMinutes: number }>>(new Map());
   useEffect(() => {
     const map = new Map<string, { policyId: string; maxMinutes: number }>();
@@ -210,11 +212,17 @@ export function useUsageReporter(
         });
       }
 
-      // Save to AsyncStorage on every tick for crash protection
-      saveSessionsToStorage(sessionsRef.current);
+      // Debounced save to AsyncStorage for crash protection
+      if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+      saveDebounceRef.current = setTimeout(() => {
+        saveSessionsToStorage(sessionsRef.current);
+      }, SAVE_DEBOUNCE_MS);
     });
 
-    return unsubTick;
+    return () => {
+      unsubTick();
+      if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    };
   }, []);
 
   // Tick interval (15s → Realtime DB)

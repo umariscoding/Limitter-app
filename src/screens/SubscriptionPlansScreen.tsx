@@ -76,8 +76,9 @@ export default function SubscriptionPlansScreen() {
 
     setIsProcessing(true);
     try {
-      await upgradePlanAPI(newPlan);
-      updateUser({ plan: newPlan, overrides_left: getPlanOverrideLimit(newPlan) });
+      const result = await upgradePlanAPI(newPlan);
+      const confirmedPlan = result?.planCode || newPlan;
+      updateUser({ plan: confirmedPlan, overrides_left: getPlanOverrideLimit(confirmedPlan) });
       Alert.alert('Plan Activated!', `You are now on the ${selectedPlan.name} plan.`, [{
         text: 'Go to Dashboard',
         onPress: () => navigation.navigate('DashboardScreen', { planUpdatedAt: Date.now() }),

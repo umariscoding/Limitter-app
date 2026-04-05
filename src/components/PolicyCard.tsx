@@ -10,10 +10,9 @@ interface PolicyCardProps {
 }
 
 export default function PolicyCard({ limit, onOverride }: PolicyCardProps) {
-  const pct = Math.min(
-    (limit.time_used_minutes / limit.max_time_minutes) * 100,
-    100,
-  );
+  const pct = limit.max_time_minutes > 0
+    ? Math.min((limit.time_used_minutes / limit.max_time_minutes) * 100, 100)
+    : 0;
   const isBlocked = limit.is_blocked;
   const isWarning = pct >= 75 && !isBlocked;
   const isActive = (limit.time_used_minutes || 0) > 0 && !isBlocked;

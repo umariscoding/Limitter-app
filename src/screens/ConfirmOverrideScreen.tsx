@@ -91,8 +91,12 @@ export default function ConfirmOverrideScreen() {
       }]);
     } catch (error: any) {
       const msg = error?.message || 'Failed to use override';
-      if (msg.includes('No free override credits')) {
-        navigation.navigate('SubscriptionPlansScreen', { fromBlockingOverride: true, packageName, appName: appNameFromRoute });
+      const status = error?.response?.status;
+      if (status === 402 || msg.toLowerCase().includes('no free override credits') || msg.toLowerCase().includes('no override credits')) {
+        Alert.alert('No Credits', 'You have no override credits remaining.', [
+          { text: 'Buy Credits', onPress: () => navigation.navigate('SubscriptionPlansScreen', { fromBlockingOverride: true, packageName, appName: appNameFromRoute }) },
+          { text: 'Cancel', style: 'cancel' },
+        ]);
       } else {
         Alert.alert('Error', msg);
       }

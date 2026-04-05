@@ -1,14 +1,29 @@
-import React from 'react';
+import React, { useCallback } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft } from 'lucide-react-native';
 import { useUsageContext } from '../context/UsageContext';
+import { getWeeklyUsageAPI } from '../services/usageService';
 import { WeeklyUsageGraph } from '../components/WeeklyUsageGraph';
 import BottomNav from '../components/BottomNav';
 
 export default function UsageScreen() {
   const navigation = useNavigation<any>();
-  const { weeklyUsage, isLoadingWeekly, weeklyError } = useUsageContext();
+  const { weeklyUsage, isLoadingWeekly, weeklyError, setWeeklyUsage, setIsLoadingWeekly, setWeeklyError } = useUsageContext();
+
+  const handleRefresh = useCallback(async () => {
+    setIsLoadingWeekly(true);
+    setWeeklyError(null);
+    try {
+      const data = await getWeeklyUsageAPI();
+      const days = Array.isArray(data) ? data : (data as any)?.days || [];
+      setWeeklyUsage(days.map((d: any) => ({ dateKey: d.dateKey, totalMinutes: d.totalMinutes || 0 })));
+    } catch (err: any) {
+      setWeeklyError(err?.message || 'Failed to load usage data');
+    } finally {
+      setIsLoadingWeekly(false);
+    }
+  }, [setWeeklyUsage, setIsLoadingWeekly, setWeeklyError]);
 
   return (
     <SafeAreaView style={styles.container}>
@@ -27,7 +42,7 @@ export default function UsageScreen() {
           data={weeklyUsage}
           isLoading={isLoadingWeekly}
           error={weeklyError}
-          onRefresh={() => {}}
+          onRefresh={handleRefresh}
         />
       </View>
       <BottomNav active="analytics" />

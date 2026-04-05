@@ -1,3 +1,4 @@
 <resources>
   <string name="app_name">Limitter</string>
+  <string name="accessibility_service_description">Limitter monitors which websites you visit in your browser to enforce your daily time limits.</string>
 </resources>

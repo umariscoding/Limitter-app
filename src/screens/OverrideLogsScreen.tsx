@@ -25,7 +25,7 @@ export default function OverrideLogsScreen() {
 
   const fetchLogs = async () => {
     try {
-      const data = await getOverrideHistoryAPI(50, 0);
+      const data = await getOverrideHistoryAPI(50);
       setLogs(data.overrides || []);
     } catch { setLogs([]); }
     finally { setLoading(false); setRefreshing(false); }

@@ -107,6 +107,28 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
                     ContextCompat.startForegroundService(reactContext, intent)
                     promise.resolve("OK")
                 }
+                "START_WEBSITE_TIMERS" -> {
+                    val websitesArray = params.getArray("websites") ?: run {
+                        promise.resolve("OK")
+                        return
+                    }
+
+                    val jsonArray = JSONArray()
+                    for (i in 0 until websitesArray.size()) {
+                        val site = websitesArray.getMap(i) ?: continue
+                        val obj = JSONObject()
+                        obj.put("domain", site.getString("domain") ?: "")
+                        obj.put("duration", site.getString("duration") ?: "0")
+                        jsonArray.put(obj)
+                    }
+
+                    val intent = Intent(reactContext, LimitterForegroundService::class.java).apply {
+                        action = LimitterForegroundService.ACTION_START_WEBSITE_TIMERS
+                        putExtra(LimitterForegroundService.EXTRA_WEBSITES_JSON, jsonArray.toString())
+                    }
+                    ContextCompat.startForegroundService(reactContext, intent)
+                    promise.resolve("OK")
+                }
                 "BLOCK_APP" -> {
                     val pkg = params.getString("package") ?: ""
                     if (pkg.isNotEmpty()) {
@@ -173,8 +195,58 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun openAccessibilitySettings(promise: Promise) {
+        openSystemSettings(Settings.ACTION_ACCESSIBILITY_SETTINGS, null, promise)
+    }
+
+    @ReactMethod
     fun startWebsiteTimer(params: ReadableMap, promise: Promise) {
-        promise.resolve("OK")
+        try {
+            if (!PermissionChecker.hasOverlay(reactContext)) {
+                promise.resolve("PERMISSION_OVERLAY_REQUIRED")
+                return
+            }
+            if (!PermissionChecker.hasAccessibility(reactContext)) {
+                promise.resolve("PERMISSION_ACCESSIBILITY_REQUIRED")
+                return
+            }
+
+            val websiteUrl = params.getString("websiteUrl") ?: ""
+            val domain = WebsiteDomainMatcher.extractDomain(websiteUrl)
+            if (domain.isNullOrEmpty()) {
+                promise.resolve("INVALID_URL")
+                return
+            }
+
+            val durationSeconds: Int
+            if (params.hasKey("blockAtTimestampMs")) {
+                val targetMs = params.getDouble("blockAtTimestampMs").toLong()
+                val nowMs = System.currentTimeMillis()
+                durationSeconds = if (targetMs > nowMs) ((targetMs - nowMs) / 1000).toInt() else 0
+            } else {
+                durationSeconds = params.getInt("durationSeconds")
+            }
+
+            if (durationSeconds <= 0) {
+                promise.resolve("INVALID_DURATION")
+                return
+            }
+
+            val jsonArray = JSONArray()
+            val obj = JSONObject()
+            obj.put("domain", domain)
+            obj.put("duration", durationSeconds.toString())
+            jsonArray.put(obj)
+
+            val intent = Intent(reactContext, LimitterForegroundService::class.java).apply {
+                action = LimitterForegroundService.ACTION_START_WEBSITE_TIMERS
+                putExtra(LimitterForegroundService.EXTRA_WEBSITES_JSON, jsonArray.toString())
+            }
+            ContextCompat.startForegroundService(reactContext, intent)
+            promise.resolve("OK")
+        } catch (e: Exception) {
+            promise.reject("WEBSITE_TIMER_ERROR", e.message, e)
+        }
     }
 
     @ReactMethod
