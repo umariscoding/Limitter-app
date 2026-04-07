@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useMemo } from 'react';
 import {
   View,
   Text,
@@ -6,95 +6,53 @@ import {
   SafeAreaView,
   TouchableOpacity,
   ScrollView,
-  ActivityIndicator,
   RefreshControl,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft } from 'lucide-react-native';
-import { useUser } from '../context/UserContext';
-import { useDeviceResolver } from '../hooks/useDeviceResolver';
-import { getPoliciesAPI } from '../services/policyService';
+import { usePolicyContext } from '../context/PolicyContext';
+import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
 import BottomNav from '../components/BottomNav';
-
-type LimitItem = {
-  id: string;
-  app_name?: string;
-  category?: string;
-  time_used_minutes?: number;
-  max_time_minutes?: number;
-  is_blocked?: boolean;
-};
 
 const BAR_COLORS = ['#4F46E5', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#14B8A6'];
 
 export default function DailyLimitsGraphScreen() {
   const navigation = useNavigation<any>();
-  const { user } = useUser();
-  const { deviceId } = useDeviceResolver(user?.uid);
-
-  const [loading, setLoading] = useState(true);
-  const [refreshing, setRefreshing] = useState(false);
-  const [limits, setLimits] = useState<LimitItem[]>([]);
-
-  const fetchData = async () => {
-    if (!user?.uid || !deviceId) {
-      setLoading(false);
-      setRefreshing(false);
-      return;
-    }
-
-    try {
-      const policiesResult = await getPoliciesAPI();
-      const policiesData = Array.isArray(policiesResult) ? policiesResult : [];
-      const list = policiesData.map((item: any) => {
-        const p = item.policy || item;
-        const state = item.policyState || p.policyState || {};
-        return {
-          id: p.policyId,
-          app_name: p.targetLabel || p.targetKey,
-          category: p.type === 'category' ? p.targetLabel : undefined,
-          max_time_minutes: p.dailyLimitMinutes,
-          time_used_minutes: state.usageTodayMinutes || 0,
-          is_blocked: state.isExhaustedToday || false,
-        };
-      });
-      setLimits(list);
-    } catch {
-      setLimits([]);
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  useEffect(() => {
-    if (deviceId) {
-      fetchData();
-    }
-  }, [user?.uid, deviceId]);
+  const { policies, isLoading } = usePolicyContext();
+  const { fetchPolicies } = usePolicyFetcher();
 
   const chartRows = useMemo(() => {
-    const filtered = limits.filter(item => Number(item.max_time_minutes || 0) > 0);
-    return filtered.map((item, index) => {
-      const used = Number(item.time_used_minutes || 0);
-      const max = Number(item.max_time_minutes || 0);
+    const filtered = policies.filter(p => Number(p.max_time_minutes || 0) > 0);
+    return filtered.map((p, index) => {
+      const used = Number(p.time_used_minutes || 0);
+      const max = Number(p.max_time_minutes || 0);
       const pct = Math.max(0, Math.min(100, Math.round((used / max) * 100)));
-      const name = item.app_name || item.category || 'Unknown';
+      const name = p.target_label || p.app_name || 'Unknown';
 
       return {
-        id: item.id,
+        id: p.id,
         name,
         used,
         max,
         pct,
-        blocked: Boolean(item.is_blocked),
+        blocked: p.is_blocked,
         color: BAR_COLORS[index % BAR_COLORS.length],
       };
     });
-  }, [limits]);
+  }, [policies]);
 
   const totalUsed = chartRows.reduce((sum, row) => sum + row.used, 0);
   const totalMax = chartRows.reduce((sum, row) => sum + row.max, 0);
+
+  const fmtMins = (m: number): string => {
+    const safe = Math.max(0, Math.round(m));
+    if (safe >= 60) {
+      const h = Math.floor(safe / 60);
+      const rm = safe % 60;
+      return rm > 0 ? `${h}h ${rm}m` : `${h}h`;
+    }
+    return `${safe}m`;
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -110,17 +68,13 @@ export default function DailyLimitsGraphScreen() {
         contentContainerStyle={styles.content}
         refreshControl={
           <RefreshControl
-            refreshing={refreshing}
-            onRefresh={() => {
-              setRefreshing(true);
-              fetchData();
-            }}
+            refreshing={isLoading}
+            onRefresh={() => fetchPolicies()}
           />
         }
       >
-        {loading ? (
+        {isLoading && chartRows.length === 0 ? (
           <View style={styles.centerWrap}>
-            <ActivityIndicator size="large" color="#4F46E5" />
             <Text style={styles.loadingText}>Loading graph data...</Text>
           </View>
         ) : chartRows.length === 0 ? (
@@ -132,14 +86,14 @@ export default function DailyLimitsGraphScreen() {
           <>
             <View style={styles.summaryCard}>
               <Text style={styles.summaryTitle}>Today Summary</Text>
-              <Text style={styles.summaryText}>{totalUsed} / {totalMax} min used</Text>
+              <Text style={styles.summaryText}>{fmtMins(totalUsed)} / {fmtMins(totalMax)} used</Text>
             </View>
 
             {chartRows.map(row => (
               <View key={row.id} style={styles.rowCard}>
                 <View style={styles.rowHeader}>
                   <Text style={styles.rowName}>{row.name}</Text>
-                  <Text style={styles.rowValue}>{row.used}/{row.max} min</Text>
+                  <Text style={styles.rowValue}>{fmtMins(row.used)} / {fmtMins(row.max)}</Text>
                 </View>
                 <View style={styles.progressBg}>
                   <View style={[styles.progressFill, { width: `${row.pct}%`, backgroundColor: row.color }]} />

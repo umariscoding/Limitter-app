@@ -38,12 +38,11 @@ export function useLockStateSync(accountId: string | undefined) {
           const key = getPolicyPackageKey(item);
           const isLockedRemotely = lockedTargets.has(key);
 
+          // Only LOCK from remote state — never unlock.
+          // Unlocking is handled by fetchPolicies (fresh API data)
+          // and useNativeTimerSync (native timer events).
           if (isLockedRemotely && !item.is_blocked) {
             return { ...item, is_blocked: true, status: 'blocked' as const };
-          }
-
-          if (!isLockedRemotely && item.is_blocked && item.time_used_minutes < item.max_time_minutes) {
-            return { ...item, is_blocked: false, status: 'active' as const };
           }
 
           return item;

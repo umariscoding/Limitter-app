@@ -16,20 +16,28 @@ export function useNativeTimerSync(
         prev.map(item => {
           if (getPolicyPackageKey(item) !== eventPkg) return item;
 
+          const maxSeconds = Number(item.max_time_minutes || 0) * 60;
           const budgetSeconds =
-            item._nativeBudgetSeconds || Number(item.max_time_minutes || 0) * 60;
+            item._nativeBudgetSeconds || maxSeconds;
           const remaining = Math.max(0, Number(event.remaining || 0));
-          const consumedSeconds = Math.max(0, budgetSeconds - remaining);
+          const consumedSeconds = Math.min(
+            Math.max(0, budgetSeconds - remaining),
+            maxSeconds,
+          );
           const eventBlocked =
             typeof event.isBlocked === 'boolean'
               ? event.isBlocked
               : String(event.status || '').toLowerCase() === 'blocked';
 
+          // Timer ticks can only UPGRADE to blocked, never downgrade.
+          // Unblocking is handled by fetchPolicies (fresh API data / overrides).
+          const isBlocked = eventBlocked ? true : item.is_blocked;
+
           return {
             ...item,
             time_used_minutes: consumedSeconds / 60,
-            is_blocked: eventBlocked,
-            status: eventBlocked
+            is_blocked: isBlocked,
+            status: isBlocked
               ? 'blocked'
               : consumedSeconds > 0
                 ? 'active'

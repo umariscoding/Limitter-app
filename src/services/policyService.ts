@@ -1,5 +1,8 @@
+import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API } from "../config/config";
 import axiosService from "./axiosService";
+
+const POLICY_CACHE_KEY = '@limitter_cached_policies';
 
 export const createPolicyAPI = async (data: {
   type: "website" | "app" | "category";
@@ -16,7 +19,19 @@ export const createPolicyAPI = async (data: {
 };
 
 export const getPoliciesAPI = async () => {
-  return await axiosService.get(API.Policies);
+  try {
+    const result = await axiosService.get(API.Policies);
+    // Cache successful response for offline fallback (fire-and-forget)
+    AsyncStorage.setItem(POLICY_CACHE_KEY, JSON.stringify(result)).catch(() => {});
+    return result;
+  } catch (error) {
+    // Serve cached data if available
+    try {
+      const cached = await AsyncStorage.getItem(POLICY_CACHE_KEY);
+      if (cached) return JSON.parse(cached);
+    } catch { /* cache read failed */ }
+    throw error;
+  }
 };
 
 export const getPolicyAPI = async (policyId: string) => {

@@ -1,16 +1,15 @@
-import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, Platform, ScrollView, RefreshControl } from 'react-native';
+import React, { useState, useEffect, useMemo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, ScrollView, RefreshControl } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft, BarChart2 } from 'lucide-react-native';
 import { useUser } from '../context/UserContext';
 import { useUsageContext } from '../context/UsageContext';
+import { usePolicyContext } from '../context/PolicyContext';
 import { WeeklyUsageGraph } from '../components/WeeklyUsageGraph';
-import { getPoliciesAPI } from '../services/policyService';
 import { getWeeklyUsageAPI } from '../services/usageService';
 import { useDeviceResolver } from '../hooks/useDeviceResolver';
-import { getNativeBlockedPackages } from '../services/appBlockerService';
-import { getPolicyPackageKey, formatLimitTime } from '../utils/policyMapper';
+import { formatLimitTime } from '../utils/policyMapper';
 import BottomNav from '../components/BottomNav';
 
 interface BreakdownItem {
@@ -21,29 +20,57 @@ interface BreakdownItem {
   isBlocked: boolean;
 }
 
-const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
-
 export default function AnalyticsScreen() {
   const navigation = useNavigation<any>();
   const { user } = useUser();
   const { weeklyUsage, isLoadingWeekly, weeklyError, setWeeklyUsage, setIsLoadingWeekly, setWeeklyError } = useUsageContext();
+  const { policies } = usePolicyContext();
   const { deviceId } = useDeviceResolver(user?.uid);
-  const [breakdown, setBreakdown] = useState<BreakdownItem[]>([]);
   const [refreshing, setRefreshing] = useState(false);
+  const [todayIndex, setTodayIndex] = useState(-1);
+
+  const breakdown = useMemo<BreakdownItem[]>(() => {
+    return policies
+      .filter(p => p.target_label)
+      .slice(0, 8)
+      .map(p => ({
+        id: p.id,
+        name: p.target_label,
+        usedMinutes: p.time_used_minutes || 0,
+        limitMinutes: p.max_time_minutes || 0,
+        isBlocked: p.is_blocked,
+      }));
+  }, [policies]);
 
   const fetchWeekly = async () => {
     setIsLoadingWeekly(true);
     setWeeklyError(null);
     try {
       const days = await getWeeklyUsageAPI(user?.accountId);
-      const points = days.map(day => {
-        const date = new Date(day.dateKey + 'T00:00:00');
-        return {
-          dateKey: day.dateKey,
-          label: DAY_NAMES[date.getDay()],
-          totalMinutes: Math.round(day.totalMinutes || 0),
-        };
-      });
+
+      // Map API data by day-of-week: Mon=0 … Sun=6
+      const WEEK_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
+      const slots: Array<{ dateKey: string; totalMinutes: number } | null> = new Array(7).fill(null);
+
+      for (const d of days) {
+        const date = new Date(d.dateKey + 'T12:00:00');
+        const jsDay = date.getDay(); // 0=Sun … 6=Sat
+        const monIdx = jsDay === 0 ? 6 : jsDay - 1; // Mon=0 … Sun=6
+        if (!slots[monIdx] || d.dateKey > slots[monIdx]!.dateKey) {
+          slots[monIdx] = d;
+        }
+      }
+
+      // Build 7 points: Mon → Sun
+      const points: typeof weeklyUsage = WEEK_LABELS.map((label, idx) => ({
+        dateKey: slots[idx]?.dateKey || `day-${idx}`,
+        label,
+        totalMinutes: slots[idx]?.totalMinutes ?? 0,
+      }));
+
+      // Find today's index (Mon=0 … Sun=6)
+      const jsToday = new Date().getDay(); // 0=Sun … 6=Sat
+      setTodayIndex(jsToday === 0 ? 6 : jsToday - 1);
       setWeeklyUsage(points);
     } catch {
       setWeeklyError('Failed to load weekly usage');
@@ -52,46 +79,27 @@ export default function AnalyticsScreen() {
     }
   };
 
-  const fetchBreakdown = async () => {
-    if (!user?.uid || !deviceId) { setBreakdown([]); return; }
-    try {
-      const policiesResult = await getPoliciesAPI();
-      const policiesData = Array.isArray(policiesResult) ? policiesResult : [];
-      const nativeBlocked = await getNativeBlockedPackages();
-
-      const items: BreakdownItem[] = policiesData
-        .map((item: any, idx: number) => {
-          const p = item.policy || item;
-          const state = item.policyState || {};
-          const targetKey = p.targetKey || '';
-          const packageKey = getPolicyPackageKey({ app_name: targetKey, package_name: targetKey });
-          const usedMinutes = state.usageTodayMinutes || 0;
-          const limitMinutes = p.dailyLimitMinutes || 0;
-          const isBlocked = state.isExhaustedToday || (limitMinutes > 0 && usedMinutes >= limitMinutes) || nativeBlocked.has(packageKey);
-
-          return {
-            id: p.policyId || `item-${idx}`,
-            name: p.targetLabel || targetKey,
-            usedMinutes,
-            limitMinutes,
-            isBlocked,
-          };
-        })
-        .filter((i: BreakdownItem) => i.name)
-        .slice(0, 8);
-
-      setBreakdown(items);
-    } catch { setBreakdown([]); }
-  };
-
   useEffect(() => {
     fetchWeekly();
-    fetchBreakdown();
   }, [deviceId]);
+
+  // Override today's bar with real-time total from policies (same source as dashboard)
+  const graphData = useMemo(() => {
+    if (todayIndex < 0 || weeklyUsage.length === 0) return weeklyUsage;
+    const liveTotalMinutes = policies.reduce(
+      (sum, p) => sum + Math.max(0, Number(p.time_used_minutes ?? 0)),
+      0,
+    );
+    return weeklyUsage.map((point, idx) => {
+      if (idx !== todayIndex) return point;
+      const best = Math.max(point.totalMinutes, liveTotalMinutes);
+      return { ...point, totalMinutes: best };
+    });
+  }, [weeklyUsage, todayIndex, policies]);
 
   const onRefresh = async () => {
     setRefreshing(true);
-    await Promise.all([fetchWeekly(), fetchBreakdown()]);
+    await fetchWeekly();
     setRefreshing(false);
   };
 
@@ -113,7 +121,8 @@ export default function AnalyticsScreen() {
       >
         <WeeklyUsageGraph
           title="7-Day Usage"
-          data={weeklyUsage}
+          data={graphData}
+          todayIndex={todayIndex}
           isLoading={isLoadingWeekly}
           error={weeklyError}
           onRefresh={onRefresh}

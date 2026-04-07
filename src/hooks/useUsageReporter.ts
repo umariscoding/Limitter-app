@@ -6,11 +6,13 @@ import { tickUsageAPI, recordUsageAPI } from '../services/usageService';
 import { startAppBlockerService, updateBlockedApps } from '../services/appBlockerService';
 import { usePolicyContext } from '../context/PolicyContext';
 import { getPolicyPackageKey } from '../utils/policyMapper';
+import { onReconnect } from '../services/networkService';
 import type { UIPolicy } from '../utils/policyMapper';
 
 const TICK_INTERVAL_MS = 15_000;
 const FLUSH_INTERVAL_MS = 2 * 60 * 1000; // flush to Firestore every 2 minutes
 const STORAGE_KEY = 'limitter_unflushed_sessions';
+const QUEUE_STORAGE_KEY = '@limitter_usage_queue';
 const SAVE_DEBOUNCE_MS = 5_000;
 
 const generateSessionId = () =>
@@ -63,6 +65,61 @@ async function recoverAndFlushStaleSessions(deviceId: string) {
       } catch { /* best effort */ }
     }
   } catch { /* corrupted data, ignore */ }
+}
+
+// ─── Persistent usage queue (survives app close + offline) ───
+
+interface QueueEntry {
+  policyId: string;
+  deviceId: string;
+  deltaSeconds: number;
+  timestamp: number;
+}
+
+let usageQueue: QueueEntry[] = [];
+let queueSaveTimer: ReturnType<typeof setTimeout> | null = null;
+
+function enqueueUsage(entry: QueueEntry) {
+  usageQueue.push(entry);
+  // Debounced save to AsyncStorage
+  if (queueSaveTimer) clearTimeout(queueSaveTimer);
+  queueSaveTimer = setTimeout(() => {
+    AsyncStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(usageQueue)).catch(() => {});
+  }, SAVE_DEBOUNCE_MS);
+}
+
+async function replayUsageQueue() {
+  // Load persisted queue entries (from previous app session)
+  try {
+    const raw = await AsyncStorage.getItem(QUEUE_STORAGE_KEY);
+    if (raw) {
+      const persisted: QueueEntry[] = JSON.parse(raw);
+      // Merge persisted with in-memory (avoid duplicates by timestamp)
+      const existingTs = new Set(usageQueue.map(e => e.timestamp));
+      for (const entry of persisted) {
+        if (!existingTs.has(entry.timestamp)) usageQueue.push(entry);
+      }
+    }
+  } catch { /* corrupted data */ }
+
+  if (usageQueue.length === 0) return;
+
+  const remaining: QueueEntry[] = [];
+  for (const entry of usageQueue) {
+    if (entry.deltaSeconds <= 0) continue;
+    try {
+      await recordUsageAPI(entry.policyId, entry.deviceId, entry.deltaSeconds);
+    } catch {
+      remaining.push(entry); // Keep for next retry
+    }
+  }
+
+  usageQueue = remaining;
+  if (remaining.length === 0) {
+    AsyncStorage.removeItem(QUEUE_STORAGE_KEY).catch(() => {});
+  } else {
+    AsyncStorage.setItem(QUEUE_STORAGE_KEY, JSON.stringify(remaining)).catch(() => {});
+  }
 }
 
 // ─── Hook ───
@@ -140,7 +197,15 @@ export function useUsageReporter(
           startAppBlockerService([{ package_name: pkg, app_name: session.targetKey }]);
           updateBlockedApps([{ package_name: pkg, app_name: session.targetKey }]);
         }
-      } catch { /* retry next interval */ }
+      } catch {
+        // Queue failed delta for replay on reconnect
+        enqueueUsage({
+          policyId: session.policyId,
+          deviceId: currentDeviceId,
+          deltaSeconds: delta,
+          timestamp: Date.now(),
+        });
+      }
     }
 
     tickingRef.current = false;
@@ -171,7 +236,15 @@ export function useUsageReporter(
         session.unsentDelta = 0;
         session.sessionId = generateSessionId();
         session.startedAt = Date.now();
-      } catch { /* retry next time */ }
+      } catch {
+        // Queue failed flush for replay on reconnect
+        enqueueUsage({
+          policyId: session.policyId,
+          deviceId: currentDeviceId,
+          deltaSeconds: seconds,
+          timestamp: Date.now(),
+        });
+      }
     }
 
     await AsyncStorage.removeItem(STORAGE_KEY);
@@ -251,5 +324,13 @@ export function useUsageReporter(
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
     return () => subscription.remove();
+  }, []);
+
+  // Replay queued usage on reconnect
+  useEffect(() => {
+    const unsub = onReconnect(() => {
+      replayUsageQueue();
+    });
+    return unsub;
   }, []);
 }

@@ -1,127 +1,154 @@
-import React, { memo, useEffect, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, ScrollView, TouchableOpacity } from 'react-native';
+import React, { memo, useMemo } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import type { WeeklyUsagePoint } from '../context/UsageContext';
 
 interface WeeklyUsageGraphProps {
   title?: string;
   data: WeeklyUsagePoint[];
+  todayIndex?: number;
   isLoading?: boolean;
   error?: string | null;
   onRefresh?: () => void;
 }
 
-interface GraphPoint {
-  key: string;
-  label: string;
-  fullLabel: string;
-  date: string;
-  minutes: number;
-}
+/**
+ * Smart time formatter for bar labels.
+ * Handles all ranges: seconds → minutes → hours.
+ *
+ *   0          → "–"
+ *   0.08  (5s) → "5s"
+ *   0.5  (30s) → "30s"
+ *   1          → "1m"
+ *   3.5        → "3m 30s"
+ *   45         → "45m"
+ *   60         → "1h"
+ *   90         → "1h 30m"
+ *   150        → "2h 30m"
+ *   600        → "10h"
+ */
+const formatBarLabel = (mins: number): string => {
+  if (!mins || mins <= 0) return '–';
 
-const DEFAULT_POINTS: GraphPoint[] = [
-  { key: 'mon', label: 'Mon', fullLabel: 'Monday', date: '', minutes: 0 },
-  { key: 'tue', label: 'Tue', fullLabel: 'Tuesday', date: '', minutes: 0 },
-  { key: 'wed', label: 'Wed', fullLabel: 'Wednesday', date: '', minutes: 0 },
-  { key: 'thu', label: 'Thu', fullLabel: 'Thursday', date: '', minutes: 0 },
-  { key: 'fri', label: 'Fri', fullLabel: 'Friday', date: '', minutes: 0 },
-  { key: 'sat', label: 'Sat', fullLabel: 'Saturday', date: '', minutes: 0 },
-  { key: 'sun', label: 'Sun', fullLabel: 'Sunday', date: '', minutes: 0 },
-];
+  const totalSeconds = Math.round(mins * 60);
 
-const formatMinutes = (mins: number) => {
-  const safe = Math.max(0, Number(mins || 0));
-  const h = Math.floor(safe / 60);
-  const m = safe % 60;
+  // Less than 1 minute → show seconds
+  if (totalSeconds < 60) return `${totalSeconds}s`;
+
+  const h = Math.floor(totalSeconds / 3600);
+  const m = Math.floor((totalSeconds % 3600) / 60);
+
+  if (h === 0) return `${m}m`;
+  if (m === 0) return `${h}h`;
   return `${h}h ${m}m`;
 };
+
+/**
+ * Compact label for the Y-axis scale hint.
+ */
+const formatScaleLabel = (mins: number): string => {
+  if (mins < 1) return `${Math.round(mins * 60)}s`;
+  if (mins < 60) return `${Math.round(mins)}m`;
+  const h = Math.floor(mins / 60);
+  const m = Math.round(mins % 60);
+  return m > 0 ? `${h}h ${m}m` : `${h}h`;
+};
+
+const BAR_MAX_HEIGHT = 130;
+const BAR_MIN_VISIBLE = 6; // minimum height for non-zero bars so they're always tappable/visible
 
 function WeeklyUsageGraphImpl({
   title = '7-Day Usage',
   data,
+  todayIndex = -1,
   isLoading = false,
   error,
   onRefresh,
 }: WeeklyUsageGraphProps) {
-  const normalizedData = useMemo(() => {
+  const bars = useMemo(() => {
     const source = Array.isArray(data) ? data : [];
-    return DEFAULT_POINTS.map((fallback, idx) => {
-      const item = source[idx];
-      if (!item) return fallback;
+    return source.map((item, idx) => ({
+      key: item.dateKey || `day-${idx}`,
+      label: item.label || '',
+      minutes: Math.max(0, Number(item.totalMinutes ?? 0)),
+      isToday: idx === todayIndex,
+    }));
+  }, [data, todayIndex]);
 
-      const minutes = Number(item.totalMinutes ?? 0);
-      return {
-        key: String(item.dateKey || fallback.key),
-        label: String(item.label || fallback.label),
-        fullLabel: String(item.label || fallback.fullLabel),
-        date: String(item.dateKey || fallback.date),
-        minutes: Number.isFinite(minutes) ? Math.max(0, minutes) : 0,
-      };
-    });
-  }, [data]);
-
-  const [selectedKey, setSelectedKey] = useState<string>(normalizedData[normalizedData.length - 1]?.key || '');
-
-  useEffect(() => {
-    const latestKey = normalizedData[normalizedData.length - 1]?.key || '';
-    setSelectedKey(latestKey);
-  }, [normalizedData]);
-
-  const maxMinutes = Math.max(...normalizedData.map(item => item.minutes), 0);
+  const maxMinutes = Math.max(...bars.map(b => b.minutes), 0);
+  // Use a sane scale so bars aren't invisible for small values
   const scaleMax = maxMinutes > 0 ? maxMinutes : 1;
 
   if (isLoading) {
     return (
-      <View style={styles.card}>
-        <Text style={styles.title}>{title}</Text>
-        <Text style={styles.loadingText}>Loading graph...</Text>
+      <View style={s.card}>
+        <Text style={s.title}>{title}</Text>
+        <Text style={s.loadingText}>Loading graph...</Text>
       </View>
     );
   }
 
   return (
-    <View style={styles.card}>
-      <View style={styles.headerRow}>
-        <Text style={styles.title}>{title}</Text>
+    <View style={s.card}>
+      <View style={s.headerRow}>
+        <Text style={s.title}>{title}</Text>
         {!!onRefresh && (
-          <TouchableOpacity onPress={onRefresh} style={styles.refreshBtn}>
-            <Text style={styles.refreshText}>Refresh</Text>
+          <TouchableOpacity onPress={onRefresh} style={s.refreshBtn}>
+            <Text style={s.refreshText}>Refresh</Text>
           </TouchableOpacity>
         )}
       </View>
 
-      {!!error && <Text style={styles.errorText}>{error}</Text>}
+      {!!error && <Text style={s.errorText}>{error}</Text>}
 
-      <View style={styles.fixedHeightWrap}>
-        <ScrollView horizontal showsHorizontalScrollIndicator={false} style={styles.graphScroll}>
-          <View style={styles.graphRow}>
-            {normalizedData.map(point => {
-              const isSelected = point.key === selectedKey;
-              const rawHeight = (point.minutes / scaleMax) * 130;
-              const barHeight = maxMinutes === 0 ? 3 : Math.max(3, rawHeight);
+      {/* Scale hint — shows max value so user knows what "full height" means */}
+      {maxMinutes > 0 && (
+        <Text style={s.scaleHint}>max: {formatScaleLabel(maxMinutes)}</Text>
+      )}
 
-              return (
-                <TouchableOpacity
-                  key={point.key}
-                  activeOpacity={0.8}
-                  onPress={() => setSelectedKey(point.key)}
-                  style={styles.barTouch}
-                >
-                  <Text style={[styles.barMinute, isSelected && styles.barMinuteSelected]}>{point.minutes}m</Text>
-                  <View style={[styles.barTrack, isSelected && styles.barTrackSelected]}>
-                    <View style={[styles.barFill, { height: barHeight }, isSelected && styles.barFillSelected]} />
-                  </View>
-                  <Text style={[styles.barLabel, isSelected && styles.barLabelSelected]}>{point.label}</Text>
-                </TouchableOpacity>
-              );
-            })}
-          </View>
-        </ScrollView>
+      <View style={s.graphContainer}>
+        {bars.map(bar => {
+          const ratio = bar.minutes / scaleMax;
+          const rawHeight = ratio * BAR_MAX_HEIGHT;
+          const barHeight = bar.minutes > 0 ? Math.max(BAR_MIN_VISIBLE, rawHeight) : 3;
+
+          return (
+            <View key={bar.key} style={s.barColumn}>
+              {/* Usage time above the bar */}
+              <Text
+                style={[s.barValue, bar.isToday && s.barValueToday]}
+                numberOfLines={1}
+              >
+                {formatBarLabel(bar.minutes)}
+              </Text>
+
+              {/* Bar track + fill */}
+              <View style={[s.barTrack, bar.isToday && s.barTrackToday]}>
+                <View
+                  style={[
+                    s.barFill,
+                    { height: barHeight },
+                    bar.isToday
+                      ? s.barFillToday
+                      : bar.minutes > 0
+                        ? s.barFillNormal
+                        : s.barFillEmpty,
+                  ]}
+                />
+              </View>
+
+              {/* Day label */}
+              <Text style={[s.dayLabel, bar.isToday && s.dayLabelToday]}>
+                {bar.label}
+              </Text>
+            </View>
+          );
+        })}
       </View>
     </View>
   );
 }
 
-const styles = StyleSheet.create({
+const s = StyleSheet.create({
   card: {
     backgroundColor: '#FFFFFF',
     borderRadius: 18,
@@ -133,7 +160,7 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
-    marginBottom: 8,
+    marginBottom: 4,
   },
   title: {
     fontSize: 18,
@@ -162,61 +189,68 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     marginBottom: 10,
   },
-  fixedHeightWrap: {
-    height: 210,
+  scaleHint: {
+    fontSize: 10,
+    fontWeight: '600',
+    color: '#CBD5E1',
+    textAlign: 'right',
+    marginBottom: 6,
   },
-  graphScroll: {
-    backgroundColor: '#FFFFFF',
-  },
-  graphRow: {
+  graphContainer: {
     flexDirection: 'row',
     alignItems: 'flex-end',
-    minHeight: 160,
-    paddingTop: 8,
-    paddingBottom: 8,
+    justifyContent: 'space-between',
+    paddingTop: 4,
+    paddingBottom: 4,
   },
-  barTouch: {
-    width: 36,
+  barColumn: {
+    flex: 1,
     alignItems: 'center',
-    marginRight: 14,
   },
-  barMinute: {
-    fontSize: 10,
-    color: '#64748B',
+  barValue: {
+    fontSize: 9,
     fontWeight: '600',
+    color: '#94A3B8',
     marginBottom: 4,
   },
-  barMinuteSelected: {
-    color: '#3730A3',
+  barValueToday: {
+    color: '#4338CA',
     fontWeight: '800',
+    fontSize: 10,
   },
   barTrack: {
-    width: 30,
-    height: 130,
+    width: 28,
+    height: BAR_MAX_HEIGHT,
     borderRadius: 8,
     backgroundColor: '#F1F5F9',
     justifyContent: 'flex-end',
+    overflow: 'hidden',
   },
-  barTrackSelected: {
-    borderWidth: 1,
+  barTrackToday: {
+    borderWidth: 1.5,
     borderColor: '#6366F1',
   },
   barFill: {
     width: '100%',
-    backgroundColor: '#C7D2FE',
     borderRadius: 8,
   },
-  barFillSelected: {
+  barFillNormal: {
+    backgroundColor: '#C7D2FE',
+  },
+  barFillToday: {
     backgroundColor: '#6366F1',
   },
-  barLabel: {
-    marginTop: 8,
-    color: '#64748B',
+  barFillEmpty: {
+    backgroundColor: '#E2E8F0',
+  },
+  dayLabel: {
+    marginTop: 6,
     fontSize: 11,
     fontWeight: '600',
+    color: '#94A3B8',
   },
-  barLabelSelected: {
-    color: '#3730A3',
+  dayLabelToday: {
+    color: '#4338CA',
     fontWeight: '800',
   },
 });

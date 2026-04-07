@@ -22,7 +22,7 @@ export function mapPolicyToUI(item: any): UIPolicy {
   const state = item.policyState || {};
 
   const usedMinutes = Number(state.usageTodayMinutes) || 0;
-  const isExhausted = state.isExhaustedToday === true && usedMinutes > 0;
+  const isExhausted = !!state.isExhaustedToday && usedMinutes > 0;
 
   let status: 'active' | 'inactive' | 'blocked' = 'inactive';
   if (isExhausted) status = 'blocked';
@@ -150,8 +150,10 @@ export function mergeLiveTimerUsageIntoPolicies(
     const liveTimerUsageSec = Math.max(0, Math.min(budget, budget - remaining));
 
     const used = Number(item.time_used_minutes) || 0;
-    const mergedUsed = used + liveTimerUsageSec / 60;
     const maxMin = Number(item.max_time_minutes) || 0;
+    const mergedUsed = maxMin > 0
+      ? Math.min(used + liveTimerUsageSec / 60, maxMin)
+      : used + liveTimerUsageSec / 60;
 
     let is_blocked = item.is_blocked;
     let status = item.status;

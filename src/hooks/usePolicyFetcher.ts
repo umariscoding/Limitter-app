@@ -10,6 +10,7 @@ import {
 } from '../services/appBlockerService';
 import { hydratePoliciesForUi } from '../helpers/helper';
 import { getPolicyPackageKey } from '../utils/policyMapper';
+import { setLastNativeUpdateAt } from './useLockStateSync';
 
 export function usePolicyFetcher() {
   const { setPolicies, setIsLoading, setLastFetchedAt } = usePolicyContext();
@@ -39,17 +40,54 @@ export function usePolicyFetcher() {
     try {
       const reconciledLimits = await hydratePoliciesForUi(policiesResult);
 
+      // Merge: preserve is_blocked=true from real-time hooks when API data is stale.
+      // Uses functional update to get the LATEST context state.
+      // Captures merged result in finalLimits for downstream timer/blocker logic.
+      let finalLimits = reconciledLimits;
+
+      // Reconcile fresh API data with existing context:
+      // - time_used_minutes: never go backwards (take the higher value)
+      // - is_blocked: preserve if context was blocked and API is stale
+      // - If hydrated usage is 0 (new day / no usage), use fresh value as-is
+      const reconcileWithContext = (prev: any[]) => {
+        const prevMap = new Map(prev.map((p: any) => [p.id, p]));
+        return reconciledLimits.map((item: any) => {
+          const existing = prevMap.get(item.id);
+          if (!existing) return item;
+
+          // Usage: never go backwards within the same day.
+          // If hydrated value is 0, it's a new day or no activity → use fresh value.
+          const freshUsed = item.time_used_minutes || 0;
+          const existingUsed = existing.time_used_minutes || 0;
+          const time_used_minutes = freshUsed > 0
+            ? Math.max(freshUsed, existingUsed)
+            : freshUsed;
+
+          // Blocked: preserve if context was blocked and API lost it (same day)
+          const is_blocked = item.is_blocked || (existing.is_blocked && freshUsed > 0);
+          const status = is_blocked ? 'blocked' as const : item.status;
+
+          return { ...item, time_used_minutes, is_blocked, status };
+        });
+      };
+
       if (options?.overriddenPackage && options?.matchesLimitPackage) {
         const overriddenPkg = options.overriddenPackage;
         const match = options.matchesLimitPackage;
-        const resetLimits = reconciledLimits.map((item: any) =>
-          match(item, overriddenPkg)
-            ? { ...item, is_blocked: false, time_used_minutes: 0, status: 'active' }
-            : item,
-        );
-        setPolicies(resetLimits);
 
-        const overriddenLimit = reconciledLimits.find((l: any) => match(l, overriddenPkg));
+        setPolicies(prev => {
+          const merged = reconcileWithContext(prev);
+          // Override path: explicitly unblock + reset the overridden package
+          finalLimits = merged.map((item: any) =>
+            match(item, overriddenPkg)
+              ? { ...item, is_blocked: false, time_used_minutes: 0, status: 'active' }
+              : item,
+          );
+          return finalLimits;
+        });
+        setLastNativeUpdateAt(Date.now());
+
+        const overriddenLimit = finalLimits.find((l: any) => match(l, overriddenPkg));
         if (overriddenLimit && overriddenLimit.target_type === 'app') {
           const pkg = overriddenLimit.app_name || overriddenLimit.package_name;
           const budgetSeconds = overriddenLimit.max_time_minutes * 60;
@@ -60,10 +98,16 @@ export function usePolicyFetcher() {
           }
         }
       } else {
-        setPolicies(reconciledLimits);
+        // Normal refresh
+        setPolicies(prev => {
+          finalLimits = reconcileWithContext(prev);
+          return finalLimits;
+        });
+        setLastNativeUpdateAt(Date.now());
       }
 
-      const blockedAppsList = reconciledLimits
+      // ALL downstream logic uses finalLimits (merged data)
+      const blockedAppsList = finalLimits
         .filter((l: any) => l.is_blocked && l.app_name)
         .map((l: any) => ({
           package_name: l.app_name || l.package_name || l.packageName,
@@ -83,7 +127,7 @@ export function usePolicyFetcher() {
           .map(t => String(t.package || '').trim().toLowerCase()),
       );
 
-      for (const limit of reconciledLimits) {
+      for (const limit of finalLimits) {
         if (limit.is_blocked) continue;
         if (limit.target_type !== 'app') continue;
         const pkg = limit.app_name || limit.package_name || (limit as any).packageName;
@@ -102,7 +146,7 @@ export function usePolicyFetcher() {
 
       // Start website timers for active website policies
       const websiteTimersToStart: Array<{ domain: string; durationSeconds: number }> = [];
-      for (const limit of reconciledLimits) {
+      for (const limit of finalLimits) {
         if (limit.is_blocked) continue;
         if (limit.target_type !== 'website') continue;
         const domain = limit.app_name || limit.package_name || (limit as any).packageName;
