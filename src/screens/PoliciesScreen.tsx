@@ -102,12 +102,12 @@ export default function PoliciesScreen() {
       setEditError('Maximum limit is 1440 minutes (24 hours)');
       return;
     }
-    if (newMinutes > editingPolicy.max_time_minutes && editingPolicy.time_used_minutes > 0) {
-      setEditError('Limit cannot be increased after usage has started today.');
+    if (newMinutes !== editingPolicy.max_time_minutes && editingPolicy.time_used_minutes > 0) {
+      setEditError('Daily limit cannot be changed after usage has started today.');
       return;
     }
-    if (newMinutes > editingPolicy.max_time_minutes && editingPolicy.is_blocked) {
-      setEditError('Limit cannot be increased while exhausted. Use an override.');
+    if (newMinutes !== editingPolicy.max_time_minutes && editingPolicy.is_blocked) {
+      setEditError('Daily limit cannot be changed while exhausted. Use an override.');
       return;
     }
 
@@ -293,7 +293,7 @@ export default function PoliciesScreen() {
             {editingPolicy && editingPolicy.time_used_minutes > 0 && (
               <View style={s.warningBox}>
                 <AlertTriangle size={14} color="#D97706" />
-                <Text style={s.warningText}>{Math.round(editingPolicy.time_used_minutes)}m used today — you can decrease the limit but not increase it.</Text>
+                <Text style={s.warningText}>{Math.round(editingPolicy.time_used_minutes)}m used today — the daily limit can't be changed until tomorrow's reset. You can still rename this limit.</Text>
               </View>
             )}
 
