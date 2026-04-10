@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -10,11 +10,15 @@ import {
   ScrollView,
   ActivityIndicator,
   RefreshControl,
+  Modal,
+  TextInput,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
-import { signOut } from '../auth/firebaseAuthService';
+import { usePolicyContext } from '../context/PolicyContext';
+import { signOut, updateDisplayName, resetPassword } from '../auth/firebaseAuthService';
+import { updateBlockedApps, stopAllTimers } from '../services/appBlockerService';
 import axiosService from '../services/axiosService';
 import { API } from '../config/config';
 import BottomNav from '../components/BottomNav';
@@ -26,8 +30,8 @@ import {
   LogOut,
   ChevronRight,
   Zap,
-  Clock,
-  FileText,
+  Edit3,
+  Lock,
 } from 'lucide-react-native';
 
 interface ProfileData {
@@ -48,9 +52,13 @@ const PLAN_COLORS: Record<string, [string, string]> = {
 export default function SettingsScreen() {
   const navigation = useNavigation<any>();
   const { clearUser } = useUser();
+  const { setPolicies } = usePolicyContext();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
+  const [showEditName, setShowEditName] = useState(false);
+  const [editNameValue, setEditNameValue] = useState('');
+  const [savingName, setSavingName] = useState(false);
 
   const fetchProfile = async () => {
     try {
@@ -60,14 +68,55 @@ export default function SettingsScreen() {
     finally { setLoading(false); setRefreshing(false); }
   };
 
-  useEffect(() => { fetchProfile(); }, []);
+  useFocusEffect(useCallback(() => { fetchProfile(); }, []));
 
   const onRefresh = () => { setRefreshing(true); fetchProfile(); };
+
+  const handleEditName = () => {
+    setEditNameValue(profile?.user.displayName || '');
+    setShowEditName(true);
+  };
+
+  const handleSaveName = async () => {
+    const trimmed = editNameValue.trim();
+    if (!trimmed) { Alert.alert('Validation', 'Name cannot be empty'); return; }
+    setSavingName(true);
+    try {
+      await updateDisplayName(trimmed);
+      setProfile(prev => prev ? { ...prev, user: { ...prev.user, displayName: trimmed } } : prev);
+      setShowEditName(false);
+      Alert.alert('Success', 'Name updated successfully');
+    } catch (err: any) {
+      Alert.alert('Error', err?.message || 'Failed to update name');
+    } finally { setSavingName(false); }
+  };
+
+  const handleResetPassword = () => {
+    const email = profile?.user.email;
+    if (!email) return;
+    Alert.alert('Reset Password', `We'll send a password reset link to ${email}`, [
+      { text: 'Cancel', style: 'cancel' },
+      { text: 'Send', onPress: async () => {
+        try {
+          await resetPassword(email);
+          Alert.alert('Email Sent', 'Check your inbox for the password reset link.');
+        } catch (err: any) {
+          Alert.alert('Error', err?.message || 'Failed to send reset email');
+        }
+      }},
+    ]);
+  };
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: async () => { await signOut(); clearUser(); } },
+      { text: 'Sign Out', style: 'destructive', onPress: async () => {
+        await stopAllTimers();
+        updateBlockedApps([]);
+        setPolicies([]);
+        await signOut();
+        clearUser();
+      } },
     ]);
   };
 
@@ -81,6 +130,31 @@ export default function SettingsScreen() {
       <View style={styles.header}>
         <Text style={styles.headerTitle}>Settings</Text>
       </View>
+
+      <Modal visible={showEditName} transparent animationType="fade" onRequestClose={() => setShowEditName(false)}>
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalCard}>
+            <Text style={styles.modalTitle}>Edit Name</Text>
+            <TextInput
+              value={editNameValue}
+              onChangeText={setEditNameValue}
+              placeholder="Enter your name"
+              style={styles.modalInput}
+              autoFocus
+              autoCapitalize="words"
+              placeholderTextColor="#94A3B8"
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity style={styles.modalCancelBtn} onPress={() => setShowEditName(false)}>
+                <Text style={styles.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.modalSaveBtn} onPress={handleSaveName} disabled={savingName}>
+                <Text style={styles.modalSaveText}>{savingName ? 'Saving...' : 'Save'}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </View>
+      </Modal>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}
@@ -120,12 +194,28 @@ export default function SettingsScreen() {
                 <Text style={styles.statValue}>{profile.devices.count}/{profile.devices.max}</Text>
                 <Text style={styles.statLabel}>Devices</Text>
               </View>
-              <View style={styles.statBox}>
+              <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('OverrideLogsScreen')} activeOpacity={0.8}>
                 <Zap size={18} color="#F59E0B" />
                 <Text style={styles.statValue}>{profile.overrides.totalAvailable}</Text>
                 <Text style={styles.statLabel}>Overrides</Text>
-              </View>
+              </TouchableOpacity>
             </View>
+
+            <Text style={styles.sectionTitle}>Account</Text>
+            <TouchableOpacity style={styles.menuCard} onPress={handleEditName}>
+              <Edit3 size={20} color="#10B981" />
+              <View style={styles.menuContent}>
+                <Text style={styles.menuLabel}>Edit Name</Text>
+              </View>
+              <ChevronRight size={18} color="#CBD5E1" />
+            </TouchableOpacity>
+            <TouchableOpacity style={styles.menuCard} onPress={handleResetPassword}>
+              <Lock size={20} color="#6366F1" />
+              <View style={styles.menuContent}>
+                <Text style={styles.menuLabel}>Reset Password</Text>
+              </View>
+              <ChevronRight size={18} color="#CBD5E1" />
+            </TouchableOpacity>
 
             <Text style={styles.sectionTitle}>Subscription</Text>
             <TouchableOpacity style={styles.menuCard} onPress={() => navigation.navigate('SubscriptionPlansScreen')}>
@@ -135,37 +225,6 @@ export default function SettingsScreen() {
                 <Text style={styles.menuValue}>{planCode.toUpperCase()}</Text>
               </View>
               <ChevronRight size={18} color="#CBD5E1" />
-            </TouchableOpacity>
-
-            <Text style={styles.sectionTitle}>Override Credits</Text>
-            <View style={styles.creditsCard}>
-              <View style={styles.creditRow}>
-                <Text style={styles.creditLabel}>Free / month</Text>
-                <Text style={styles.creditValue}>{profile.overrides.freeOverridesPerMonth}</Text>
-              </View>
-              <View style={styles.creditRow}>
-                <Text style={styles.creditLabel}>Free remaining</Text>
-                <Text style={styles.creditValue}>{profile.overrides.freeRemaining}</Text>
-              </View>
-              <View style={styles.creditRow}>
-                <Text style={styles.creditLabel}>Purchased remaining</Text>
-                <Text style={styles.creditValue}>{profile.overrides.grantedRemaining}</Text>
-              </View>
-              <View style={[styles.creditRow, { borderBottomWidth: 0 }]}>
-                <Text style={styles.creditLabel}>Used this month</Text>
-                <Text style={styles.creditValue}>{profile.overrides.totalUsedThisMonth}</Text>
-              </View>
-            </View>
-
-            <TouchableOpacity
-              style={styles.buyOverridesBtn}
-              onPress={() => navigation.navigate('SubscriptionPlansScreen', { showBuyOverrides: true })}
-              activeOpacity={0.8}
-            >
-              <LinearGradient colors={['#F59E0B', '#D97706']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={styles.buyOverridesGradient}>
-                <Zap size={16} color="#FFFFFF" />
-                <Text style={styles.buyOverridesText}>Buy More Overrides</Text>
-              </LinearGradient>
             </TouchableOpacity>
 
             <Text style={styles.sectionTitle}>Devices</Text>
@@ -183,9 +242,9 @@ export default function SettingsScreen() {
 
             <Text style={styles.sectionTitle}>Quick Links</Text>
             <TouchableOpacity style={styles.menuCard} onPress={() => navigation.navigate('OverrideLogsScreen')}>
-              <FileText size={20} color="#F59E0B" />
+              <Zap size={20} color="#F59E0B" />
               <View style={styles.menuContent}>
-                <Text style={styles.menuLabel}>Override History</Text>
+                <Text style={styles.menuLabel}>Overrides</Text>
               </View>
               <ChevronRight size={18} color="#CBD5E1" />
             </TouchableOpacity>
@@ -221,7 +280,7 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F1F5F9' },
-  header: { backgroundColor: '#FFFFFF', paddingVertical: 16, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', alignItems: 'center' },
+  header: { backgroundColor: '#FFFFFF', paddingVertical: 40, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', alignItems: 'center' },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
   scrollContent: { padding: 20 },
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 },
@@ -247,23 +306,24 @@ const styles = StyleSheet.create({
   menuLabel: { fontSize: 15, fontWeight: '600', color: '#0F172A' },
   menuValue: { fontSize: 12, color: '#6366F1', fontWeight: '700', marginTop: 2 },
 
-  creditsCard: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#E8ECF4', marginBottom: 16 },
-  creditRow: { flexDirection: 'row', justifyContent: 'space-between', paddingVertical: 10, borderBottomWidth: 1, borderBottomColor: '#F8FAFC' },
-  creditLabel: { fontSize: 14, color: '#64748B' },
-  creditValue: { fontSize: 14, fontWeight: '700', color: '#0F172A' },
-
   deviceCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#E8ECF4', marginBottom: 8, gap: 12 },
   deviceIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
   deviceInfo: { flex: 1 },
   deviceName: { fontSize: 14, fontWeight: '600', color: '#0F172A' },
   devicePlatform: { fontSize: 12, color: '#94A3B8', marginTop: 2 },
 
-  buyOverridesBtn: { marginTop: 4, marginBottom: 16 },
-  buyOverridesGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, paddingVertical: 14, borderRadius: 14 },
-  buyOverridesText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
-
   signOutBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 24, paddingVertical: 14, backgroundColor: '#FEF2F2', borderRadius: 14, borderWidth: 1, borderColor: '#FECACA' },
   signOutText: { color: '#DC2626', fontWeight: '700', fontSize: 15 },
+
+  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.45)', justifyContent: 'center', paddingHorizontal: 24 },
+  modalCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 24 },
+  modalTitle: { fontSize: 18, fontWeight: '700', color: '#0F172A', marginBottom: 16 },
+  modalInput: { borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 12, paddingHorizontal: 14, paddingVertical: 12, fontSize: 15, color: '#0F172A', backgroundColor: '#F8FAFC', marginBottom: 20 },
+  modalActions: { flexDirection: 'row', justifyContent: 'flex-end', gap: 10 },
+  modalCancelBtn: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 10, backgroundColor: '#E2E8F0' },
+  modalCancelText: { color: '#334155', fontWeight: '600', fontSize: 14 },
+  modalSaveBtn: { paddingHorizontal: 18, paddingVertical: 10, borderRadius: 10, backgroundColor: '#10B981' },
+  modalSaveText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
 
   errorText: { fontSize: 16, color: '#64748B', marginBottom: 12 },
   retryBtn: { paddingHorizontal: 20, paddingVertical: 10, backgroundColor: '#6366F1', borderRadius: 10 },

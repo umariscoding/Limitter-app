@@ -11,14 +11,14 @@ class LimitterForegroundService : Service() {
 
     companion object {
         const val TAG = "LimitterSvc"
-        const val POLL_INTERVAL_MS = 3000L
+        const val POLL_INTERVAL_MS = 1000L
 
         const val ACTION_START_TIMERS = "START_TIMERS"
         const val ACTION_START_WEBSITE_TIMERS = "START_WEBSITE_TIMERS"
         const val ACTION_STOP = "STOP"
         const val EXTRA_APPS_JSON = "apps_json"
         const val EXTRA_WEBSITES_JSON = "websites_json"
-        const val URL_FRESHNESS_MS = 10_000L
+        const val URL_FRESHNESS_MS = 300_000L  // 5 minutes — browser foreground = URL unchanged
 
         private var instance: LimitterForegroundService? = null
 
@@ -29,6 +29,9 @@ class LimitterForegroundService : Service() {
     private var isPolling = false
     private var lastDetectedForeground: String? = null
     private var persistCounter = 0
+    // Grace period: when a website URL match fails temporarily, keep counting for 3 seconds
+    private val websiteLastConfirmed = mutableMapOf<String, Long>()
+    private val WEBSITE_GRACE_MS = 3000L
 
     private val pollRunnable = object : Runnable {
         override fun run() {
@@ -127,37 +130,42 @@ class LimitterForegroundService : Service() {
                     continue
                 }
 
-                val elapsed = if (timer.lastActiveTimestamp > 0 && timer.status == "active") {
-                    ((now - timer.lastActiveTimestamp) / 1000).toInt().coerceIn(0, 15)
-                } else {
-                    (POLL_INTERVAL_MS / 1000).toInt()
-                }
-
-                val newUsed = timer.usedSeconds + elapsed
-                val remaining = timer.durationSeconds - newUsed
-
-                if (remaining <= 0) {
+                if (timer.status != "active") {
+                    // Session start — record timestamp, don't count time yet
                     TimerStateManager.updateTimer(pkg, timer.copy(
-                        usedSeconds = newUsed,
-                        status = "blocked",
-                        lastActiveTimestamp = now
-                    ))
-                    TimerStateManager.markBlocked(pkg)
-                    Log.w(TAG, "BLOCKED: ${timer.appName} ($pkg) used=${newUsed}s/${timer.durationSeconds}s")
-                    TimerEventModule.sendBlockedEvent(pkg, timer.appName)
-                    launchBlockOverlay(timer.appName, pkg)
-                    TimerStateManager.persistToPrefs(this)
-                } else {
-                    TimerStateManager.updateTimer(pkg, timer.copy(
-                        usedSeconds = newUsed,
                         status = "active",
                         lastActiveTimestamp = now
                     ))
+                    val remaining = timer.durationSeconds - timer.usedSeconds
                     TimerEventModule.sendTickEvent(pkg, timer.appName, remaining, false, "active")
+                } else {
+                    // Ongoing session — compute from session start, no per-tick accumulation
+                    val sessionSeconds = ((now - timer.lastActiveTimestamp) / 1000).toInt()
+                    val effectiveUsed = timer.usedSeconds + sessionSeconds
+                    val remaining = timer.durationSeconds - effectiveUsed
+
+                    if (remaining <= 0) {
+                        TimerStateManager.updateTimer(pkg, timer.copy(
+                            usedSeconds = effectiveUsed,
+                            status = "blocked",
+                            lastActiveTimestamp = now
+                        ))
+                        TimerStateManager.markBlocked(pkg)
+                        Log.w(TAG, "BLOCKED: ${timer.appName} ($pkg) used=${effectiveUsed}s/${timer.durationSeconds}s")
+                        TimerEventModule.sendBlockedEvent(pkg, timer.appName)
+                        launchBlockOverlay(timer.appName, pkg)
+                        TimerStateManager.persistToPrefs(this)
+                    } else {
+                        // Don't update usedSeconds — only commit on session end or block
+                        TimerEventModule.sendTickEvent(pkg, timer.appName, remaining, false, "active")
+                    }
                 }
             } else {
                 if (timer.status == "active") {
+                    // Session end — commit elapsed time from this session
+                    val sessionSeconds = ((now - timer.lastActiveTimestamp) / 1000).toInt()
                     TimerStateManager.updateTimer(pkg, timer.copy(
+                        usedSeconds = timer.usedSeconds + sessionSeconds,
                         status = "waiting",
                         lastActiveTimestamp = 0
                     ))
@@ -168,7 +176,10 @@ class LimitterForegroundService : Service() {
         // Website timer polling
         val isBrowserForeground = foregroundPkg != null && WebsiteDomainMatcher.isBrowser(foregroundPkg)
         val currentUrl = WebsiteAccessibilityService.currentBrowserUrl
-        val urlFresh = (now - WebsiteAccessibilityService.lastUrlUpdateTimestamp) < URL_FRESHNESS_MS
+
+        if (!isBrowserForeground) {
+            websiteLastConfirmed.clear()
+        }
 
         for ((key, timer) in TimerStateManager.activeTimers.toMap()) {
             if (!TimerStateManager.isWebsiteTimer(key)) continue
@@ -179,8 +190,18 @@ class LimitterForegroundService : Service() {
             }
 
             val domain = TimerStateManager.getWebsiteDomain(key)
-            val isOnSite = isBrowserForeground && urlFresh && currentUrl != null &&
+
+            // Direct URL match
+            val urlMatch = isBrowserForeground && currentUrl != null &&
                 WebsiteDomainMatcher.matchesDomain(currentUrl, domain)
+
+            if (urlMatch) {
+                websiteLastConfirmed[key] = now
+            }
+
+            // Effective: true if URL matches, OR if browser is still open and last confirmed within grace period
+            val lastConfirmedAt = websiteLastConfirmed[key] ?: 0L
+            val isOnSite = urlMatch || (isBrowserForeground && timer.status == "active" && (now - lastConfirmedAt) < WEBSITE_GRACE_MS)
 
             if (isOnSite) {
                 if (timer.status == "blocked") {
@@ -188,37 +209,42 @@ class LimitterForegroundService : Service() {
                     continue
                 }
 
-                val elapsed = if (timer.lastActiveTimestamp > 0 && timer.status == "active") {
-                    ((now - timer.lastActiveTimestamp) / 1000).toInt().coerceIn(0, 15)
-                } else {
-                    (POLL_INTERVAL_MS / 1000).toInt()
-                }
-
-                val newUsed = timer.usedSeconds + elapsed
-                val remaining = timer.durationSeconds - newUsed
-
-                if (remaining <= 0) {
+                if (timer.status != "active") {
+                    // Session start
                     TimerStateManager.updateTimer(key, timer.copy(
-                        usedSeconds = newUsed,
-                        status = "blocked",
-                        lastActiveTimestamp = now
-                    ))
-                    TimerStateManager.markBlocked(key)
-                    Log.w(TAG, "BLOCKED website: $domain used=${newUsed}s/${timer.durationSeconds}s")
-                    TimerEventModule.sendBlockedEvent(key, domain)
-                    launchBlockOverlay(domain, key)
-                    TimerStateManager.persistToPrefs(this)
-                } else {
-                    TimerStateManager.updateTimer(key, timer.copy(
-                        usedSeconds = newUsed,
                         status = "active",
                         lastActiveTimestamp = now
                     ))
+                    val remaining = timer.durationSeconds - timer.usedSeconds
                     TimerEventModule.sendTickEvent(key, domain, remaining, false, "active")
+                } else {
+                    // Ongoing session — compute from absolute session start
+                    val sessionSeconds = ((now - timer.lastActiveTimestamp) / 1000).toInt()
+                    val effectiveUsed = timer.usedSeconds + sessionSeconds
+                    val remaining = timer.durationSeconds - effectiveUsed
+
+                    if (remaining <= 0) {
+                        TimerStateManager.updateTimer(key, timer.copy(
+                            usedSeconds = effectiveUsed,
+                            status = "blocked",
+                            lastActiveTimestamp = now
+                        ))
+                        TimerStateManager.markBlocked(key)
+                        Log.w(TAG, "BLOCKED website: $domain used=${effectiveUsed}s/${timer.durationSeconds}s")
+                        TimerEventModule.sendBlockedEvent(key, domain)
+                        launchBlockOverlay(domain, key)
+                        TimerStateManager.persistToPrefs(this)
+                    } else {
+                        TimerEventModule.sendTickEvent(key, domain, remaining, false, "active")
+                    }
                 }
             } else {
                 if (timer.status == "active") {
+                    // Session end — commit elapsed time
+                    val sessionSeconds = ((now - timer.lastActiveTimestamp) / 1000).toInt()
+                    websiteLastConfirmed.remove(key)
                     TimerStateManager.updateTimer(key, timer.copy(
+                        usedSeconds = timer.usedSeconds + sessionSeconds,
                         status = "waiting",
                         lastActiveTimestamp = 0
                     ))

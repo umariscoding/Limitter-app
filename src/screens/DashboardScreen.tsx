@@ -22,7 +22,6 @@ import {
   Smartphone,
   Zap,
   ChevronRight,
-  Trash2,
 } from 'lucide-react-native';
 import { useUser } from '../context/UserContext';
 import { usePolicyContext } from '../context/PolicyContext';
@@ -31,14 +30,12 @@ import { useNativeTimerSync } from '../hooks/useNativeTimerSync';
 import { useDeviceResolver } from '../hooks/useDeviceResolver';
 import { useCreateLimit } from '../hooks/useCreateLimit';
 import { useUsageReporter } from '../hooks/useUsageReporter';
-import { archiveAllPoliciesAPI } from '../services/policyService';
 import { updateBlockedApps } from '../services/appBlockerService';
+import { formatTotalUsageFromLimits } from '../helpers/helper';
 import { getPlanLimits, canCreatePolicy, invalidatePlanCache, type PlanLimits } from '../services/planGuardService';
 import { useLockStateSync } from '../hooks/useLockStateSync';
-import { LimitterModule } from '../config/nativeModules';
 import { requestRequiredPermissions } from '../services/permissionsService';
 import { getPolicyPackageKey } from '../utils/policyMapper';
-import { formatTotalUsageFromLimits } from '../helpers/helper';
 import { Toast } from '../../components';
 import CreateLimitModal from '../components/CreateLimitModal';
 import PolicyCard from '../components/PolicyCard';
@@ -58,6 +55,7 @@ export default function DashboardScreen() {
   const [showToast, setShowToast] = useState(false);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [planLimits, setPlanLimits] = useState<PlanLimits | null>(null);
+  const [visibleCount, setVisibleCount] = useState(10);
   const justOverriddenPackageRef = React.useRef<string | null>(null);
   const fetchInProgressRef = React.useRef(false);
 
@@ -162,44 +160,37 @@ export default function DashboardScreen() {
     const success = await createLimit(state);
     if (success) {
       invalidatePlanCache();
-      await new Promise<void>(r => setTimeout(r, 1500));
       await fetchLimits();
     }
   };
 
   const handleOverride = (limit: any) => {
     const pkg = limit.app_name || limit.package_name || limit.packageName;
-    navigation.navigate('ConfirmOverrideScreen', { limitId: limit.id, packageName: pkg, appName: pkg });
-  };
+    const appName = limit.target_label || pkg;
+    const targetType = limit.target_type || 'app';
 
-  const handleResetAll = () => {
-    if (limits.length === 0) { Alert.alert('Nothing to reset', 'No limits found.'); return; }
-    Alert.alert('Reset All Limits', 'This will archive all limits and stop all timers. Are you sure?', [
-      { text: 'Cancel', style: 'cancel' },
-      {
-        text: 'Reset All', style: 'destructive',
-        onPress: async () => {
-          setLoading(true);
-          try {
-            await archiveAllPoliciesAPI();
-            try { if (LimitterModule?.sendCommand) await LimitterModule.sendCommand('STOP', {}); } catch { }
-            updateBlockedApps([]);
-            setLimits([]);
-            setToastMessage('All limits archived');
-            setShowToast(true);
-          } catch (error: any) {
-            Alert.alert('Error', error?.message || 'Failed to reset limits');
-          } finally { setLoading(false); }
-        },
-      },
-    ]);
+    if ((user?.overrides_left ?? 0) <= 0) {
+      navigation.navigate('SubscriptionPlansScreen', {
+        fromBlockingOverride: true,
+        packageName: pkg,
+        appName,
+      });
+      return;
+    }
+
+    navigation.navigate('ConfirmOverrideScreen', {
+      limitId: limit.id,
+      packageName: pkg,
+      appName,
+      targetType,
+    });
   };
 
   if (loading && !refreshing) {
     return (
       <SafeAreaView style={styles.container}>
         <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color="#63f1b8ff" />
+          <ActivityIndicator size="large" color="#10B981" />
           <Text style={styles.loadingText}>Loading your limits...</Text>
         </View>
       </SafeAreaView>
@@ -208,7 +199,7 @@ export default function DashboardScreen() {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#56da8dd7" />
+      <StatusBar barStyle="light-content" backgroundColor="#059669" />
       <Toast visible={showToast} message={toastMessage} onHide={() => setShowToast(false)} type="success" />
 
       <CreateLimitModal
@@ -223,16 +214,11 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" />}
       >
-        <LinearGradient colors={['#63f1a8ff', '#066a2ece', '#131514ff']} style={styles.headerGradient}>
+        <LinearGradient colors={['#10B981', '#059669', '#0F172A']} style={styles.headerGradient}>
           <View style={styles.headerRow}>
             <View>
               <Text style={styles.greeting}>Welcome back,</Text>
               <Text style={styles.userName}>{user?.name || 'User'}</Text>
-            </View>
-            <View style={styles.headerActions}>
-              <TouchableOpacity style={styles.headerBtn} onPress={handleResetAll}>
-                <Trash2 size={18} color="rgba(255,255,255,0.7)" />
-              </TouchableOpacity>
             </View>
           </View>
 
@@ -255,7 +241,7 @@ export default function DashboardScreen() {
 
             <View style={styles.statCard}>
               <View style={styles.statIconWrap}>
-                <Clock size={16} color="#63f1bbff" />
+                <Clock size={16} color="#10B981" />
               </View>
               <Text style={styles.statValue}>{totalUsageText}</Text>
               <Text style={styles.statLabel}>Usage</Text>
@@ -286,32 +272,41 @@ export default function DashboardScreen() {
               <Text style={styles.emptyTitle}>No limits yet</Text>
               <Text style={styles.emptyDesc}>Create your first limit to start tracking app usage</Text>
               <TouchableOpacity onPress={handleOpenCreateModal} activeOpacity={0.8}>
-                <LinearGradient colors={['#63f1afff', '#63f1afff']} style={styles.emptyBtn}>
+                <LinearGradient colors={['#10B981', '#059669']} style={styles.emptyBtn}>
                   <PlusIcon size={16} color="#FFFFFF" />
                   <Text style={styles.emptyBtnText}>Create First Limit</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
           ) : (
-            <>
-              {limits.slice(0, 5).map((limit: any) => (
+            <ScrollView
+              style={limits.length > 2 ? styles.limitsScroll : undefined}
+              nestedScrollEnabled
+              showsVerticalScrollIndicator={limits.length > 2}
+            >
+              {limits.slice(0, visibleCount).map((limit: any) => (
                 <PolicyCard key={limit.id} limit={limit} onOverride={handleOverride} />
               ))}
-              {limits.length > 5 && (
-                <TouchableOpacity style={styles.moreCard} onPress={() => navigation.navigate('PoliciesScreen')} activeOpacity={0.8}>
-                  <Text style={styles.moreText}>+{limits.length - 5} more · View all limits</Text>
-                  <ChevronRight size={16} color="#63f1afff" />
+              {limits.length > visibleCount && (
+                <TouchableOpacity
+                  style={styles.loadMoreBtn}
+                  onPress={() => setVisibleCount(prev => prev + 10)}
+                  activeOpacity={0.8}
+                >
+                  <Text style={styles.loadMoreText}>
+                    Load More ({limits.length - visibleCount} remaining)
+                  </Text>
                 </TouchableOpacity>
               )}
-            </>
+            </ScrollView>
           )}
 
           <Text style={[styles.sectionTitle, { marginTop: 28, marginBottom: 12 }]}>Quick Actions</Text>
           <View style={styles.actionsGrid}>
             {[
               { icon: <Shield size={22} color="#10B981" />, title: 'My Limits', bg: '#F0FDF4', screen: 'PoliciesScreen' },
-              { icon: <BarChart2 size={22} color="#63f1afff" />, title: 'Analytics', bg: '#EEF2FF', screen: 'AnalyticsScreen' },
-              { icon: <Smartphone size={22} color="#22caabff" />, title: 'Devices', bg: '#F0F9FF', screen: 'ControlPlansScreen' },
+              { icon: <BarChart2 size={22} color="#6366F1" />, title: 'Analytics', bg: '#EEF2FF', screen: 'AnalyticsScreen' },
+              { icon: <Smartphone size={22} color="#059669" />, title: 'Devices', bg: '#F0F9FF', screen: 'ControlPlansScreen' },
               { icon: <Zap size={22} color="#F59E0B" />, title: 'Upgrade', bg: '#FFFBEB', screen: 'SubscriptionPlansScreen' },
             ].map(action => (
               <TouchableOpacity key={action.screen} style={[styles.actionTile, { backgroundColor: action.bg }]} onPress={() => navigation.navigate(action.screen)} activeOpacity={0.8}>
@@ -338,8 +333,6 @@ const styles = StyleSheet.create({
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
   greeting: { fontSize: 14, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
   userName: { fontSize: 24, fontWeight: '800', color: '#FFFFFF', marginTop: 2 },
-  headerActions: { flexDirection: 'row', gap: 8 },
-  headerBtn: { width: 36, height: 36, borderRadius: 18, backgroundColor: 'rgba(255,255,255,0.15)', alignItems: 'center', justifyContent: 'center' },
 
   statsRow: { flexDirection: 'row', gap: 10 },
   statCard: { flex: 1, backgroundColor: 'rgba(255,255,255,0.15)', borderRadius: 16, padding: 14, alignItems: 'center', borderWidth: 1, borderColor: 'rgba(255,255,255,0.1)' },
@@ -362,8 +355,9 @@ const styles = StyleSheet.create({
   emptyBtn: { flexDirection: 'row', alignItems: 'center', gap: 8, paddingHorizontal: 24, paddingVertical: 12, borderRadius: 12 },
   emptyBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
 
-  moreCard: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', backgroundColor: '#EEF2FF', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#C7D2FE', marginTop: 4 },
-  moreText: { color: '#38ca66ff', fontSize: 13, fontWeight: '700' },
+  limitsScroll: { maxHeight: 380 },
+  loadMoreBtn: { alignItems: 'center', backgroundColor: '#F0FDF4', padding: 14, borderRadius: 12, borderWidth: 1, borderColor: '#BBF7D0', marginTop: 8 },
+  loadMoreText: { color: '#059669', fontSize: 13, fontWeight: '700' },
 
   actionsGrid: { flexDirection: 'row', flexWrap: 'wrap', gap: 10 },
   actionTile: { width: '48%' as any, padding: 16, borderRadius: 16, alignItems: 'center', gap: 10, borderWidth: 1, borderColor: 'rgba(0,0,0,0.04)' },

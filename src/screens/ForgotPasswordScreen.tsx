@@ -41,11 +41,11 @@ const ForgotPasswordScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#4338CA" />
+      <StatusBar barStyle="light-content" backgroundColor="#059669" />
       <Toast visible={showToast} message={toastMessage} onHide={() => setShowToast(false)} type={toastType} />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <LinearGradient colors={["#4338CA", "#6366F1"]} style={styles.headerGradient}>
+          <LinearGradient colors={["#059669", "#10B981"]} style={styles.headerGradient}>
             <View style={styles.iconCircle}>
               <Shield size={32} color="#FFFFFF" />
             </View>
@@ -90,7 +90,7 @@ const styles = StyleSheet.create({
   formCard: { backgroundColor: "#FFFFFF", marginHorizontal: 20, marginTop: -16, borderRadius: 24, padding: 24, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 24, elevation: 5 },
   actionBtn: { marginTop: 16, marginBottom: 8 },
   footer: { justifyContent: "center", alignItems: "center", marginTop: "auto", paddingVertical: 24 },
-  backText: { color: "#6366F1", fontWeight: "800", fontSize: 14 },
+  backText: { color: "#10B981", fontWeight: "800", fontSize: 14 },
 });
 
 export default ForgotPasswordScreen;

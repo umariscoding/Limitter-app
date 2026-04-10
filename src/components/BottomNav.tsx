@@ -23,8 +23,8 @@ const TAB_ICONS: Record<ActiveTab, (color: string) => React.ReactNode> = {
   settings: (color) => <SettingsIcon size={22} color={color} />,
 };
 
-const ACTIVE_COLOR = '#6366F1';
-const INACTIVE_COLOR = '#94A3B8';
+const ACTIVE_COLOR = '#08b341e0';
+const INACTIVE_COLOR = '#08b341e0';
 
 export default function BottomNav({ active }: BottomNavProps) {
   const navigation = useNavigation<any>();

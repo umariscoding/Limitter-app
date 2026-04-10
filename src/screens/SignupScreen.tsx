@@ -27,11 +27,21 @@ const SignupScreen: React.FC = () => {
   const [showToast, setShowToast] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
 
+  const validatePassword = (pwd: string): string | null => {
+    if (pwd.length < 8) return "Password must be at least 8 characters";
+    if (!/[A-Z]/.test(pwd)) return "Password must include at least one uppercase letter";
+    if (!/[a-z]/.test(pwd)) return "Password must include at least one lowercase letter";
+    if (!/[0-9]/.test(pwd)) return "Password must include at least one number";
+    if (!/[!@#$%^&*()_+\-=\[\]{};':"\\|,.<>\/?]/.test(pwd)) return "Password must include at least one special character";
+    return null;
+  };
+
   const handleSignup = async () => {
     setError(null);
-    if (password !== confirmPassword) { setError("Passwords do not match"); return; }
     if (!email || !password) { setError("Email and password are required"); return; }
-    if (password.length < 6) { setError("Password must be at least 6 characters"); return; }
+    const passwordError = validatePassword(password);
+    if (passwordError) { setError(passwordError); return; }
+    if (password !== confirmPassword) { setError("Passwords do not match"); return; }
 
     Keyboard.dismiss();
     setIsLoading(true);
@@ -43,7 +53,7 @@ const SignupScreen: React.FC = () => {
     } catch (err: any) {
       const code = err?.code || "";
       if (code === "auth/email-already-in-use") setError("An account with this email already exists");
-      else if (code === "auth/weak-password") setError("Password is too weak. Use at least 6 characters.");
+      else if (code === "auth/weak-password") setError("Password is too weak. Use at least 8 characters with uppercase, lowercase, number, and special character.");
       else if (code === "auth/invalid-email") setError("Invalid email address");
       else setError(err?.message || "Signup failed");
     } finally { setIsLoading(false); }
@@ -51,11 +61,11 @@ const SignupScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#4338CA" />
+      <StatusBar barStyle="light-content" backgroundColor="#059669" />
       <Toast visible={showToast} message="Account created! Check your email to verify." onHide={() => setShowToast(false)} type="success" />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <LinearGradient colors={["#4338CA", "#6366F1"]} style={styles.headerGradient}>
+          <LinearGradient colors={["#059669", "#10B981"]} style={styles.headerGradient}>
             <View style={styles.iconCircle}>
               <Shield size={32} color="#FFFFFF" />
             </View>
@@ -101,7 +111,7 @@ const styles = StyleSheet.create({
 
   footer: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: "auto", paddingVertical: 24 },
   footerText: { color: "#64748B", fontSize: 14 },
-  loginText: { color: "#6366F1", fontWeight: "800", fontSize: 14 },
+  loginText: { color: "#10B981", fontWeight: "800", fontSize: 14 },
 });
 
 export default SignupScreen;

@@ -59,7 +59,9 @@ export function useCreateLimit(
 
     const appName = createAppName.trim();
     const category = createCategory.trim();
-    const websiteUrl = createWebsiteUrl.trim();
+    const websiteUrl = createWebsiteUrl.trim().toLowerCase()
+      .replace(/^(https?:\/\/)?(www\.)?/, '')
+      .replace(/\/.*$/, '');
 
     const totalSeconds = calculateTotalSecondsFromInputs({
       timerType, hours, minutes, seconds,
@@ -81,6 +83,12 @@ export function useCreateLimit(
     } else {
       if (!websiteUrl) {
         Alert.alert('Validation', 'Website URL is required');
+        return false;
+      }
+      const domainPattern = /^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
+      const cleaned = websiteUrl.replace(/^(https?:\/\/)?(www\.)?/, '').replace(/\/.*$/, '');
+      if (!domainPattern.test(cleaned)) {
+        Alert.alert('Validation', 'Enter a valid website URL (e.g. youtube.com)');
         return false;
       }
     }

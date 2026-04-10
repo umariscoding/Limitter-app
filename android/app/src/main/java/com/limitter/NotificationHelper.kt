@@ -23,14 +23,40 @@ object NotificationHelper {
         nm.createNotificationChannel(channel)
     }
 
+    private fun formatTime(totalSeconds: Int): String {
+        val h = totalSeconds / 3600
+        val m = (totalSeconds % 3600) / 60
+        val s = totalSeconds % 60
+        return when {
+            h > 0 -> "${h}h ${m}m"
+            m > 0 -> "${m}m ${s}s"
+            else -> "${s}s"
+        }
+    }
+
     fun build(context: Context, foregroundPkg: String?): Notification {
-        val fg = foregroundPkg ?: "none"
-        val trackingInfo = TimerStateManager.activeTimers.entries.joinToString("\n") { (_, t) ->
-            "${t.appName}: ${t.usedSeconds}s/${t.durationSeconds}s [${t.status}]"
+        val activeTimers = TimerStateManager.activeTimers.values.filter {
+            it.status == "RUNNING" || it.status == "WARNING"
+        }
+        val activeCount = activeTimers.size
+        val blockedCount = TimerStateManager.activeTimers.values.count { it.status == "BLOCKED" }
+
+        val title = when {
+            activeCount > 0 -> "Tracking $activeCount app${if (activeCount > 1) "s" else ""}"
+            blockedCount > 0 -> "$blockedCount app${if (blockedCount > 1) "s" else ""} blocked"
+            else -> "Limitter is running"
         }
 
-        val title = "FG: $fg"
-        val text = if (trackingInfo.isNotEmpty()) trackingInfo else "No timers"
+        val text = if (activeTimers.isNotEmpty()) {
+            activeTimers.joinToString("\n") { t ->
+                val remaining = maxOf(0, t.durationSeconds - t.usedSeconds)
+                "${t.appName} \u2022 ${formatTime(remaining)} left"
+            }
+        } else if (blockedCount > 0) {
+            "Limit reached. Use an override to continue."
+        } else {
+            "Monitoring your screen time"
+        }
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(title)

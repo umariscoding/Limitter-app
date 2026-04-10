@@ -91,9 +91,9 @@ export const subscriptionPlans = [
       { text: "1 Device", enabled: true },
       { text: "3 Limits", enabled: true },
       { text: "Fixed 1-Hour Timer", enabled: true },
-      { text: "Pay $1.99 per Override", enabled: true },
+      { text: "3 Free Overrides / Month", enabled: true },
       { text: "Custom Timers", enabled: false },
-      { text: "Free Overrides", enabled: false },
+      { text: "$1.99 per Extra Override", enabled: true },
     ],
   },
   {

@@ -27,11 +27,27 @@ export async function getOrCreateInstallationId(): Promise<string> {
   return id;
 }
 
+function getDeviceName(): string {
+  if (Platform.OS === "android") {
+    const constants = Platform.constants as any;
+    const brand = constants?.Brand || constants?.brand || "";
+    const model = constants?.Model || constants?.model || "";
+    if (brand && model) {
+      const brandCap = brand.charAt(0).toUpperCase() + brand.slice(1).toLowerCase();
+      return model.toLowerCase().startsWith(brand.toLowerCase())
+        ? model
+        : `${brandCap} ${model}`;
+    }
+    return "Android Phone";
+  }
+  return "iPhone";
+}
+
 function getDeviceInfo() {
   return {
     platform: Platform.OS === "ios" ? ("ios" as const) : ("android" as const),
     deviceType: "phone" as const,
-    deviceName: `${Platform.OS} ${Platform.Version}`,
+    deviceName: getDeviceName(),
     osVersion: String(Platform.Version),
     appVersion: "1.0.0",
   };
@@ -51,11 +67,16 @@ export async function signUp(
   const installationId = await getOrCreateInstallationId();
   const deviceInfo = getDeviceInfo();
 
-  const accountData = await axiosService.post(API.SetupAccount, {
-    email,
-    displayName,
-    device: { installationId, ...deviceInfo },
-  });
+  try {
+    await axiosService.post(API.SetupAccount, {
+      email,
+      displayName,
+      device: { installationId, ...deviceInfo },
+    });
+  } catch (setupError) {
+    await credential.user.delete();
+    throw setupError;
+  }
 
   await sendEmailVerification(credential.user);
   await fbSignOut(auth);
@@ -93,14 +114,32 @@ export async function bootstrap() {
 export async function getIdToken(): Promise<string | null> {
   const user = auth.currentUser;
   if (!user) return null;
-  return user.getIdToken(false);
+  return user.getIdToken(true);
+}
+
+const SESSION_STORAGE_KEYS = [
+  "@limitter_current_device_id",
+  "@limitter_cached_policies",
+  "limitter_unflushed_sessions",
+  "@limitter_usage_queue",
+];
+
+export async function clearSessionData() {
+  await AsyncStorage.multiRemove(SESSION_STORAGE_KEYS);
 }
 
 export async function signOut() {
   try {
     await axiosService.post(API.Logout);
   } catch { /* silenced */ }
+  await clearSessionData();
   await fbSignOut(auth);
+}
+
+export async function updateDisplayName(name: string) {
+  const user = auth.currentUser;
+  if (!user) throw new Error("Not authenticated");
+  await updateProfile(user, { displayName: name });
 }
 
 export async function resetPassword(email: string) {

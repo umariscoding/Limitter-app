@@ -34,7 +34,7 @@ export default function PolicyCard({ limit, onOverride }: PolicyCardProps) {
           {isBlocked ? (
             <ShieldOff size={20} color="#EF4444" />
           ) : (
-            <Shield size={20} color="#4F46E5" />
+            <Shield size={20} color="#21e396ff" />
           )}
         </View>
         <View style={s.titleWrap}>
@@ -75,7 +75,7 @@ export default function PolicyCard({ limit, onOverride }: PolicyCardProps) {
       {isBlocked && (
         <TouchableOpacity onPress={() => onOverride(limit)} activeOpacity={0.8}>
           <LinearGradient
-            colors={['#6366F1', '#4F46E5']}
+            colors={['#08b341e0', '#08b341e0']}
             start={{ x: 0, y: 0 }}
             end={{ x: 1, y: 0 }}
             style={s.overrideBtn}

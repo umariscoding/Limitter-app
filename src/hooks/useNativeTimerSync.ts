@@ -17,11 +17,9 @@ export function useNativeTimerSync(
           if (getPolicyPackageKey(item) !== eventPkg) return item;
 
           const maxSeconds = Number(item.max_time_minutes || 0) * 60;
-          const budgetSeconds =
-            item._nativeBudgetSeconds || maxSeconds;
           const remaining = Math.max(0, Number(event.remaining || 0));
           const consumedSeconds = Math.min(
-            Math.max(0, budgetSeconds - remaining),
+            Math.max(0, maxSeconds - remaining),
             maxSeconds,
           );
           const eventBlocked =
@@ -55,7 +53,12 @@ export function useNativeTimerSync(
       setState(prev =>
         prev.map(item =>
           getPolicyPackageKey(item) === eventPkg
-            ? { ...item, is_blocked: true, status: 'blocked' }
+            ? {
+                ...item,
+                is_blocked: true,
+                status: 'blocked',
+                time_used_minutes: item.max_time_minutes,
+              }
             : item,
         ),
       );

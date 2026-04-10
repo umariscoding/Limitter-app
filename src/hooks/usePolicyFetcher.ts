@@ -88,12 +88,16 @@ export function usePolicyFetcher() {
         setLastNativeUpdateAt(Date.now());
 
         const overriddenLimit = finalLimits.find((l: any) => match(l, overriddenPkg));
-        if (overriddenLimit && overriddenLimit.target_type === 'app') {
+        if (overriddenLimit) {
           const pkg = overriddenLimit.app_name || overriddenLimit.package_name;
           const budgetSeconds = overriddenLimit.max_time_minutes * 60;
           if (pkg && budgetSeconds > 0) {
             try {
-              await startAppUsageTimer(pkg, overriddenLimit.target_label || pkg, budgetSeconds);
+              if (overriddenLimit.target_type === 'website') {
+                await startBulkWebsiteTimers([{ domain: pkg, durationSeconds: budgetSeconds }]);
+              } else {
+                await startAppUsageTimer(pkg, overriddenLimit.target_label || pkg, budgetSeconds);
+              }
             } catch (_) { /* silenced */ }
           }
         }

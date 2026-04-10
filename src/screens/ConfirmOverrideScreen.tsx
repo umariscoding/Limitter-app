@@ -26,7 +26,7 @@ import { useUser } from '../context/UserContext';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
 import { useDeviceResolver } from '../hooks/useDeviceResolver';
-import { grantTemporaryOverrideAccess } from '../services/appBlockerService';
+import { grantTemporaryOverrideAccess, grantTemporaryWebsiteOverride } from '../services/appBlockerService';
 import { useOverrideAPI, getOverrideBalanceAPI, type OverrideBalanceResponse } from '../services/overrideService';
 
 export default function ConfirmOverrideScreen() {
@@ -39,6 +39,7 @@ export default function ConfirmOverrideScreen() {
   const limitId = route?.params?.limitId;
   const packageName = route?.params?.packageName;
   const appNameFromRoute = route?.params?.appName;
+  const targetType = route?.params?.targetType as string || 'app';
 
   const [isLoading, setIsLoading] = useState(false);
   const [balance, setBalance] = useState<OverrideBalanceResponse | null>(null);
@@ -82,12 +83,17 @@ export default function ConfirmOverrideScreen() {
       updateUser({ overrides_left: Math.max(0, totalAvailable - 1) });
 
       if (packageName) {
-        await grantTemporaryOverrideAccess(packageName, appNameFromRoute || packageName, 5);
+        if (targetType === 'website') {
+          await grantTemporaryWebsiteOverride(packageName, 5);
+        } else {
+          await grantTemporaryOverrideAccess(packageName, appNameFromRoute || packageName, 5);
+        }
       }
 
+      const overriddenKey = targetType === 'website' && packageName ? `website:${packageName}` : packageName;
       Alert.alert(overrideLabels.alertUnlockedTitle, 'Override applied successfully', [{
         text: 'OK',
-        onPress: () => navigation.navigate('DashboardScreen', { refreshAt: Date.now(), justOverriddenPackage: packageName || null }),
+        onPress: () => navigation.navigate('DashboardScreen', { refreshAt: Date.now(), justOverriddenPackage: overriddenKey || null }),
       }]);
     } catch (error: any) {
       const msg = error?.message || 'Failed to use override';

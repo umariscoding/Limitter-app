@@ -2,6 +2,7 @@ import AsyncStorage from "@react-native-async-storage/async-storage";
 import { Platform } from "react-native";
 import { getDevicesAPI, registerDeviceAPI } from "../services/deviceService";
 import { getOrCreateInstallationId } from "../auth/firebaseAuthService";
+import { canRegisterDevice } from "../services/planGuardService";
 
 const CURRENT_DEVICE_KEY = "@limitter_current_device_id";
 
@@ -24,6 +25,11 @@ export const resolveCurrentDeviceId = async (_userId?: string): Promise<string |
       const deviceId = devices[0].deviceId || devices[0].id;
       await AsyncStorage.setItem(CURRENT_DEVICE_KEY, deviceId);
       return deviceId;
+    }
+
+    const check = await canRegisterDevice();
+    if (!check.allowed) {
+      throw new Error(check.reason || "Device limit reached for your plan.");
     }
 
     const installationId = await getOrCreateInstallationId();
@@ -50,7 +56,11 @@ export const resolveCurrentDeviceId = async (_userId?: string): Promise<string |
     const deviceId = refreshedDevices[0].deviceId || refreshedDevices[0].id;
     await AsyncStorage.setItem(CURRENT_DEVICE_KEY, deviceId);
     return deviceId;
-  } catch {
+  } catch (error: any) {
+    const msg = error?.message || '';
+    if (msg.includes('plan') || msg.includes('Device limit') || msg.includes('device limit')) {
+      throw error;
+    }
     return null;
   }
 };

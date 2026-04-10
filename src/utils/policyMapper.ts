@@ -17,6 +17,13 @@ export interface UIPolicy {
   _nativeBudgetSeconds?: number;
 }
 
+function humanizePackageName(packageName: string): string {
+  const generic = new Set(['com', 'org', 'net', 'io', 'android', 'app', 'apps', 'mobile', 'lite']);
+  const parts = packageName.split('.').filter(p => !generic.has(p.toLowerCase()));
+  const name = parts[parts.length - 1] || packageName.split('.')[1] || packageName;
+  return name.charAt(0).toUpperCase() + name.slice(1);
+}
+
 export function mapPolicyToUI(item: any): UIPolicy {
   const p = item.policy || item;
   const state = item.policyState || {};
@@ -28,13 +35,19 @@ export function mapPolicyToUI(item: any): UIPolicy {
   if (isExhausted) status = 'blocked';
   else if (usedMinutes > 0) status = 'active';
 
+  const label = p.targetLabel && p.targetLabel !== p.targetKey
+    ? p.targetLabel
+    : p.type === 'app'
+      ? humanizePackageName(p.targetKey)
+      : p.targetLabel || p.targetKey;
+
   return {
     id: p.policyId,
     app_name: p.targetKey,
     package_name: p.targetKey,
     packageName: p.targetKey,
     category: p.type === 'category' ? p.targetLabel : null,
-    target_label: p.targetLabel,
+    target_label: label,
     target_type: p.type,
     max_time_minutes: p.dailyLimitMinutes,
     time_used_minutes: usedMinutes,
@@ -46,14 +59,13 @@ export function mapPolicyToUI(item: any): UIPolicy {
 }
 
 export function formatUsageTime(minutes: number): string {
-  if (minutes === 0) return '0s';
+  if (minutes <= 0) return '0s';
   const totalSec = Math.round(minutes * 60);
   if (totalSec < 60) return `${totalSec}s`;
-  const h = Math.floor(minutes / 60);
-  const m = Math.floor(minutes % 60);
-  const s = Math.round((minutes % 1) * 60);
-  if (h > 0) return s > 0 ? `${h}h ${m}m ${s}s` : m > 0 ? `${h}h ${m}m` : `${h}h`;
-  return s > 0 ? `${m}m ${s}s` : `${m}m`;
+  const h = Math.floor(totalSec / 3600);
+  const m = Math.floor((totalSec % 3600) / 60);
+  if (h > 0) return m > 0 ? `${h}h ${m}m` : `${h}h`;
+  return `${m}m`;
 }
 
 export function formatLimitTime(minutes: number): string {
@@ -73,11 +85,14 @@ export function formatRemainingTime(minutes: number): string {
 }
 
 export function getPolicyPackageKey(item: any): string {
-  const raw = String(item?.app_name || item?.package_name || item?.packageName || '')
+  let raw = String(item?.app_name || item?.package_name || item?.packageName || '')
     .trim()
     .toLowerCase();
-  if (item?.target_type === 'website' && !raw.startsWith('website:')) {
-    return `website:${raw}`;
+  if (item?.target_type === 'website') {
+    raw = raw.replace(/^(https?:\/\/)?(www\.)?/, '').replace(/\/.*$/, '');
+    if (!raw.startsWith('website:')) {
+      return `website:${raw}`;
+    }
   }
   return raw;
 }

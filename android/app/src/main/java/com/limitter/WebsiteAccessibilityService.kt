@@ -48,8 +48,15 @@ class WebsiteAccessibilityService : AccessibilityService() {
 
         val eventType = event.eventType
         if (eventType != AccessibilityEvent.TYPE_WINDOW_CONTENT_CHANGED &&
-            eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED) {
+            eventType != AccessibilityEvent.TYPE_WINDOW_STATE_CHANGED &&
+            eventType != AccessibilityEvent.TYPE_VIEW_SCROLLED &&
+            eventType != AccessibilityEvent.TYPE_VIEW_FOCUSED) {
             return
+        }
+
+        // Keep timestamp fresh on any browser event, even without URL re-read
+        if (currentBrowserUrl != null) {
+            lastUrlUpdateTimestamp = System.currentTimeMillis()
         }
 
         val root = try { rootInActiveWindow } catch (_: Exception) { null } ?: return

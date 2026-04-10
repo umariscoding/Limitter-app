@@ -37,7 +37,6 @@ import {
   formatRemainingTime,
   type UIPolicy,
 } from '../utils/policyMapper';
-import { useNativeTimerSync } from '../hooks/useNativeTimerSync';
 
 export default function PoliciesScreen() {
   const navigation = useNavigation<any>();
@@ -59,8 +58,6 @@ export default function PoliciesScreen() {
   useEffect(() => {
     fetchRef.current();
   }, []);
-
-  useNativeTimerSync(setPolicies);
 
   const handleDelete = (policy: UIPolicy) => {
     Alert.alert(
@@ -135,7 +132,8 @@ export default function PoliciesScreen() {
       );
       setEditModalVisible(false);
     } catch (err: any) {
-      setEditError(err?.message || 'Failed to update limit');
+      const msg = err?.message || 'Failed to update limit';
+      setEditError(msg.length > 100 ? 'Failed to update limit. Please try again.' : msg);
     } finally {
       setEditLoading(false);
     }
@@ -258,7 +256,7 @@ export default function PoliciesScreen() {
           renderItem={renderPolicy}
           contentContainerStyle={{ paddingTop: 8, paddingBottom: 90 }}
           refreshing={refreshing}
-          onRefresh={() => { setRefreshing(true); fetchPolicies(); }}
+          onRefresh={() => { setRefreshing(true); fetchPolicies().finally(() => setRefreshing(false)); }}
           showsVerticalScrollIndicator={false}
         />
       )}

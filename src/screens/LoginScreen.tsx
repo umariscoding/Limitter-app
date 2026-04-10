@@ -57,11 +57,11 @@ const LoginScreen: React.FC = () => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="light-content" backgroundColor="#4338CA" />
+      <StatusBar barStyle="light-content" backgroundColor="#059669" />
       <Toast visible={showToast} message="Logged in successfully" onHide={() => setShowToast(false)} type="success" />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <LinearGradient colors={["#4338CA", "#6366F1"]} style={styles.headerGradient}>
+          <LinearGradient colors={["#059669", "#10B981"]} style={styles.headerGradient}>
             <View style={styles.iconCircle}>
               <Shield size={36} color="#FFFFFF" />
             </View>
@@ -134,12 +134,12 @@ const styles = StyleSheet.create({
   formCard: { backgroundColor: "#FFFFFF", marginHorizontal: 20, marginTop: -20, borderRadius: 24, padding: 24, shadowColor: "#000", shadowOffset: { width: 0, height: 8 }, shadowOpacity: 0.08, shadowRadius: 24, elevation: 5 },
   formTitle: { fontSize: 22, fontWeight: "800", color: "#0F172A", marginBottom: 24 },
   forgotContainer: { alignSelf: "flex-end", marginTop: -8, marginBottom: 24, padding: 4 },
-  forgotText: { color: "#6366F1", fontWeight: "700", fontSize: 13 },
+  forgotText: { color: "#10B981", fontWeight: "700", fontSize: 13 },
   loginButton: { marginBottom: 8 },
 
   footer: { flexDirection: "row", justifyContent: "center", alignItems: "center", marginTop: "auto", paddingVertical: 24 },
   footerText: { color: "#64748B", fontSize: 14 },
-  signUpText: { color: "#6366F1", fontWeight: "800", fontSize: 14 },
+  signUpText: { color: "#10B981", fontWeight: "800", fontSize: 14 },
 });
 
 export default LoginScreen;

@@ -43,7 +43,7 @@ interface ProfileData {
 
 const PLAN_COLORS: Record<string, [string, string]> = {
   free: ['#64748B', '#475569'],
-  pro: ['#6366F1', '#4F46E5'],
+  pro: ['#10B981', '#059669'],
   elite: ['#F59E0B', '#D97706'],
 };
 
@@ -75,10 +75,10 @@ export default function ControlPlansScreen() {
 
   const getDeviceIcon = (platform: string) => {
     const p = platform.toLowerCase();
-    if (p.includes('android') || p.includes('ios') || p === 'chrome') return <Smartphone size={20} color="#6366F1" />;
-    if (p.includes('tablet') || p.includes('ipad')) return <Tablet size={20} color="#6366F1" />;
-    if (p.includes('mac') || p.includes('windows')) return <Laptop size={20} color="#6366F1" />;
-    return <Monitor size={20} color="#6366F1" />;
+    if (p.includes('android') || p.includes('ios') || p === 'chrome') return <Smartphone size={20} color="#10B981" />;
+    if (p.includes('tablet') || p.includes('ipad')) return <Tablet size={20} color="#10B981" />;
+    if (p.includes('mac') || p.includes('windows')) return <Laptop size={20} color="#10B981" />;
+    return <Monitor size={20} color="#10B981" />;
   };
 
   return (
@@ -99,7 +99,7 @@ export default function ControlPlansScreen() {
       >
         {loading ? (
           <View style={s.loadingWrap}>
-            <ActivityIndicator size="large" color="#6366F1" />
+            <ActivityIndicator size="large" color="#10B981" />
           </View>
         ) : profile ? (
           <>
@@ -122,7 +122,7 @@ export default function ControlPlansScreen() {
               <View style={s.planStatsRow}>
                 <View style={s.planStat}>
                   <Shield size={14} color="rgba(255,255,255,0.7)" />
-                  <Text style={s.planStatValue}>{profile.planLimits.currentPolicies}/{profile.planLimits.maxPolicies ?? '\u221E'}</Text>
+                  <Text style={s.planStatValue}>{profile.planLimits.maxPolicies != null ? `${profile.planLimits.currentPolicies}/${profile.planLimits.maxPolicies}` : `${profile.planLimits.currentPolicies}`}</Text>
                   <Text style={s.planStatLabel}>Limits</Text>
                 </View>
                 <View style={s.planStat}>
@@ -146,7 +146,7 @@ export default function ControlPlansScreen() {
               </View>
               <View style={s.progressTrack}>
                 <LinearGradient
-                  colors={devicePct >= 100 ? ['#EF4444', '#DC2626'] : ['#6366F1', '#818CF8']}
+                  colors={devicePct >= 100 ? ['#EF4444', '#DC2626'] : ['#10B981', '#34D399']}
                   start={{ x: 0, y: 0 }}
                   end={{ x: 1, y: 0 }}
                   style={[s.progressFill, { width: `${Math.max(devicePct, 4)}%` }]}
@@ -195,7 +195,7 @@ export default function ControlPlansScreen() {
               <ChevronRight size={18} color="#CBD5E1" />
             </TouchableOpacity>
             <TouchableOpacity style={s.menuCard} onPress={() => navigation.navigate('AnalyticsScreen')}>
-              <Clock size={20} color="#6366F1" />
+              <Clock size={20} color="#10B981" />
               <View style={s.menuContent}>
                 <Text style={s.menuLabel}>Usage Analytics</Text>
               </View>
@@ -249,7 +249,7 @@ const s = StyleSheet.create({
   emptyText: { fontSize: 14, color: '#94A3B8', fontWeight: '500' },
 
   deviceCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFFFF', padding: 14, borderRadius: 14, borderWidth: 1, borderColor: '#E8ECF4', marginBottom: 8, gap: 12, shadowColor: '#64748B', shadowOffset: { width: 0, height: 1 }, shadowOpacity: 0.04, shadowRadius: 4, elevation: 1 },
-  deviceIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#EEF2FF', alignItems: 'center', justifyContent: 'center' },
+  deviceIconWrap: { width: 40, height: 40, borderRadius: 12, backgroundColor: '#F0FDF4', alignItems: 'center', justifyContent: 'center' },
   deviceInfo: { flex: 1 },
   deviceName: { fontSize: 14, fontWeight: '600', color: '#0F172A' },
   devicePlatform: { fontSize: 12, color: '#94A3B8', marginTop: 2 },

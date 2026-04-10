@@ -136,6 +136,17 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
                     }
                     promise.resolve("OK")
                 }
+                "UNBLOCK_APP" -> {
+                    val pkg = params.getString("package") ?: ""
+                    if (pkg.isNotEmpty()) {
+                        TimerStateManager.blockedPackages.remove(pkg)
+                        val timer = TimerStateManager.activeTimers[pkg]
+                        if (timer != null && timer.status == "blocked") {
+                            TimerStateManager.activeTimers[pkg] = timer.copy(usedSeconds = 0, status = "waiting")
+                        }
+                    }
+                    promise.resolve("OK")
+                }
                 "STOP" -> {
                     val intent = Intent(reactContext, LimitterForegroundService::class.java).apply {
                         action = LimitterForegroundService.ACTION_STOP

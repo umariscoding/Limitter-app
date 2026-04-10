@@ -19,7 +19,7 @@ import { subscriptionPlans } from '../data/appData';
 import { useUser } from '../context/UserContext';
 import { useDeviceResolver } from '../hooks/useDeviceResolver';
 import { grantTemporaryOverrideAccess } from '../services/appBlockerService';
-import { grantOverrideCreditsAPI, useOverrideAPI } from '../services/overrideService';
+import { grantOverrideCreditsAPI, useOverrideAPI, getOverrideBalanceAPI } from '../services/overrideService';
 import { getPoliciesAPI } from '../services/policyService';
 import { getPlanOverrideLimit, normalizePlan } from '../utils/planRules';
 import { upgradePlanAPI } from '../services/planGuardService';
@@ -78,7 +78,14 @@ export default function SubscriptionPlansScreen() {
     try {
       const result = await upgradePlanAPI(newPlan);
       const confirmedPlan = result?.planCode || newPlan;
-      updateUser({ plan: confirmedPlan, overrides_left: getPlanOverrideLimit(confirmedPlan) });
+
+      // Fetch fresh override balance from backend after upgrade
+      let overrideCount = getPlanOverrideLimit(confirmedPlan);
+      try {
+        const balance = await getOverrideBalanceAPI();
+        overrideCount = balance.totalAvailable;
+      } catch { /* use fallback */ }
+      updateUser({ plan: confirmedPlan, overrides_left: overrideCount });
       Alert.alert('Plan Activated!', `You are now on the ${selectedPlan.name} plan.`, [{
         text: 'Go to Dashboard',
         onPress: () => navigation.navigate('DashboardScreen', { planUpdatedAt: Date.now() }),
@@ -241,7 +248,7 @@ export default function SubscriptionPlansScreen() {
           <Text style={s.trustText}>30-day money back guarantee</Text>
         </View>
 
-        <View style={{ height: 140 }} />
+        <View style={{ height: 180 }} />
       </ScrollView>
 
       <View style={s.footer}>
@@ -305,7 +312,7 @@ const s = StyleSheet.create({
   trustRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 },
   trustText: { fontSize: 12, color: '#10B981', fontWeight: '600' },
 
-  footer: { position: 'absolute', bottom: 56, left: 0, right: 0, backgroundColor: '#FFFFFF', paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#F1F5F9', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10 },
+  footer: { position: 'absolute', bottom: Platform.OS === 'ios' ? 88 : 72, left: 0, right: 0, backgroundColor: '#FFFFFF', paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#F1F5F9', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10 },
   footerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   footerPlan: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
   footerPrice: { fontSize: 18, fontWeight: '800', color: '#0F172A', marginTop: 2 },
