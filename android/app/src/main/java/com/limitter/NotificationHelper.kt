@@ -35,11 +35,10 @@ object NotificationHelper {
     }
 
     fun build(context: Context, foregroundPkg: String?): Notification {
-        val activeTimers = TimerStateManager.activeTimers.values.filter {
-            it.status == "RUNNING" || it.status == "WARNING"
-        }
+        val now = System.currentTimeMillis()
+        val activeTimers = TimerStateManager.activeTimers.values.filter { it.status == "active" }
         val activeCount = activeTimers.size
-        val blockedCount = TimerStateManager.activeTimers.values.count { it.status == "BLOCKED" }
+        val blockedCount = TimerStateManager.activeTimers.values.count { it.status == "blocked" }
 
         val title = when {
             activeCount > 0 -> "Tracking $activeCount app${if (activeCount > 1) "s" else ""}"
@@ -49,7 +48,10 @@ object NotificationHelper {
 
         val text = if (activeTimers.isNotEmpty()) {
             activeTimers.joinToString("\n") { t ->
-                val remaining = maxOf(0, t.durationSeconds - t.usedSeconds)
+                val liveSessionSeconds = if (t.lastActiveTimestamp > 0)
+                    maxOf(0, ((now - t.lastActiveTimestamp) / 1000).toInt())
+                else 0
+                val remaining = maxOf(0, t.durationSeconds - t.usedSeconds - liveSessionSeconds)
                 "${t.appName} \u2022 ${formatTime(remaining)} left"
             }
         } else if (blockedCount > 0) {

@@ -215,7 +215,7 @@ export default function OverrideLogsScreen() {
         )}
       </ScrollView>
 
-      <BottomNav active="settings" />
+      <BottomNav active="overrides" />
     </SafeAreaView>
   );
 }

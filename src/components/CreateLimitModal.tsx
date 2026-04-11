@@ -10,10 +10,9 @@ import {
   Platform,
   Alert,
 } from 'react-native';
-import { getInstalledApps, InstalledApp } from '../services/appListService';
+import { getInstalledApps, getCachedApps, InstalledApp } from '../services/appListService';
 import { filterInstalledApps } from '../helpers/helper';
 import type { CreateLimitState } from '../hooks/useCreateLimit';
-
 interface PlanLimitsData {
   planCode: string;
   maxPolicies: number | null;
@@ -51,8 +50,15 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
   const [clockMinute, setClockMinute] = useState('00');
   const [clockPeriod, setClockPeriod] = useState<'AM' | 'PM'>('PM');
 
+
   useEffect(() => {
-    if (visible && installedAppsList.length === 0) {
+    if (!visible) return;
+
+    const cached = getCachedApps();
+
+    if (cached) {
+      setInstalledAppsList(cached);
+    } else {
       loadInstalledApps();
     }
   }, [visible]);
@@ -285,15 +291,15 @@ const s = StyleSheet.create({
   card: { backgroundColor: '#FFFFFF', borderRadius: 16, padding: 16 },
   titleRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 12 },
   title: { fontSize: 18, fontWeight: '700', color: '#0F172A' },
-  limitCounter: { fontSize: 13, fontWeight: '700', color: '#08b341e0', backgroundColor: '#EEF2FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, overflow: 'hidden' },
+  limitCounter: { fontSize: 13, fontWeight: '700', color: '#10B981', backgroundColor: '#EEF2FF', paddingHorizontal: 10, paddingVertical: 4, borderRadius: 8, overflow: 'hidden' },
   planRestrictionBanner: { backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A', borderRadius: 8, padding: 10, marginBottom: 10 },
   planRestrictionText: { fontSize: 12, color: '#92400E', fontWeight: '600' },
   subTitle: { color: '#334155', fontWeight: '700', marginBottom: 8, marginTop: 4 },
   selectorRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   selectorBtn: { flex: 1, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, paddingVertical: 9, alignItems: 'center', backgroundColor: '#F8FAFC' },
-  selectorBtnActive: { borderColor: '#08b341e0', backgroundColor: '#EEF2FF' },
+  selectorBtnActive: { borderColor: '#10B981', backgroundColor: '#EEF2FF' },
   selectorBtnText: { color: '#475569', fontWeight: '600', fontSize: 12 },
-  selectorBtnTextActive: { color: '#08b341e0' },
+  selectorBtnTextActive: { color: '#10B981' },
   input: { borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 12 : 10, fontSize: 14, color: '#0F172A', marginBottom: 10, backgroundColor: '#F8FAFC' },
   availableText: { color: '#64748B', fontSize: 11, marginBottom: 6 },
   suggestionList: { maxHeight: 180, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, backgroundColor: '#FFFFFF' },
@@ -304,9 +310,9 @@ const s = StyleSheet.create({
   emptyAppsText: { color: '#94A3B8', fontSize: 12, textAlign: 'center', paddingVertical: 12 },
   categoryWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },
   categoryChip: { borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 999, paddingHorizontal: 10, paddingVertical: 6, backgroundColor: '#F8FAFC' },
-  categoryChipActive: { borderColor: '#08b341e0', backgroundColor: '#EEF2FF' },
+  categoryChipActive: { borderColor: '#10B981', backgroundColor: '#EEF2FF' },
   categoryChipText: { color: '#475569', fontSize: 12, fontWeight: '600' },
-  categoryChipTextActive: { color: '#08b341e0' },
+  categoryChipTextActive: { color: '#10B981' },
   timeRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   timeBox: { flex: 1 },
   timeLabel: { color: '#64748B', fontSize: 11, marginBottom: 4, fontWeight: '700' },
@@ -316,7 +322,7 @@ const s = StyleSheet.create({
   actions: { flexDirection: 'row', justifyContent: 'flex-end', marginTop: 4 },
   actionBtn: { paddingHorizontal: 14, paddingVertical: 10, borderRadius: 10, marginLeft: 8 },
   cancelBtn: { backgroundColor: '#E2E8F0' },
-  createBtn: { backgroundColor: '#08b341e0' },
+  createBtn: { backgroundColor: '#10B981' },
   cancelText: { color: '#334155', fontWeight: '700' },
   createText: { color: '#FFFFFF', fontWeight: '700' },
 });

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -23,6 +23,8 @@ import {
   Zap,
   ChevronRight,
 } from 'lucide-react-native';
+import { preloadInstalledApps } from '../services/appListService';
+
 import { useUser } from '../context/UserContext';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
@@ -82,7 +84,6 @@ export default function DashboardScreen() {
   useNativeTimerSync(setLimits);
   useUsageReporter(limits, deviceId, user?.accountId);
   useLockStateSync(user?.accountId);
-
   const fetchLimits = async () => {
     if (!user?.uid || !deviceId) {
       setLoading(false);
@@ -129,31 +130,54 @@ export default function DashboardScreen() {
     setLoading(true);
     fetchLimits();
   };
+  useEffect(() => {
+    preloadInstalledApps();
+  }, []);
+  const lastFetchRef = useRef(0);
 
   useEffect(() => {
+    if (!deviceId) return;
+
+    const now = Date.now();
+
+    if (now - lastFetchRef.current < 2000) return;
+
+    lastFetchRef.current = now;
     focusHandlerRef.current();
 
-    // Auto-refresh on network reconnect (flush queue → fetch fresh data)
     const { onReconnect } = require('../services/networkService');
     const unsub = onReconnect(() => {
-      if (deviceId) fetchLimits();
+      if (!deviceId) return;
+
+      const nowReconnect = Date.now();
+
+
+      if (nowReconnect - lastFetchRef.current < 2000) return;
+
+      lastFetchRef.current = nowReconnect;
+
+      fetchLimits();
     });
+
     return () => unsub();
   }, [deviceId, route?.params?.refreshAt]);
 
   const onRefresh = () => { setRefreshing(true); fetchLimits(); };
 
-  const handleOpenCreateModal = async () => {
-    const check = await canCreatePolicy();
-    setPlanLimits(check.limits);
-    if (!check.allowed) {
-      Alert.alert('Plan Limit Reached', check.reason || 'Upgrade for more limits.', [
-        { text: 'Cancel', style: 'cancel' },
-        { text: 'Upgrade', onPress: () => navigation.navigate('SubscriptionPlansScreen') },
-      ]);
-      return;
-    }
-    setShowCreateModal(true);
+  const handleOpenCreateModal = () => {
+    setShowCreateModal(true); // 🚀 instant open
+
+    canCreatePolicy().then(check => {
+      setPlanLimits(check.limits);
+
+      if (!check.allowed) {
+        setShowCreateModal(false);
+        Alert.alert('Plan Limit Reached', check.reason || 'Upgrade required', [
+          { text: 'Cancel', style: 'cancel' },
+          { text: 'Upgrade', onPress: () => navigation.navigate('SubscriptionPlansScreen') },
+        ]);
+      }
+    });
   };
 
   const handleCreateSubmit = async (state: CreateLimitState) => {
@@ -346,7 +370,7 @@ const styles = StyleSheet.create({
   body: { padding: 20, marginTop: -12, borderTopLeftRadius: 20, borderTopRightRadius: 20, backgroundColor: '#F1F5F9' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
-  addBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#63f1afff', alignItems: 'center', justifyContent: 'center', shadowColor: '#63f1afff', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
+  addBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#10B981', alignItems: 'center', justifyContent: 'center', shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
 
   emptyState: { alignItems: 'center', paddingVertical: 40, backgroundColor: '#FFFFFF', borderRadius: 20, borderWidth: 1, borderColor: '#E8ECF4' },
   emptyIconWrap: { width: 72, height: 72, borderRadius: 36, backgroundColor: '#F8FAFC', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },

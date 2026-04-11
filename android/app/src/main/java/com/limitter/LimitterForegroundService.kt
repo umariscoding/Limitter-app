@@ -107,7 +107,9 @@ class LimitterForegroundService : Service() {
     }
 
     private fun pollForegroundApp() {
-        val detected = ForegroundDetector.detect(this)
+        val detection = ForegroundDetector.detect(this)
+        val detected = detection?.first
+        val detectedEventTs = detection?.second
         val foregroundPkg = detected ?: lastDetectedForeground
         val now = System.currentTimeMillis()
         val today = todayDate()
@@ -131,16 +133,18 @@ class LimitterForegroundService : Service() {
                 }
 
                 if (timer.status != "active") {
-                    // Session start — record timestamp, don't count time yet
+                    // Session start — use the real ACTIVITY_RESUMED timestamp, not poll time,
+                    // so UsageStats aggregation latency doesn't steal seconds.
+                    val sessionStartTs = detectedEventTs ?: now
                     TimerStateManager.updateTimer(pkg, timer.copy(
                         status = "active",
-                        lastActiveTimestamp = now
+                        lastActiveTimestamp = sessionStartTs
                     ))
                     val remaining = timer.durationSeconds - timer.usedSeconds
                     TimerEventModule.sendTickEvent(pkg, timer.appName, remaining, false, "active")
                 } else {
                     // Ongoing session — compute from session start, no per-tick accumulation
-                    val sessionSeconds = ((now - timer.lastActiveTimestamp) / 1000).toInt()
+                    val sessionSeconds = maxOf(0, ((now - timer.lastActiveTimestamp) / 1000).toInt())
                     val effectiveUsed = timer.usedSeconds + sessionSeconds
                     val remaining = timer.durationSeconds - effectiveUsed
 
@@ -162,8 +166,10 @@ class LimitterForegroundService : Service() {
                 }
             } else {
                 if (timer.status == "active") {
-                    // Session end — commit elapsed time from this session
-                    val sessionSeconds = ((now - timer.lastActiveTimestamp) / 1000).toInt()
+                    // Session end — use the NEW foreground app's event timestamp (≈ the instant
+                    // the target went background) so we don't over-count poll/usage-stats lag.
+                    val sessionEndTs = detectedEventTs ?: now
+                    val sessionSeconds = maxOf(0, ((sessionEndTs - timer.lastActiveTimestamp) / 1000).toInt())
                     TimerStateManager.updateTimer(pkg, timer.copy(
                         usedSeconds = timer.usedSeconds + sessionSeconds,
                         status = "waiting",
@@ -218,8 +224,10 @@ class LimitterForegroundService : Service() {
                     val remaining = timer.durationSeconds - timer.usedSeconds
                     TimerEventModule.sendTickEvent(key, domain, remaining, false, "active")
                 } else {
-                    // Ongoing session — compute from absolute session start
-                    val sessionSeconds = ((now - timer.lastActiveTimestamp) / 1000).toInt()
+                    // Ongoing session — usedSeconds is NOT mutated here; we only recompute
+                    // effectiveUsed locally from the single lastActiveTimestamp anchor, so
+                    // there is no double counting even though this runs every poll.
+                    val sessionSeconds = maxOf(0, ((now - timer.lastActiveTimestamp) / 1000).toInt())
                     val effectiveUsed = timer.usedSeconds + sessionSeconds
                     val remaining = timer.durationSeconds - effectiveUsed
 
@@ -240,8 +248,8 @@ class LimitterForegroundService : Service() {
                 }
             } else {
                 if (timer.status == "active") {
-                    // Session end — commit elapsed time
-                    val sessionSeconds = ((now - timer.lastActiveTimestamp) / 1000).toInt()
+                    // Session end — commit elapsed time from this single session once
+                    val sessionSeconds = maxOf(0, ((now - timer.lastActiveTimestamp) / 1000).toInt())
                     websiteLastConfirmed.remove(key)
                     TimerStateManager.updateTimer(key, timer.copy(
                         usedSeconds = timer.usedSeconds + sessionSeconds,

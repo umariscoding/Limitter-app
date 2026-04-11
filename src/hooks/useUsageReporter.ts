@@ -172,6 +172,26 @@ export function useUsageReporter(
 
     for (const [pkg, session] of toTick) {
       const delta = session.unsentDelta;
+      const locallyExhausted = () =>
+        session.limitSeconds > 0 && session.accumulatedSeconds >= session.limitSeconds;
+
+      const enforceBlock = () => {
+        setPoliciesRef.current(prev =>
+          prev.map(item => {
+            if (getPolicyPackageKey(item) !== pkg) return item;
+            return { ...item, is_blocked: true, status: 'blocked' as const };
+          }),
+        );
+        const blockedUntil = Date.now() + 24 * 60 * 60 * 1000;
+        const payload = [{
+          package_name: pkg,
+          app_name: session.targetKey,
+          blocked_until_timestamp: blockedUntil,
+        }];
+        startAppBlockerService(payload);
+        updateBlockedApps(payload);
+      };
+
       try {
         const response = await tickUsageAPI({
           policyId: session.policyId,
@@ -186,16 +206,8 @@ export function useUsageReporter(
         session.lastSentSeconds = session.accumulatedSeconds;
         session.unsentDelta = 0;
 
-        if (response.isExhausted) {
-          setPoliciesRef.current(prev =>
-            prev.map(item => {
-              if (getPolicyPackageKey(item) !== pkg) return item;
-              return { ...item, is_blocked: true, status: 'blocked' as const };
-            }),
-          );
-
-          startAppBlockerService([{ package_name: pkg, app_name: session.targetKey }]);
-          updateBlockedApps([{ package_name: pkg, app_name: session.targetKey }]);
+        if (response.isExhausted || locallyExhausted()) {
+          enforceBlock();
         }
       } catch {
         // Queue failed delta for replay on reconnect
@@ -205,6 +217,9 @@ export function useUsageReporter(
           deltaSeconds: delta,
           timestamp: Date.now(),
         });
+        if (locallyExhausted()) {
+          enforceBlock();
+        }
       }
     }
 

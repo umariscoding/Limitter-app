@@ -8,6 +8,8 @@ export interface InstalledApp {
   icon?: string;
 }
 
+let cachedApps: InstalledApp[] | null = null;
+
 export const getInstalledApps = async (): Promise<InstalledApp[]> => {
   try {
     if (AppListModule?.getInstalledApps) {
@@ -28,4 +30,13 @@ export const getInstalledApps = async (): Promise<InstalledApp[]> => {
   } catch {
     return [];
   }
+};
+
+export const getCachedApps = (): InstalledApp[] | null => cachedApps;
+
+export const preloadInstalledApps = async (): Promise<InstalledApp[]> => {
+  if (cachedApps) return cachedApps;
+  const apps = await getInstalledApps();
+  cachedApps = apps;
+  return apps;
 };

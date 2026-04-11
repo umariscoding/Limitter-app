@@ -80,8 +80,10 @@ export default function AnalyticsScreen() {
   };
 
   useEffect(() => {
+    // if (!deviceId) return;
+    if (!user?.accountId) return;
     fetchWeekly();
-  }, [deviceId]);
+  }, [user?.accountId]);
 
   // Override today's bar with real-time total from policies (same source as dashboard)
   const graphData = useMemo(() => {

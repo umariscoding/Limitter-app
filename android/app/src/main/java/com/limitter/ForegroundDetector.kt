@@ -8,7 +8,7 @@ import android.util.Log
 object ForegroundDetector {
     private const val TAG = "FgDetector"
 
-    fun detect(context: Context): String? {
+    fun detect(context: Context): Pair<String, Long>? {
         try {
             val usm = context.getSystemService(Context.USAGE_STATS_SERVICE) as UsageStatsManager
             val now = System.currentTimeMillis()
@@ -30,7 +30,7 @@ object ForegroundDetector {
                 }
 
                 if (lastForegroundPkg != null) {
-                    return lastForegroundPkg
+                    return Pair(lastForegroundPkg, lastForegroundTime)
                 }
             } catch (e: Exception) {
                 Log.e(TAG, "queryEvents failed", e)
@@ -42,7 +42,10 @@ object ForegroundDetector {
                 now
             )
             if (!stats.isNullOrEmpty()) {
-                return stats.maxByOrNull { it.lastTimeUsed }?.packageName
+                val top = stats.maxByOrNull { it.lastTimeUsed }
+                if (top != null) {
+                    return Pair(top.packageName, top.lastTimeUsed)
+                }
             }
         } catch (e: Exception) {
             Log.e(TAG, "detect failed", e)

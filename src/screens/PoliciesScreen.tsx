@@ -55,7 +55,11 @@ export default function PoliciesScreen() {
   const fetchRef = useRef(fetchPolicies);
   fetchRef.current = fetchPolicies;
 
+  const hasFetchedRef = useRef(false);
   useEffect(() => {
+    if (hasFetchedRef.current) return;
+
+    hasFetchedRef.current = true;
     fetchRef.current();
   }, []);
 
@@ -177,13 +181,13 @@ export default function PoliciesScreen() {
             s.statusPill,
             item.status === 'blocked' ? s.statusBlocked
               : item.status === 'active' ? s.statusActive
-              : s.statusInactive,
+                : s.statusInactive,
           ]}>
             <Text style={[
               s.statusText,
               item.status === 'blocked' ? s.statusBlockedText
                 : item.status === 'active' ? s.statusActiveText
-                : s.statusInactiveText,
+                  : s.statusInactiveText,
             ]}>
               {item.status === 'blocked' ? 'BLOCKED' : item.status === 'active' ? 'ACTIVE' : 'TRACKING'}
             </Text>
@@ -201,7 +205,7 @@ export default function PoliciesScreen() {
               { width: `${pct}%` },
               item.status === 'blocked' ? s.progressFillBlocked
                 : item.status === 'active' ? s.progressFillActive
-                : s.progressFillInactive,
+                  : s.progressFillInactive,
             ]} />
           </View>
         </View>

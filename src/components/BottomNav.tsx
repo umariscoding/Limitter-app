@@ -2,8 +2,8 @@ import React from 'react';
 import { View, TouchableOpacity, Text, StyleSheet, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Home, Shield, BarChart2, Settings as SettingsIcon } from 'lucide-react-native';
-
-type ActiveTab = 'home' | 'limits' | 'analytics' | 'settings';
+import { FileText } from 'lucide-react-native';
+type ActiveTab = 'home' | 'limits' | 'analytics' | 'settings' | 'overrides';
 
 interface BottomNavProps {
   active: ActiveTab;
@@ -14,6 +14,7 @@ const TABS: Array<{ key: ActiveTab; label: string; screen: string }> = [
   { key: 'limits', label: 'Limits', screen: 'PoliciesScreen' },
   { key: 'analytics', label: 'Analytics', screen: 'AnalyticsScreen' },
   { key: 'settings', label: 'Settings', screen: 'SettingsScreen' },
+  { key: 'overrides', label: 'Overrides', screen: 'OverrideLogsScreen' },
 ];
 
 const TAB_ICONS: Record<ActiveTab, (color: string) => React.ReactNode> = {
@@ -21,10 +22,11 @@ const TAB_ICONS: Record<ActiveTab, (color: string) => React.ReactNode> = {
   limits: (color) => <Shield size={22} color={color} />,
   analytics: (color) => <BarChart2 size={22} color={color} />,
   settings: (color) => <SettingsIcon size={22} color={color} />,
+  overrides: (color) => <FileText size={22} color={color} />,
 };
 
-const ACTIVE_COLOR = '#08b341e0';
-const INACTIVE_COLOR = '#08b341e0';
+const ACTIVE_COLOR = '#000000';
+const INACTIVE_COLOR = '#000000';
 
 export default function BottomNav({ active }: BottomNavProps) {
   const navigation = useNavigation<any>();
