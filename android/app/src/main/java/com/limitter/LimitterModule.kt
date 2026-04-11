@@ -133,6 +133,17 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
                     val pkg = params.getString("package") ?: ""
                     if (pkg.isNotEmpty()) {
                         TimerStateManager.markBlocked(pkg)
+                        // Also flip timer.status to "blocked" so the poll loop catches it.
+                        // markBlocked only updates blockedPackages (a dead set); the actual
+                        // blocking decision in pollForegroundApp reads timer.status.
+                        val timer = TimerStateManager.activeTimers[pkg]
+                        if (timer != null && timer.status != "blocked") {
+                            TimerStateManager.activeTimers[pkg] = timer.copy(
+                                usedSeconds = timer.durationSeconds,
+                                status = "blocked",
+                                lastActiveTimestamp = 0
+                            )
+                        }
                     }
                     promise.resolve("OK")
                 }
@@ -263,17 +274,31 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
     @ReactMethod
     fun getActiveTimers(promise: Promise) {
         try {
-            if (!LimitterForegroundService.isRunning()) {
-                promise.resolve(WritableNativeArray())
-                return
+            // Do NOT gate on LimitterForegroundService.isRunning(). The service can be killed
+            // by Android (memory / battery optimization) while the JS process stays alive, and
+            // TimerStateManager.activeTimers is a process-wide singleton that still holds the
+            // correct blocked/active state. If the whole process was restarted and the service
+            // hasn't been re-created yet, lazy-restore from SharedPreferences so the dashboard
+            // refresh reflects the persisted state.
+            if (TimerStateManager.activeTimers.isEmpty()) {
+                TimerStateManager.loadFromPrefs(reactContext)
             }
 
+            val now = System.currentTimeMillis()
             val result = WritableNativeArray()
             for ((pkg, timer) in TimerStateManager.activeTimers) {
                 val map = WritableNativeMap()
                 map.putString("package", pkg)
                 map.putString("name", timer.appName)
-                map.putInt("remainingSeconds", maxOf(0, timer.durationSeconds - timer.usedSeconds))
+                // Factor in the currently-running session so remainingSeconds reflects
+                // real-time usage. Matches the math used by NotificationHelper.
+                val liveSessionSeconds = if (timer.status == "active" && timer.lastActiveTimestamp > 0) {
+                    maxOf(0, ((now - timer.lastActiveTimestamp) / 1000).toInt())
+                } else {
+                    0
+                }
+                val remaining = maxOf(0, timer.durationSeconds - timer.usedSeconds - liveSessionSeconds)
+                map.putInt("remainingSeconds", remaining)
                 map.putInt("liveTimerUsageBudgetSeconds", timer.durationSeconds)
                 map.putString("status", timer.status)
                 result.pushMap(map)

@@ -121,6 +121,13 @@ class LimitterForegroundService : Service() {
         if (foregroundPkg == null) return
 
         for ((pkg, timer) in TimerStateManager.activeTimers.toMap()) {
+            // Skip website timers entirely — they have their own polling loop below.
+            // Without this guard, the app loop's session-end branch (pkg != foregroundPkg
+            // is always true for a "website:..." key) would thrash website status between
+            // "active" and "waiting" every poll, preventing the website blocking check from
+            // ever running.
+            if (TimerStateManager.isWebsiteTimer(pkg)) continue
+
             if (timer.startDate != today) {
                 TimerStateManager.resetForNewDay(pkg, timer, today)
                 continue
@@ -133,9 +140,13 @@ class LimitterForegroundService : Service() {
                 }
 
                 if (timer.status != "active") {
-                    // Session start — use the real ACTIVITY_RESUMED timestamp, not poll time,
-                    // so UsageStats aggregation latency doesn't steal seconds.
-                    val sessionStartTs = detectedEventTs ?: now
+                    // Anchor the session to `now`, not detectedEventTs. Anchoring to the real
+                    // ACTIVITY_RESUMED timestamp would make the UI skip a second at session start:
+                    // the first tick sends remaining=duration (e.g. 60), then the next poll 1s
+                    // later computes sessionSeconds=2 (because the event is ~1s old) and sends
+                    // remaining=58. Using `now` keeps the countdown smooth (60 → 59 → 58 …).
+                    // Clamped to createdAt defensively; now >= createdAt always holds.
+                    val sessionStartTs = maxOf(now, timer.createdAt)
                     TimerStateManager.updateTimer(pkg, timer.copy(
                         status = "active",
                         lastActiveTimestamp = sessionStartTs
@@ -170,11 +181,20 @@ class LimitterForegroundService : Service() {
                     // the target went background) so we don't over-count poll/usage-stats lag.
                     val sessionEndTs = detectedEventTs ?: now
                     val sessionSeconds = maxOf(0, ((sessionEndTs - timer.lastActiveTimestamp) / 1000).toInt())
+                    val newUsed = timer.usedSeconds + sessionSeconds
+                    // If this commit pushes us past the limit, transition directly to "blocked"
+                    // so a subsequent dashboard refresh correctly reflects the state.
+                    val newStatus = if (newUsed >= timer.durationSeconds) "blocked" else "waiting"
                     TimerStateManager.updateTimer(pkg, timer.copy(
-                        usedSeconds = timer.usedSeconds + sessionSeconds,
-                        status = "waiting",
+                        usedSeconds = newUsed,
+                        status = newStatus,
                         lastActiveTimestamp = 0
                     ))
+                    if (newStatus == "blocked") {
+                        TimerStateManager.markBlocked(pkg)
+                        TimerEventModule.sendBlockedEvent(pkg, timer.appName)
+                        TimerStateManager.persistToPrefs(this)
+                    }
                 }
             }
         }

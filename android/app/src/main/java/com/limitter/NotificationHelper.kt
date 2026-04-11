@@ -48,11 +48,13 @@ object NotificationHelper {
 
         val text = if (activeTimers.isNotEmpty()) {
             activeTimers.joinToString("\n") { t ->
-                val liveSessionSeconds = if (t.lastActiveTimestamp > 0)
-                    maxOf(0, ((now - t.lastActiveTimestamp) / 1000).toInt())
-                else 0
-                val remaining = maxOf(0, t.durationSeconds - t.usedSeconds - liveSessionSeconds)
-                "${t.appName} \u2022 ${formatTime(remaining)} left"
+                val liveSessionSeconds = if (t.status == "active" && t.lastActiveTimestamp > 0)
+               ((now - t.lastActiveTimestamp) / 1000).toInt()
+                else 0  
+                // Elapsed (counting up) so the notification moves in the same direction as the
+                // in-app progress bar (which fills as time_used_minutes grows).
+                val elapsed = minOf(t.durationSeconds, t.usedSeconds + liveSessionSeconds)
+                "${t.appName} \u2022 ${formatTime(elapsed)} / ${formatTime(t.durationSeconds)}"
             }
         } else if (blockedCount > 0) {
             "Limit reached. Use an override to continue."

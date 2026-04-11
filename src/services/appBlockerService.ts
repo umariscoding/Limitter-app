@@ -173,38 +173,35 @@ export const getWebsiteBlockerStatus = async (): Promise<WebsiteBlockerStatus> =
   }
 };
 
+// Reset the native timer to a fresh window. UNBLOCK_APP sets usedSeconds=0 and status=waiting
+// on the existing entry, preserving durationSeconds (the original limit), so the user gets
+// another full max_time_minutes of usage before the limit re-blocks.
 export const grantTemporaryOverrideAccess = async (
   packageName: string,
-  appName: string,
-  minutes = 5
+  _appName: string,
+  _minutes = 5
 ) => {
-  // Explicitly unblock in native before starting fresh timer
   try {
     if (LimitterModule?.sendCommand) {
       await LimitterModule.sendCommand('UNBLOCK_APP', { package: packageName });
     }
   } catch { /* best effort */ }
   blockedApps.delete(packageName);
-
-  const safeSeconds = Math.max(60, Math.floor(minutes * 60));
-  return startAppUsageTimer(packageName, appName, safeSeconds);
+  return { success: true };
 };
 
 export const grantTemporaryWebsiteOverride = async (
   domain: string,
-  minutes = 5
+  _minutes = 5
 ) => {
   const nativeKey = `website:${domain.toLowerCase()}`;
-  // Unblock using the native website key format
   try {
     if (LimitterModule?.sendCommand) {
       await LimitterModule.sendCommand('UNBLOCK_APP', { package: nativeKey });
     }
   } catch { /* best effort */ }
   blockedApps.delete(nativeKey);
-
-  const safeSeconds = Math.max(60, Math.floor(minutes * 60));
-  return startWebsiteTimer({ websiteUrl: domain, durationSeconds: safeSeconds });
+  return { success: true };
 };
 
 export const startAppBlockerService = async (

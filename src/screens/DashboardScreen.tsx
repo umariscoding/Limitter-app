@@ -22,6 +22,7 @@ import {
   Smartphone,
   Zap,
   ChevronRight,
+  RefreshCcw,
 } from 'lucide-react-native';
 import { preloadInstalledApps } from '../services/appListService';
 
@@ -139,27 +140,14 @@ export default function DashboardScreen() {
     if (!deviceId) return;
 
     const now = Date.now();
-
     if (now - lastFetchRef.current < 2000) return;
 
     lastFetchRef.current = now;
     focusHandlerRef.current();
-
-    const { onReconnect } = require('../services/networkService');
-    const unsub = onReconnect(() => {
-      if (!deviceId) return;
-
-      const nowReconnect = Date.now();
-
-
-      if (nowReconnect - lastFetchRef.current < 2000) return;
-
-      lastFetchRef.current = nowReconnect;
-
-      fetchLimits();
-    });
-
-    return () => unsub();
+    // No onReconnect auto-refresh and no network-triggered refetch — the user wants
+    // the dashboard to only refresh via explicit actions (manual button, pull-to-refresh,
+    // override completion, limit creation). Spontaneous refreshes were flipping the
+    // blocked/active state unpredictably when stale backend data arrived.
   }, [deviceId, route?.params?.refreshAt]);
 
   const onRefresh = () => { setRefreshing(true); fetchLimits(); };
@@ -283,9 +271,19 @@ export default function DashboardScreen() {
         <View style={styles.body}>
           <View style={styles.sectionHeader}>
             <Text style={styles.sectionTitle}>Active Limits</Text>
-            <TouchableOpacity style={styles.addBtn} onPress={handleOpenCreateModal} activeOpacity={0.8}>
-              <PlusIcon size={16} color="#FFFFFF" />
-            </TouchableOpacity>
+            <View style={styles.sectionActions}>
+              <TouchableOpacity
+                style={styles.refreshBtn}
+                onPress={onRefresh}
+                activeOpacity={0.8}
+                disabled={refreshing}
+              >
+                <RefreshCcw size={16} color="#FFFFFF" />
+              </TouchableOpacity>
+              <TouchableOpacity style={styles.addBtn} onPress={handleOpenCreateModal} activeOpacity={0.8}>
+                <PlusIcon size={16} color="#FFFFFF" />
+              </TouchableOpacity>
+            </View>
           </View>
 
           {limits.length === 0 ? (
@@ -370,6 +368,8 @@ const styles = StyleSheet.create({
   body: { padding: 20, marginTop: -12, borderTopLeftRadius: 20, borderTopRightRadius: 20, backgroundColor: '#F1F5F9' },
   sectionHeader: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center', marginBottom: 16 },
   sectionTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
+  sectionActions: { flexDirection: 'row', alignItems: 'center', gap: 8 },
+  refreshBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#0F172A', alignItems: 'center', justifyContent: 'center', shadowColor: '#0F172A', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.25, shadowRadius: 8, elevation: 4 },
   addBtn: { width: 32, height: 32, borderRadius: 16, backgroundColor: '#10B981', alignItems: 'center', justifyContent: 'center', shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.3, shadowRadius: 8, elevation: 4 },
 
   emptyState: { alignItems: 'center', paddingVertical: 40, backgroundColor: '#FFFFFF', borderRadius: 20, borderWidth: 1, borderColor: '#E8ECF4' },

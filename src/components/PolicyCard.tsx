@@ -16,7 +16,6 @@ export default function PolicyCard({ limit, onOverride }: PolicyCardProps) {
   const isBlocked = limit.is_blocked;
   const isWarning = pct >= 75 && !isBlocked;
   const isActive = (limit.time_used_minutes || 0) > 0 && !isBlocked;
-  const remaining = Math.max(0, limit.max_time_minutes - (limit.time_used_minutes || 0));
 
   const progressColors: [string, string] = isBlocked
     ? ['#EF4444', '#DC2626']
@@ -59,7 +58,7 @@ export default function PolicyCard({ limit, onOverride }: PolicyCardProps) {
           </Text>
         </View>
         <Text style={[s.remainingText, isBlocked && s.remainingBlocked]}>
-          {isBlocked ? 'Limit reached' : `${formatUsageTime(remaining)} left`}
+          {isBlocked ? 'Limit reached' : `${Math.round(pct)}% used`}
         </Text>
       </View>
 
@@ -72,19 +71,17 @@ export default function PolicyCard({ limit, onOverride }: PolicyCardProps) {
         />
       </View>
 
-      {isBlocked && (
-        <TouchableOpacity onPress={() => onOverride(limit)} activeOpacity={0.8}>
-          <LinearGradient
-            colors={['#08b341e0', '#08b341e0']}
-            start={{ x: 0, y: 0 }}
-            end={{ x: 1, y: 0 }}
-            style={s.overrideBtn}
-          >
-            <Zap size={16} color="#FFFFFF" />
-            <Text style={s.overrideBtnText}>Use Override</Text>
-          </LinearGradient>
-        </TouchableOpacity>
-      )}
+      <TouchableOpacity onPress={() => onOverride(limit)} activeOpacity={0.8}>
+        <LinearGradient
+          colors={['#08b341e0', '#08b341e0']}
+          start={{ x: 0, y: 0 }}
+          end={{ x: 1, y: 0 }}
+          style={s.overrideBtn}
+        >
+          <Zap size={16} color="#FFFFFF" />
+          <Text style={s.overrideBtnText}>Use Override</Text>
+        </LinearGradient>
+      </TouchableOpacity>
     </View>
   );
 }

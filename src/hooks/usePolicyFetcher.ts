@@ -77,7 +77,10 @@ export function usePolicyFetcher() {
 
         setPolicies(prev => {
           const merged = reconcileWithContext(prev);
-          // Override path: explicitly unblock + reset the overridden package
+          // Override path: grantTemporaryOverrideAccess already sent UNBLOCK_APP which reset
+          // the native timer (usedSeconds=0, status=waiting) while preserving durationSeconds.
+          // We only sync UI state here — the user gets a fresh full limit window and the
+          // native poll loop will start a new session next time they open the app.
           finalLimits = merged.map((item: any) =>
             match(item, overriddenPkg)
               ? { ...item, is_blocked: false, time_used_minutes: 0, status: 'active' }
@@ -86,21 +89,6 @@ export function usePolicyFetcher() {
           return finalLimits;
         });
         setLastNativeUpdateAt(Date.now());
-
-        const overriddenLimit = finalLimits.find((l: any) => match(l, overriddenPkg));
-        if (overriddenLimit) {
-          const pkg = overriddenLimit.app_name || overriddenLimit.package_name;
-          const budgetSeconds = overriddenLimit.max_time_minutes * 60;
-          if (pkg && budgetSeconds > 0) {
-            try {
-              if (overriddenLimit.target_type === 'website') {
-                await startBulkWebsiteTimers([{ domain: pkg, durationSeconds: budgetSeconds }]);
-              } else {
-                await startAppUsageTimer(pkg, overriddenLimit.target_label || pkg, budgetSeconds);
-              }
-            } catch (_) { /* silenced */ }
-          }
-        }
       } else {
         // Normal refresh
         setPolicies(prev => {

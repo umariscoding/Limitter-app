@@ -7,9 +7,13 @@ import {
 import MainNavigator from "./src/navigation/MainNavigator";
 import { UserContextProvider, useUser } from "./src/context/UserContext";
 import { UsageContextProvider } from "./src/context/UsageContext";
-import { PolicyContextProvider } from "./src/context/PolicyContext";
+import { PolicyContextProvider, usePolicyContext } from "./src/context/PolicyContext";
 import { onAuthStateChanged, bootstrap } from "./src/auth/firebaseAuthService";
 import { startTimerRealtimeTracking, stopTimerRealtimeTracking } from "./src/services/timerRealtimeService";
+import { getOverrideBalanceAPI, useOverrideAPI } from "./src/services/overrideService";
+import { grantTemporaryOverrideAccess, grantTemporaryWebsiteOverride } from "./src/services/appBlockerService";
+import { resolveCurrentDeviceId } from "./src/services/currentDeviceService";
+import { getPolicyPackageKey } from "./src/utils/policyMapper";
 
 const navigationRef = createNavigationContainerRef<any>();
 
@@ -19,7 +23,8 @@ type OverrideLinkPayload = {
 };
 
 function AppInner(): React.JSX.Element {
-  const { setFirebaseUser, setAccountData, setIsLoading, clearUser } = useUser();
+  const { user, updateUser, setFirebaseUser, setAccountData, setIsLoading, clearUser } = useUser();
+  const { policies } = usePolicyContext();
   const [bootstrapError, setBootstrapError] = React.useState<string | null>(null);
   const [retrying, setRetrying] = React.useState(false);
   const pendingOverrideRef = React.useRef<OverrideLinkPayload | null>(null);
@@ -46,17 +51,81 @@ function AppInner(): React.JSX.Element {
     [],
   );
 
-  const openOverrideFlow = React.useCallback((payload: OverrideLinkPayload) => {
+  const openOverrideFlow = React.useCallback(async (payload: OverrideLinkPayload) => {
     if (!navigationRef.isReady()) {
       pendingOverrideRef.current = payload;
       return;
     }
-    navigationRef.navigate("SubscriptionPlansScreen", {
-      fromBlockingOverride: true,
-      packageName: payload.packageName,
-      appName: payload.appName,
-    });
-  }, []);
+
+    const goToPlans = () =>
+      navigationRef.navigate("SubscriptionPlansScreen", {
+        fromBlockingOverride: true,
+        packageName: payload.packageName,
+        appName: payload.appName,
+      });
+    const goToConfirm = (targetType: string) =>
+      navigationRef.navigate("ConfirmOverrideScreen", {
+        packageName: payload.packageName,
+        appName: payload.appName,
+        targetType,
+      });
+
+    // If the user has no override credits, show the upgrade screen (the "popup").
+    // If they do have credits, silently consume one and land on the dashboard — no popup.
+    let available = 0;
+    try {
+      const balance = await getOverrideBalanceAPI();
+      available = balance?.totalAvailable ?? 0;
+    } catch {
+      goToPlans();
+      return;
+    }
+
+    if (available <= 0) {
+      goToPlans();
+      return;
+    }
+
+    const normalizedPkg = String(payload.packageName).trim().toLowerCase();
+    const matching = (Array.isArray(policies) ? policies : [])
+      .filter((p: any) => {
+        const k = getPolicyPackageKey(p);
+        return k === normalizedPkg || k === `website:${normalizedPkg}`;
+      })
+      .sort((a: any, b: any) => (b.created_at || 0) - (a.created_at || 0))[0];
+
+    const limitId = matching?.id as string | undefined;
+    const targetType = (matching?.target_type as string) || "app";
+
+    let deviceId: string | null = null;
+    try {
+      deviceId = await resolveCurrentDeviceId(user?.uid);
+    } catch { /* fall through */ }
+
+    if (!limitId || !deviceId) {
+      goToConfirm(targetType);
+      return;
+    }
+
+    try {
+      await useOverrideAPI(limitId, deviceId);
+      updateUser({ overrides_left: Math.max(0, available - 1) });
+      if (targetType === "website") {
+        await grantTemporaryWebsiteOverride(payload.packageName, 5);
+      } else {
+        await grantTemporaryOverrideAccess(payload.packageName, payload.appName, 5);
+      }
+      const overriddenKey = targetType === "website"
+        ? `website:${normalizedPkg}`
+        : normalizedPkg;
+      navigationRef.navigate("DashboardScreen", {
+        refreshAt: Date.now(),
+        justOverriddenPackage: overriddenKey,
+      });
+    } catch {
+      goToConfirm(targetType);
+    }
+  }, [policies, user?.uid, updateUser]);
 
   const loadAccount = React.useCallback(async () => {
     try {

@@ -22,7 +22,10 @@ object TimerStateManager {
         var usedSeconds: Int = 0,
         var status: String = "waiting",
         var lastActiveTimestamp: Long = 0,
-        val startDate: String = todayDate()
+        val startDate: String = todayDate(),
+        // Moment this timer instance began tracking. Used to clamp session start anchors
+        // so usage before the limit existed is never charged against it.
+        val createdAt: Long = System.currentTimeMillis()
     )
 
     fun addTimers(appsJson: String) {
@@ -105,7 +108,13 @@ object TimerStateManager {
     }
 
     fun resetForNewDay(pkg: String, timer: TimerEntry, today: String): TimerEntry {
-        val reset = timer.copy(usedSeconds = 0, status = "waiting", startDate = today)
+        val reset = timer.copy(
+            usedSeconds = 0,
+            status = "waiting",
+            lastActiveTimestamp = 0,
+            startDate = today,
+            createdAt = System.currentTimeMillis()
+        )
         activeTimers[pkg] = reset
         blockedPackages.remove(pkg)
         return reset
@@ -127,6 +136,7 @@ object TimerStateManager {
                 obj.put("used", timer.usedSeconds)
                 obj.put("status", timer.status)
                 obj.put("startDate", timer.startDate)
+                obj.put("createdAt", timer.createdAt)
                 arr.put(obj)
             }
             prefs.edit().putString("timers", arr.toString()).apply()
@@ -149,14 +159,20 @@ object TimerStateManager {
 
                 if (startDate != today) continue
 
+                // A session cannot survive process death — coerce "active" back to "waiting"
+                // so the next foreground poll re-anchors lastActiveTimestamp cleanly.
+                val persistedStatus = obj.getString("status")
+                val status = if (persistedStatus == "active") "waiting" else persistedStatus
+
                 val entry = TimerEntry(
                     packageName = pkg,
                     appName = obj.getString("appName"),
                     durationSeconds = obj.getInt("duration"),
                     usedSeconds = obj.getInt("used"),
-                    status = obj.getString("status"),
+                    status = status,
                     lastActiveTimestamp = 0,
-                    startDate = startDate
+                    startDate = startDate,
+                    createdAt = obj.optLong("createdAt", System.currentTimeMillis())
                 )
                 activeTimers[pkg] = entry
                 if (entry.status == "blocked") {

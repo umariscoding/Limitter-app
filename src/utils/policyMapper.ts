@@ -158,30 +158,39 @@ export function mergeLiveTimerUsageIntoPolicies(
     if (item.target_type !== 'app' && item.target_type !== 'website') return item;
     const key = getPolicyPackageKey(item);
     const timer = byPkg.get(key);
+    // No native timer for this policy → fall back to backend data unchanged.
     if (!timer) return item;
 
     const budget = Math.max(0, Number(timer.liveTimerUsageBudgetSeconds) || 0);
     const remaining = Math.max(0, Number(timer.remainingSeconds) || 0);
     const liveTimerUsageSec = Math.max(0, Math.min(budget, budget - remaining));
-
-    const used = Number(item.time_used_minutes) || 0;
     const maxMin = Number(item.max_time_minutes) || 0;
-    const mergedUsed = maxMin > 0
-      ? Math.min(used + liveTimerUsageSec / 60, maxMin)
-      : used + liveTimerUsageSec / 60;
+    const nativeStatus = String(timer.status || '').toLowerCase();
 
-    let is_blocked = item.is_blocked;
-    let status = item.status;
-    if (maxMin > 0 && mergedUsed >= maxMin) {
-      is_blocked = true;
-      status = 'blocked';
+    // Native is the authoritative source of truth for this device's current state.
+    // Backend aggregates can be stale (not-yet-flushed usage, or stale "blocked" rows that
+    // survive an override), which was causing the refresh-flicker bug where the card would
+    // randomly flip between blocked and active after an override.
+    if (nativeStatus === 'blocked') {
+      return {
+        ...item,
+        is_blocked: true,
+        status: 'blocked' as const,
+        time_used_minutes: maxMin > 0 ? maxMin : liveTimerUsageSec / 60,
+        _nativeBudgetSeconds: budget > 0 ? budget : undefined,
+      };
     }
+
+    const nativeUsedMinutes = liveTimerUsageSec / 60;
+    const cappedUsed = maxMin > 0
+      ? Math.min(nativeUsedMinutes, maxMin)
+      : nativeUsedMinutes;
 
     return {
       ...item,
-      time_used_minutes: mergedUsed,
-      is_blocked,
-      status,
+      time_used_minutes: cappedUsed,
+      is_blocked: false,
+      status: cappedUsed > 0 ? ('active' as const) : item.status,
       _nativeBudgetSeconds: budget > 0 ? budget : undefined,
     };
   });
