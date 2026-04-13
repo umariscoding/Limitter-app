@@ -47,30 +47,26 @@ export default function AnalyticsScreen() {
     setWeeklyError(null);
     try {
       const days = await getWeeklyUsageAPI(user?.accountId);
+      const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const dayMap = new Map(days.map(d => [d.dateKey, d.totalMinutes]));
+      const today = new Date().toISOString().slice(0, 10);
 
-      // Map API data by day-of-week: Mon=0 … Sun=6
-      const WEEK_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      const slots: Array<{ dateKey: string; totalMinutes: number } | null> = new Array(7).fill(null);
-
-      for (const d of days) {
-        const date = new Date(d.dateKey + 'T12:00:00');
-        const jsDay = date.getDay(); // 0=Sun … 6=Sat
-        const monIdx = jsDay === 0 ? 6 : jsDay - 1; // Mon=0 … Sun=6
-        if (!slots[monIdx] || d.dateKey > slots[monIdx]!.dateKey) {
-          slots[monIdx] = d;
-        }
+      const points: typeof weeklyUsage = [];
+      let todayIdx = -1;
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateKey = date.toISOString().slice(0, 10);
+        const label = DAY_NAMES[date.getDay()];
+        points.push({
+          dateKey,
+          label,
+          totalMinutes: dayMap.get(dateKey) ?? 0,
+        });
+        if (dateKey === today) todayIdx = points.length - 1;
       }
 
-      // Build 7 points: Mon → Sun
-      const points: typeof weeklyUsage = WEEK_LABELS.map((label, idx) => ({
-        dateKey: slots[idx]?.dateKey || `day-${idx}`,
-        label,
-        totalMinutes: slots[idx]?.totalMinutes ?? 0,
-      }));
-
-      // Find today's index (Mon=0 … Sun=6)
-      const jsToday = new Date().getDay(); // 0=Sun … 6=Sat
-      setTodayIndex(jsToday === 0 ? 6 : jsToday - 1);
+      setTodayIndex(todayIdx);
       setWeeklyUsage(points);
     } catch {
       setWeeklyError('Failed to load weekly usage');
@@ -87,17 +83,8 @@ export default function AnalyticsScreen() {
 
   // Override today's bar with real-time total from policies (same source as dashboard)
   const graphData = useMemo(() => {
-    if (todayIndex < 0 || weeklyUsage.length === 0) return weeklyUsage;
-    const liveTotalMinutes = policies.reduce(
-      (sum, p) => sum + Math.max(0, Number(p.time_used_minutes ?? 0)),
-      0,
-    );
-    return weeklyUsage.map((point, idx) => {
-      if (idx !== todayIndex) return point;
-      const best = Math.max(point.totalMinutes, liveTotalMinutes);
-      return { ...point, totalMinutes: best };
-    });
-  }, [weeklyUsage, todayIndex, policies]);
+    return weeklyUsage;
+  }, [weeklyUsage]);
 
   const onRefresh = async () => {
     setRefreshing(true);

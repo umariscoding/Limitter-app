@@ -21,23 +21,21 @@ export interface UsageRemainingResponse {
 
 export interface UsageTickResponse {
   policyId: string;
-  sessionId: string;
   accumulatedSeconds: number;
   totalUsageSeconds: number;
   limitSeconds: number;
   remainingSeconds: number;
   isExhausted: boolean;
+  wasReset?: boolean;
 }
 
 export const tickUsageAPI = async (data: {
   policyId: string;
   deviceId: string;
-  sessionId: string;
   accumulatedSeconds: number;
   deltaSeconds: number;
   limitSeconds: number;
   targetKey: string;
-  startedAt: number;
 }): Promise<UsageTickResponse> => {
   return await axiosService.post<UsageTickResponse>(API.UsageTick, data);
 };

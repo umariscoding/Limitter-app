@@ -22,6 +22,7 @@ import {
   ArrowUpRight,
 } from 'lucide-react-native';
 import { overrideConfig, overrideLabels } from '../data/appData';
+import { getRandomNudge } from '../data/nudges';
 import { useUser } from '../context/UserContext';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
@@ -44,6 +45,7 @@ export default function ConfirmOverrideScreen() {
   const [isLoading, setIsLoading] = useState(false);
   const [balance, setBalance] = useState<OverrideBalanceResponse | null>(null);
   const [balanceLoading, setBalanceLoading] = useState(true);
+  const [nudge] = useState(getRandomNudge);
 
   useEffect(() => {
     setBalanceLoading(true);
@@ -186,6 +188,11 @@ export default function ConfirmOverrideScreen() {
           </TouchableOpacity>
         )}
 
+        <View style={styles.nudgeCard}>
+          <Text style={styles.nudgeEmoji}>{"\uD83D\uDCAC"}</Text>
+          <Text style={styles.nudgeText}>{"\u201C"}{nudge}{"\u201D"}</Text>
+        </View>
+
         <TouchableOpacity
           onPress={handleConfirm}
           disabled={isLoading || !hasCredits}
@@ -255,6 +262,10 @@ const styles = StyleSheet.create({
   confirmBtn: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, height: 56, borderRadius: 16, shadowColor: '#10B981', shadowOffset: { width: 0, height: 4 }, shadowOpacity: 0.2, shadowRadius: 8, elevation: 4 },
   btnDisabled: { opacity: 0.7, shadowOpacity: 0 },
   confirmBtnText: { color: '#FFFFFF', fontSize: 16, fontWeight: '800' },
+
+  nudgeCard: { backgroundColor: '#FFFBEB', borderRadius: 16, padding: 20, alignItems: 'center', borderWidth: 1, borderColor: '#FDE68A', marginBottom: 20 },
+  nudgeEmoji: { fontSize: 24, marginBottom: 10 },
+  nudgeText: { fontSize: 14, fontWeight: '600', color: '#92400E', textAlign: 'center', lineHeight: 20, fontStyle: 'italic' },
 
   securityFooter: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 6, marginTop: 20 },
   securityText: { fontSize: 11, color: '#CBD5E1', fontWeight: '500' },

@@ -14,10 +14,12 @@ object NotificationHelper {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Limitter Tracking",
-            NotificationManager.IMPORTANCE_LOW
+            NotificationManager.IMPORTANCE_DEFAULT
         ).apply {
-            description = "Tracks app usage for your limits"
+            description = "Shows real-time usage and remaining time for your limits"
             setShowBadge(false)
+            setSound(null, null)
+            enableVibration(false)
         }
         val nm = context.getSystemService(NotificationManager::class.java)
         nm.createNotificationChannel(channel)
@@ -34,38 +36,81 @@ object NotificationHelper {
         }
     }
 
+    private fun progressBar(used: Int, total: Int, width: Int = 10): String {
+        if (total <= 0) return "\u2588".repeat(width)
+        val filled = minOf(width, (used.toLong() * width / total).toInt())
+        val empty = width - filled
+        return "\u2593".repeat(filled) + "\u2591".repeat(empty)
+    }
+
+    private fun pctText(used: Int, total: Int): String {
+        if (total <= 0) return "100%"
+        return "${minOf(100, (used.toLong() * 100 / total).toInt())}%"
+    }
+
     fun build(context: Context, foregroundPkg: String?): Notification {
         val now = System.currentTimeMillis()
-        val activeTimers = TimerStateManager.activeTimers.values.filter { it.status == "active" }
-        val activeCount = activeTimers.size
-        val blockedCount = TimerStateManager.activeTimers.values.count { it.status == "blocked" }
 
-        val title = when {
-            activeCount > 0 -> "Tracking $activeCount app${if (activeCount > 1) "s" else ""}"
-            blockedCount > 0 -> "$blockedCount app${if (blockedCount > 1) "s" else ""} blocked"
-            else -> "Limitter is running"
+        val ranked = TimerStateManager.activeTimers.values
+            .sortedWith(compareByDescending<TimerStateManager.TimerEntry> { it.status == "active" }
+                .thenByDescending { it.status == "blocked" }
+                .thenByDescending { it.usedSeconds })
+            .take(3)
+
+        val currentApp = ranked.firstOrNull { it.status == "active" }
+
+        val title = if (currentApp != null) {
+            val liveSession = if (currentApp.lastActiveTimestamp > 0)
+                maxOf(0, ((now - currentApp.lastActiveTimestamp) / 1000).toInt()) else 0
+            val remaining = maxOf(0, currentApp.durationSeconds - currentApp.usedSeconds - liveSession)
+            "\u25B6 ${currentApp.appName}  \u2022  ${formatTime(remaining)} remaining"
+        } else if (ranked.any { it.status == "blocked" }) {
+            "\u26D4 Limit reached"
+        } else {
+            "\u23F2 Limitter active"
         }
 
-        val text = if (activeTimers.isNotEmpty()) {
-            activeTimers.joinToString("\n") { t ->
-                val liveSessionSeconds = if (t.status == "active" && t.lastActiveTimestamp > 0)
-               ((now - t.lastActiveTimestamp) / 1000).toInt()
-                else 0  
-                // Elapsed (counting up) so the notification moves in the same direction as the
-                // in-app progress bar (which fills as time_used_minutes grows).
-                val elapsed = minOf(t.durationSeconds, t.usedSeconds + liveSessionSeconds)
-                "${t.appName} \u2022 ${formatTime(elapsed)} / ${formatTime(t.durationSeconds)}"
+        val inbox = NotificationCompat.InboxStyle()
+
+        for (t in ranked) {
+            val liveSession = if (t.status == "active" && t.lastActiveTimestamp > 0)
+                maxOf(0, ((now - t.lastActiveTimestamp) / 1000).toInt()) else 0
+            val used = minOf(t.durationSeconds, t.usedSeconds + liveSession)
+            val remaining = maxOf(0, t.durationSeconds - used)
+            val bar = progressBar(used, t.durationSeconds)
+            val pct = pctText(used, t.durationSeconds)
+
+            val line = when (t.status) {
+                "active" -> "${t.appName}  ${formatTime(remaining)} left  $bar $pct"
+                "blocked" -> "${t.appName}  \u26D4 Limit reached"
+                else -> {
+                    if (t.usedSeconds > 0)
+                        "${t.appName}  ${formatTime(remaining)} left  $bar $pct"
+                    else
+                        "${t.appName}  ${formatTime(t.durationSeconds)} limit"
+                }
             }
-        } else if (blockedCount > 0) {
-            "Limit reached. Use an override to continue."
+            inbox.addLine(line)
+        }
+
+        val totalTracked = TimerStateManager.activeTimers.size
+        if (totalTracked > 3) {
+            inbox.setSummaryText("+${totalTracked - 3} more limit${if (totalTracked - 3 > 1) "s" else ""}")
+        }
+
+        val collapsed = if (currentApp != null) {
+            val liveSession = if (currentApp.lastActiveTimestamp > 0)
+                maxOf(0, ((now - currentApp.lastActiveTimestamp) / 1000).toInt()) else 0
+            val remaining = maxOf(0, currentApp.durationSeconds - currentApp.usedSeconds - liveSession)
+            "${currentApp.appName} \u2022 ${formatTime(remaining)} left"
         } else {
-            "Monitoring your screen time"
+            "$totalTracked limit${if (totalTracked != 1) "s" else ""} tracked"
         }
 
         return NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(title)
-            .setContentText(text)
-            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setContentText(collapsed)
+            .setStyle(inbox)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
             .setOngoing(true)
             .setSilent(true)

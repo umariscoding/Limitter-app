@@ -1,4 +1,4 @@
-import React, { createContext, useState, useContext, ReactNode } from 'react';
+import React, { createContext, useState, useContext, useRef, useMemo, ReactNode } from 'react';
 import type { UIPolicy } from '../utils/policyMapper';
 
 interface PolicyContextType {
@@ -17,17 +17,25 @@ export const PolicyContextProvider: React.FC<{ children: ReactNode }> = ({ child
   const [isLoading, setIsLoading] = useState(true);
   const [lastFetchedAt, setLastFetchedAt] = useState(0);
 
+  const setIsLoadingRef = useRef(setIsLoading);
+  setIsLoadingRef.current = setIsLoading;
+  const stableSetIsLoading = useRef((v: boolean) => setIsLoadingRef.current(v)).current;
+
+  const setLastFetchedAtRef = useRef(setLastFetchedAt);
+  setLastFetchedAtRef.current = setLastFetchedAt;
+  const stableSetLastFetchedAt = useRef((v: number) => setLastFetchedAtRef.current(v)).current;
+
+  const value = useMemo(() => ({
+    policies,
+    isLoading,
+    lastFetchedAt,
+    setPolicies,
+    setIsLoading: stableSetIsLoading,
+    setLastFetchedAt: stableSetLastFetchedAt,
+  }), [policies, isLoading, lastFetchedAt, setPolicies, stableSetIsLoading, stableSetLastFetchedAt]);
+
   return (
-    <PolicyContext.Provider
-      value={{
-        policies,
-        isLoading,
-        lastFetchedAt,
-        setPolicies,
-        setIsLoading,
-        setLastFetchedAt,
-      }}
-    >
+    <PolicyContext.Provider value={value}>
       {children}
     </PolicyContext.Provider>
   );

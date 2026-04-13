@@ -18,18 +18,23 @@ export const createPolicyAPI = async (data: {
   return await axiosService.post(API.Policies, data);
 };
 
+export const getCachedPolicies = async (): Promise<any | null> => {
+  try {
+    const cached = await AsyncStorage.getItem(POLICY_CACHE_KEY);
+    return cached ? JSON.parse(cached) : null;
+  } catch {
+    return null;
+  }
+};
+
 export const getPoliciesAPI = async () => {
   try {
     const result = await axiosService.get(API.Policies);
-    // Cache successful response for offline fallback (fire-and-forget)
     AsyncStorage.setItem(POLICY_CACHE_KEY, JSON.stringify(result)).catch(() => {});
     return result;
   } catch (error) {
-    // Serve cached data if available
-    try {
-      const cached = await AsyncStorage.getItem(POLICY_CACHE_KEY);
-      if (cached) return JSON.parse(cached);
-    } catch { /* cache read failed */ }
+    const cached = await getCachedPolicies();
+    if (cached) return cached;
     throw error;
   }
 };

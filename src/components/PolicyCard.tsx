@@ -71,15 +71,15 @@ export default function PolicyCard({ limit, onOverride }: PolicyCardProps) {
         />
       </View>
 
-      <TouchableOpacity onPress={() => onOverride(limit)} activeOpacity={0.8}>
+      <TouchableOpacity onPress={() => onOverride(limit)} activeOpacity={0.8} disabled={!isBlocked}>
         <LinearGradient
-          colors={['#08b341e0', '#08b341e0']}
+          colors={isBlocked ? ['#EF4444', '#DC2626'] : ['#CBD5E1', '#CBD5E1']}
           start={{ x: 0, y: 0 }}
           end={{ x: 1, y: 0 }}
-          style={s.overrideBtn}
+          style={[s.overrideBtn, !isBlocked && { opacity: 0.4 }]}
         >
           <Zap size={16} color="#FFFFFF" />
-          <Text style={s.overrideBtnText}>Use Override</Text>
+          <Text style={s.overrideBtnText}>{isBlocked ? 'Use Override' : 'Override'}</Text>
         </LinearGradient>
       </TouchableOpacity>
     </View>

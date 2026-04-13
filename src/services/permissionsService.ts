@@ -3,6 +3,7 @@ import {
   Alert,
   Linking,
   AppState,
+  PermissionsAndroid,
   type AppStateStatus,
 } from "react-native";
 
@@ -155,6 +156,12 @@ export const requestRequiredPermissions = async (): Promise<PermissionStatus> =>
   let status = await checkPermissions();
 
   if (Platform.OS !== "android") return status;
+
+  if (Number(Platform.Version) >= 33) {
+    try {
+      await PermissionsAndroid.request(PermissionsAndroid.PERMISSIONS.POST_NOTIFICATIONS);
+    } catch { /* best effort */ }
+  }
 
   for (;;) {
     const step = getFirstMissingStep(status);

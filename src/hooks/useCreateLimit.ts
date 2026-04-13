@@ -102,7 +102,7 @@ export function useCreateLimit(
     setLoading(true);
     try {
       const targetKey =
-        targetType === 'app' ? appName
+        targetType === 'app' ? selectedInstalledApp!.packageName
           : targetType === 'website' ? websiteUrl
             : category;
       const targetLabel =

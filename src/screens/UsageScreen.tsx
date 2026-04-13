@@ -1,9 +1,8 @@
-import React, { useCallback, useMemo, useState } from 'react';
+import React, { useRef, useMemo, useState } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, Platform } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft } from 'lucide-react-native';
 import { useUsageContext } from '../context/UsageContext';
-import { usePolicyContext } from '../context/PolicyContext';
 import { getWeeklyUsageAPI } from '../services/usageService';
 import { useUser } from '../context/UserContext';
 import { WeeklyUsageGraph } from '../components/WeeklyUsageGraph';
@@ -13,56 +12,42 @@ export default function UsageScreen() {
   const navigation = useNavigation<any>();
   const { user } = useUser();
   const { weeklyUsage, isLoadingWeekly, weeklyError, setWeeklyUsage, setIsLoadingWeekly, setWeeklyError } = useUsageContext();
-  const { policies } = usePolicyContext();
   const [todayIndex, setTodayIndex] = useState(-1);
 
-  const handleRefresh = useCallback(async () => {
+  const handleRefresh = useRef(async () => {
     setIsLoadingWeekly(true);
     setWeeklyError(null);
     try {
       const days = await getWeeklyUsageAPI(user?.accountId);
+      const DAY_NAMES = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+      const dayMap = new Map(days.map(d => [d.dateKey, d.totalMinutes]));
+      const today = new Date().toISOString().slice(0, 10);
 
-      const WEEK_LABELS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun'];
-      const slots: Array<{ dateKey: string; totalMinutes: number } | null> = new Array(7).fill(null);
-
-      for (const d of days) {
-        const date = new Date(d.dateKey + 'T12:00:00');
-        const jsDay = date.getDay();
-        const monIdx = jsDay === 0 ? 6 : jsDay - 1;
-        if (!slots[monIdx] || d.dateKey > slots[monIdx]!.dateKey) {
-          slots[monIdx] = d;
-        }
+      const points: typeof weeklyUsage = [];
+      let todayIdx = -1;
+      for (let i = 6; i >= 0; i--) {
+        const date = new Date();
+        date.setDate(date.getDate() - i);
+        const dateKey = date.toISOString().slice(0, 10);
+        const label = DAY_NAMES[date.getDay()];
+        points.push({
+          dateKey,
+          label,
+          totalMinutes: dayMap.get(dateKey) ?? 0,
+        });
+        if (dateKey === today) todayIdx = points.length - 1;
       }
 
-      const points = WEEK_LABELS.map((label, idx) => ({
-        dateKey: slots[idx]?.dateKey || `day-${idx}`,
-        label,
-        totalMinutes: slots[idx]?.totalMinutes ?? 0,
-      }));
-
-      const jsToday = new Date().getDay();
-      setTodayIndex(jsToday === 0 ? 6 : jsToday - 1);
+      setTodayIndex(todayIdx);
       setWeeklyUsage(points);
     } catch (err: any) {
       setWeeklyError(err?.message || 'Failed to load usage data');
     } finally {
       setIsLoadingWeekly(false);
     }
-  }, [user?.accountId, setWeeklyUsage, setIsLoadingWeekly, setWeeklyError]);
+  }).current;
 
-  // Override today's bar with real-time total from policies
-  const graphData = useMemo(() => {
-    if (todayIndex < 0 || weeklyUsage.length === 0) return weeklyUsage;
-    const liveTotalMinutes = policies.reduce(
-      (sum, p) => sum + Math.max(0, Number(p.time_used_minutes ?? 0)),
-      0,
-    );
-    return weeklyUsage.map((point, idx) => {
-      if (idx !== todayIndex) return point;
-      const best = Math.max(point.totalMinutes, liveTotalMinutes);
-      return { ...point, totalMinutes: best };
-    });
-  }, [weeklyUsage, todayIndex, policies]);
+  const graphData = useMemo(() => weeklyUsage, [weeklyUsage]);
 
   return (
     <SafeAreaView style={styles.container}>

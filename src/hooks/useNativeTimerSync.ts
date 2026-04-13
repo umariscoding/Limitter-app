@@ -3,6 +3,12 @@ import { subscribeTimerTicks, subscribeTimerBlocked } from '../services/timerRea
 import { getPolicyPackageKey } from '../utils/policyMapper';
 import { setLastNativeUpdateAt } from './useLockStateSync';
 
+function nativeKeyMatches(policyKey: string, eventPkg: string): boolean {
+  if (policyKey === eventPkg) return true;
+  if (policyKey === `website:${eventPkg}`) return true;
+  return false;
+}
+
 export function useNativeTimerSync(
   setState: React.Dispatch<React.SetStateAction<any[]>>,
 ) {
@@ -12,9 +18,10 @@ export function useNativeTimerSync(
       const eventPkg = String(event.package).trim().toLowerCase();
       setLastNativeUpdateAt(Date.now());
 
-      setState(prev =>
-        prev.map(item => {
-          if (getPolicyPackageKey(item) !== eventPkg) return item;
+      setState(prev => {
+        let changed = false;
+        const next = prev.map(item => {
+          if (!nativeKeyMatches(getPolicyPackageKey(item), eventPkg)) return item;
 
           const maxSeconds = Number(item.max_time_minutes || 0) * 60;
           const remaining = Math.max(0, Number(event.remaining || 0));
@@ -22,27 +29,36 @@ export function useNativeTimerSync(
             Math.max(0, maxSeconds - remaining),
             maxSeconds,
           );
+          const newUsedMinutes = consumedSeconds / 60;
           const eventBlocked =
             typeof event.isBlocked === 'boolean'
               ? event.isBlocked
               : String(event.status || '').toLowerCase() === 'blocked';
-
-          // Timer ticks can only UPGRADE to blocked, never downgrade.
-          // Unblocking is handled by fetchPolicies (fresh API data / overrides).
           const isBlocked = eventBlocked ? true : item.is_blocked;
+          const newStatus = isBlocked
+            ? 'blocked'
+            : consumedSeconds > 0
+              ? 'active'
+              : item.status;
 
+          if (
+            Math.abs(item.time_used_minutes - newUsedMinutes) < 0.01 &&
+            item.is_blocked === isBlocked &&
+            item.status === newStatus
+          ) {
+            return item;
+          }
+
+          changed = true;
           return {
             ...item,
-            time_used_minutes: consumedSeconds / 60,
+            time_used_minutes: newUsedMinutes,
             is_blocked: isBlocked,
-            status: isBlocked
-              ? 'blocked'
-              : consumedSeconds > 0
-                ? 'active'
-                : item.status,
+            status: newStatus,
           };
-        }),
-      );
+        });
+        return changed ? next : prev;
+      });
     });
 
     const unsubBlocked = subscribeTimerBlocked(event => {
@@ -50,18 +66,23 @@ export function useNativeTimerSync(
       const eventPkg = String(event.package).trim().toLowerCase();
       setLastNativeUpdateAt(Date.now());
 
-      setState(prev =>
-        prev.map(item =>
-          getPolicyPackageKey(item) === eventPkg
-            ? {
-                ...item,
-                is_blocked: true,
-                status: 'blocked',
-                time_used_minutes: item.max_time_minutes,
-              }
-            : item,
-        ),
-      );
+      setState(prev => {
+        let changed = false;
+        const next = prev.map(item => {
+          if (!nativeKeyMatches(getPolicyPackageKey(item), eventPkg)) return item;
+          if (item.is_blocked && item.status === 'blocked' && item.time_used_minutes === item.max_time_minutes) {
+            return item;
+          }
+          changed = true;
+          return {
+            ...item,
+            is_blocked: true,
+            status: 'blocked',
+            time_used_minutes: item.max_time_minutes,
+          };
+        });
+        return changed ? next : prev;
+      });
     });
 
     return () => {

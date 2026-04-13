@@ -2,9 +2,14 @@ import { useEffect, useRef } from 'react';
 import { subscribeLockState, type LiveLockEvent } from '../services/timerRealtimeService';
 import { usePolicyContext } from '../context/PolicyContext';
 import { getPolicyPackageKey } from '../utils/policyMapper';
+import {
+  startAppBlockerService,
+  updateBlockedApps,
+  grantTemporaryOverrideAccess,
+  grantTemporaryWebsiteOverride,
+} from '../services/appBlockerService';
+import type { UIPolicy } from '../utils/policyMapper';
 
-// Timestamp of last native timer sync update — native state takes priority
-// over remote lock state when both update within a short window.
 let lastNativeUpdateAt = 0;
 export const setLastNativeUpdateAt = (ts: number) => { lastNativeUpdateAt = ts; };
 
@@ -20,7 +25,6 @@ export function useLockStateSync(accountId: string | undefined) {
 
     const unsubscribe = subscribeLockState(accountId, (locks: Record<string, LiveLockEvent>) => {
       const now = Date.now();
-      // If native timer just updated, skip this remote update to avoid flicker
       if (now - lastNativeUpdateAt < NATIVE_PRIORITY_WINDOW_MS) return;
 
       const lockedTargets = new Set<string>();
@@ -28,26 +32,57 @@ export function useLockStateSync(accountId: string | undefined) {
         if (lock.isLocked && lock.targetKey) {
           const raw = lock.targetKey.trim().toLowerCase();
           lockedTargets.add(raw);
-          // Also add with website: prefix so website policies match
           lockedTargets.add(`website:${raw}`);
         }
       }
 
-      setPoliciesRef.current(prev =>
-        prev.map(item => {
+      const newlyBlocked: Array<{ package_name: string; app_name: string; blocked_until_timestamp: number }> = [];
+      const newlyUnblocked: UIPolicy[] = [];
+
+      setPoliciesRef.current(prev => {
+        let changed = false;
+        const next = prev.map(item => {
           const key = getPolicyPackageKey(item);
           const isLockedRemotely = lockedTargets.has(key);
 
-          // Only LOCK from remote state — never unlock.
-          // Unlocking is handled by fetchPolicies (fresh API data)
-          // and useNativeTimerSync (native timer events).
           if (isLockedRemotely && !item.is_blocked) {
+            changed = true;
+            const pkg = item.app_name || item.package_name || item.packageName;
+            if (pkg) {
+              newlyBlocked.push({
+                package_name: pkg,
+                app_name: pkg,
+                blocked_until_timestamp: now + 24 * 60 * 60 * 1000,
+              });
+            }
             return { ...item, is_blocked: true, status: 'blocked' as const };
           }
 
+          if (!isLockedRemotely && item.is_blocked) {
+            changed = true;
+            newlyUnblocked.push(item);
+            return { ...item, is_blocked: false, time_used_minutes: 0, status: 'active' as const };
+          }
+
           return item;
-        }),
-      );
+        });
+        return changed ? next : prev;
+      });
+
+      if (newlyBlocked.length > 0) {
+        startAppBlockerService(newlyBlocked).catch(() => {});
+        updateBlockedApps(newlyBlocked);
+      }
+
+      for (const item of newlyUnblocked) {
+        const pkg = item.app_name || item.package_name || item.packageName;
+        if (!pkg) continue;
+        if (item.target_type === 'website') {
+          grantTemporaryWebsiteOverride(pkg, 5).catch(() => {});
+        } else {
+          grantTemporaryOverrideAccess(pkg, item.target_label || pkg, 5).catch(() => {});
+        }
+      }
     });
 
     return unsubscribe;

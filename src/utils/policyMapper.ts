@@ -97,6 +97,15 @@ export function getPolicyPackageKey(item: any): string {
   return raw;
 }
 
+export function normalizeNativePackageKey(pkg: string, targetType?: string): string {
+  const raw = String(pkg || '').trim().toLowerCase();
+  if (targetType === 'website') {
+    const cleaned = raw.replace(/^(https?:\/\/)?(www\.)?/, '').replace(/\/.*$/, '');
+    return cleaned.startsWith('website:') ? cleaned : `website:${cleaned}`;
+  }
+  return raw;
+}
+
 export function resolvePolicyBlockedState(item: any): boolean {
   if (typeof item?.is_blocked === 'boolean') return item.is_blocked;
 
@@ -148,10 +157,12 @@ export function mergeLiveTimerUsageIntoPolicies(
 ): UIPolicy[] {
   const byPkg = new Map<string, NativeTimerForLiveTimerUsageMerge>();
   timers.forEach(t => {
-    const k = String(t.package || '')
-      .trim()
-      .toLowerCase();
-    if (k) byPkg.set(k, t);
+    const k = String(t.package || '').trim().toLowerCase();
+    if (!k) return;
+    byPkg.set(k, t);
+    if (!k.startsWith('website:')) {
+      byPkg.set(`website:${k}`, t);
+    }
   });
 
   return policies.map(item => {

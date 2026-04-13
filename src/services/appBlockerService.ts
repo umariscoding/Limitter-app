@@ -283,6 +283,9 @@ export function nativeBlockedPackagesFromTimers(timers: NativeTimerState[]): Set
     if (!pkg) return;
     if (String(timer.status || '').toLowerCase() === 'blocked') {
       set.add(pkg);
+      if (!pkg.startsWith('website:')) {
+        set.add(`website:${pkg}`);
+      }
     }
   });
   return set;

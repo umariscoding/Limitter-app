@@ -15,15 +15,10 @@ const STORAGE_KEY = 'limitter_unflushed_sessions';
 const QUEUE_STORAGE_KEY = '@limitter_usage_queue';
 const SAVE_DEBOUNCE_MS = 5_000;
 
-const generateSessionId = () =>
-  `sess_${Date.now().toString(36)}_${Math.random().toString(36).substring(2, 8)}`;
-
 interface PolicySession {
   policyId: string;
   packageName: string;
   targetKey: string;
-  sessionId: string;
-  startedAt: number;
   accumulatedSeconds: number;
   lastSentSeconds: number;
   limitSeconds: number;
@@ -196,15 +191,40 @@ export function useUsageReporter(
         const response = await tickUsageAPI({
           policyId: session.policyId,
           deviceId: currentDeviceId,
-          sessionId: session.sessionId,
           accumulatedSeconds: session.accumulatedSeconds,
           deltaSeconds: delta,
           limitSeconds: session.limitSeconds,
           targetKey: session.targetKey,
-          startedAt: session.startedAt,
         });
+        if (response.wasReset) {
+          session.accumulatedSeconds = 0;
+          session.lastSentSeconds = 0;
+          session.unsentDelta = 0;
+          setPoliciesRef.current(prev =>
+            prev.map(item => {
+              if (getPolicyPackageKey(item) !== pkg && getPolicyPackageKey(item) !== `website:${pkg}`) return item;
+              return { ...item, time_used_minutes: (response.totalUsageSeconds || 0) / 60, is_blocked: false, status: 'active' as const };
+            }),
+          );
+          continue;
+        }
+
         session.lastSentSeconds = session.accumulatedSeconds;
         session.unsentDelta = 0;
+
+        const serverUsed = response.totalUsageSeconds || 0;
+        const localUsed = session.accumulatedSeconds;
+        if (serverUsed > localUsed) {
+          session.accumulatedSeconds = serverUsed;
+          const serverUsedMinutes = serverUsed / 60;
+          setPoliciesRef.current(prev =>
+            prev.map(item => {
+              if (getPolicyPackageKey(item) !== pkg && getPolicyPackageKey(item) !== `website:${pkg}`) return item;
+              if (item.time_used_minutes >= serverUsedMinutes) return item;
+              return { ...item, time_used_minutes: serverUsedMinutes };
+            }),
+          );
+        }
 
         if (response.isExhausted || locallyExhausted()) {
           enforceBlock();
@@ -249,8 +269,6 @@ export function useUsageReporter(
         session.accumulatedSeconds = 0;
         session.lastSentSeconds = 0;
         session.unsentDelta = 0;
-        session.sessionId = generateSessionId();
-        session.startedAt = Date.now();
       } catch {
         // Queue failed flush for replay on reconnect
         enqueueUsage({
@@ -278,21 +296,20 @@ export function useUsageReporter(
 
       if (isBlocked) return;
 
-      const pkg = String(event.package).trim().toLowerCase();
-      const policyInfo = policyByPackage.current.get(pkg);
+      const rawPkg = String(event.package).trim().toLowerCase();
+      const policyInfo = policyByPackage.current.get(rawPkg)
+        || policyByPackage.current.get(`website:${rawPkg}`);
       if (!policyInfo) return;
 
-      const existing = sessionsRef.current.get(pkg);
+      const existing = sessionsRef.current.get(rawPkg);
       if (existing) {
         existing.accumulatedSeconds += 1;
         existing.unsentDelta += 1;
       } else {
-        sessionsRef.current.set(pkg, {
+        sessionsRef.current.set(rawPkg, {
           policyId: policyInfo.policyId,
-          packageName: pkg,
-          targetKey: pkg,
-          sessionId: generateSessionId(),
-          startedAt: Date.now(),
+          packageName: rawPkg,
+          targetKey: rawPkg,
           accumulatedSeconds: 1,
           lastSentSeconds: 0,
           limitSeconds: policyInfo.maxMinutes * 60,
