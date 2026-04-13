@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useCallback } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -68,7 +68,9 @@ export default function SettingsScreen() {
     finally { setLoading(false); setRefreshing(false); }
   };
 
-  useFocusEffect(useCallback(() => { fetchProfile(); }, []));
+  const fetchRef = useRef(fetchProfile);
+  fetchRef.current = fetchProfile;
+  useFocusEffect(React.useCallback(() => { fetchRef.current(); }, []));
 
   const onRefresh = () => { setRefreshing(true); fetchProfile(); };
 

@@ -8,7 +8,6 @@ import { useUsageContext } from '../context/UsageContext';
 import { usePolicyContext } from '../context/PolicyContext';
 import { WeeklyUsageGraph } from '../components/WeeklyUsageGraph';
 import { getWeeklyUsageAPI } from '../services/usageService';
-import { useDeviceResolver } from '../hooks/useDeviceResolver';
 import { formatLimitTime } from '../utils/policyMapper';
 import BottomNav from '../components/BottomNav';
 
@@ -25,7 +24,6 @@ export default function AnalyticsScreen() {
   const { user } = useUser();
   const { weeklyUsage, isLoadingWeekly, weeklyError, setWeeklyUsage, setIsLoadingWeekly, setWeeklyError } = useUsageContext();
   const { policies } = usePolicyContext();
-  const { deviceId } = useDeviceResolver(user?.uid);
   const [refreshing, setRefreshing] = useState(false);
   const [todayIndex, setTodayIndex] = useState(-1);
 
@@ -76,15 +74,11 @@ export default function AnalyticsScreen() {
   };
 
   useEffect(() => {
-    // if (!deviceId) return;
     if (!user?.accountId) return;
     fetchWeekly();
   }, [user?.accountId]);
 
-  // Override today's bar with real-time total from policies (same source as dashboard)
-  const graphData = useMemo(() => {
-    return weeklyUsage;
-  }, [weeklyUsage]);
+  const graphData = useMemo(() => weeklyUsage, [weeklyUsage]);
 
   const onRefresh = async () => {
     setRefreshing(true);

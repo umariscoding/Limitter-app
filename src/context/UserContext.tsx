@@ -1,8 +1,9 @@
 import React, {
   createContext,
   useState,
-  useCallback,
   useContext,
+  useRef,
+  useMemo,
   ReactNode,
 } from "react";
 import { type User as FirebaseUser } from "firebase/auth";
@@ -75,44 +76,44 @@ export const UserContextProvider: React.FC<{ children: ReactNode }> = ({ childre
   const [firebaseUser, setFirebaseUser] = useState<FirebaseUser | null>(null);
   const [isLoading, setIsLoading] = useState(true);
 
-  const setAccountData = useCallback((data: any) => {
+  const setAccountData = useRef((data: any) => {
     setUser(parseAccountData(data));
-  }, []);
+  }).current;
 
-  const clearUser = useCallback(() => {
+  const clearUser = useRef(() => {
     setUser(null);
     setFirebaseUser(null);
-  }, []);
+  }).current;
 
-  const login = useCallback((userData: any) => {
+  const login = useRef((userData: any) => {
     setUser(parseAccountData(userData));
-  }, []);
+  }).current;
 
-  const logout = useCallback(() => {
+  const logout = useRef(() => {
     setUser(null);
     setFirebaseUser(null);
-  }, []);
+  }).current;
 
-  const updateUser = useCallback((partial: Partial<AccountContext>) => {
+  const updateUser = useRef((partial: Partial<AccountContext>) => {
     setUser((prev) => prev ? { ...prev, ...partial } : prev);
-  }, []);
+  }).current;
+
+  const value = useMemo(() => ({
+    user,
+    firebaseUser,
+    isLoading,
+    isAuthenticated: !!firebaseUser && !!user,
+    setAccountData,
+    setFirebaseUser,
+    setIsLoading,
+    clearUser,
+    login,
+    logout,
+    updateUser,
+  }), [user, firebaseUser, isLoading, setAccountData, setFirebaseUser, setIsLoading, clearUser, login, logout, updateUser]);
 
   return (
-    <UserContext.Provider
-      value={{
-        user,
-        firebaseUser,
-        isLoading,
-        isAuthenticated: !!firebaseUser && !!user,
-        setAccountData,
-        setFirebaseUser,
-        setIsLoading,
-        clearUser,
-        login,
-        logout,
-        updateUser,
-      }}
-    >
+    <UserContext.Provider value={value}>
       {children}
     </UserContext.Provider>
   );

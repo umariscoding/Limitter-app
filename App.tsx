@@ -29,7 +29,10 @@ function AppInner(): React.JSX.Element {
   const [retrying, setRetrying] = React.useState(false);
   const pendingOverrideRef = React.useRef<OverrideLinkPayload | null>(null);
 
-  const parseOverrideLink = React.useCallback(
+  const depsRef = React.useRef({ policies, user, updateUser, setAccountData, setFirebaseUser, setIsLoading, clearUser });
+  depsRef.current = { policies, user, updateUser, setAccountData, setFirebaseUser, setIsLoading, clearUser };
+
+  const parseOverrideLink = React.useRef(
     (url: string): OverrideLinkPayload | null => {
       try {
         const parsed = new URL(url);
@@ -38,7 +41,7 @@ function AppInner(): React.JSX.Element {
         if (parsed.hostname?.toLowerCase() === "override" && packageName) {
           return { packageName, appName };
         }
-      } catch (_) { /* silenced */ }
+      } catch (_) {}
 
       const overrideMatch = url.match(/limitter:\/\/override\?(.*)$/i);
       if (!overrideMatch) return null;
@@ -48,14 +51,15 @@ function AppInner(): React.JSX.Element {
       if (!packageName) return null;
       return { packageName, appName };
     },
-    [],
-  );
+  ).current;
 
-  const openOverrideFlow = React.useCallback(async (payload: OverrideLinkPayload) => {
+  const openOverrideFlow = React.useRef(async (payload: OverrideLinkPayload) => {
     if (!navigationRef.isReady()) {
       pendingOverrideRef.current = payload;
       return;
     }
+
+    const { policies, user, updateUser } = depsRef.current;
 
     const goToPlans = () =>
       navigationRef.navigate("SubscriptionPlansScreen", {
@@ -70,8 +74,6 @@ function AppInner(): React.JSX.Element {
         targetType,
       });
 
-    // If the user has no override credits, show the upgrade screen (the "popup").
-    // If they do have credits, silently consume one and land on the dashboard — no popup.
     let available = 0;
     try {
       const balance = await getOverrideBalanceAPI();
@@ -100,7 +102,7 @@ function AppInner(): React.JSX.Element {
     let deviceId: string | null = null;
     try {
       deviceId = await resolveCurrentDeviceId(user?.uid);
-    } catch { /* fall through */ }
+    } catch {}
 
     if (!limitId || !deviceId) {
       goToConfirm(targetType);
@@ -125,20 +127,21 @@ function AppInner(): React.JSX.Element {
     } catch {
       goToConfirm(targetType);
     }
-  }, [policies, user?.uid, updateUser]);
+  }).current;
 
-  const loadAccount = React.useCallback(async () => {
+  const loadAccountRef = React.useRef(async () => {
     try {
       setBootstrapError(null);
       const accountData = await bootstrap();
-      setAccountData(accountData);
+      depsRef.current.setAccountData(accountData);
     } catch (err: any) {
       setBootstrapError(err?.message || "Failed to load account. Check your connection.");
     }
-  }, [setAccountData]);
+  });
 
   React.useEffect(() => {
     const unsubscribe = onAuthStateChanged(async (fbUser) => {
+      const { setFirebaseUser, clearUser, setIsLoading } = depsRef.current;
       if (fbUser && !fbUser.emailVerified) {
         setFirebaseUser(null);
         clearUser();
@@ -147,7 +150,7 @@ function AppInner(): React.JSX.Element {
       }
       setFirebaseUser(fbUser);
       if (fbUser) {
-        await loadAccount();
+        await loadAccountRef.current();
       } else {
         clearUser();
         setBootstrapError(null);
@@ -155,7 +158,7 @@ function AppInner(): React.JSX.Element {
       setIsLoading(false);
     });
     return unsubscribe;
-  }, [loadAccount]);
+  }, []);
 
   React.useEffect(() => {
     startTimerRealtimeTracking();
@@ -169,7 +172,7 @@ function AppInner(): React.JSX.Element {
       try {
         const payload = parseOverrideLink(url);
         if (payload) openOverrideFlow(payload);
-      } catch { /* silenced */ }
+      } catch {}
     };
 
     const sub = Linking.addEventListener("url", onDeepLink);
@@ -178,7 +181,7 @@ function AppInner(): React.JSX.Element {
     });
 
     return () => sub.remove();
-  }, [openOverrideFlow, parseOverrideLink]);
+  }, []);
 
   if (bootstrapError) {
     return (
@@ -190,7 +193,7 @@ function AppInner(): React.JSX.Element {
           disabled={retrying}
           onPress={async () => {
             setRetrying(true);
-            await loadAccount();
+            await loadAccountRef.current();
             setRetrying(false);
           }}
         >
