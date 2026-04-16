@@ -112,7 +112,7 @@ export default function AnalyticsScreen() {
         />
 
         <View style={s.sectionHeader}>
-          <BarChart2 size={18} color="#6366F1" />
+          <BarChart2 size={18} color="#636af1ff" />
           <Text style={s.sectionTitle}>App Breakdown</Text>
         </View>
 

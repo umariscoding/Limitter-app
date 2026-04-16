@@ -1,4 +1,4 @@
-export const BASE_URL = "https://5ea3-154-80-29-205.ngrok-free.app";
+export const BASE_URL = "https://nonremediably-nonbearded-miguel.ngrok-free.dev";
 
 export const API = {
   SetupAccount: "/api/auth/setup-account",

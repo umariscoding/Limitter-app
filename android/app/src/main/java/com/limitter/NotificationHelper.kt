@@ -60,15 +60,15 @@ object NotificationHelper {
         val currentApp = ranked.firstOrNull { it.status == "active" }
 
         val title = if (currentApp != null) {
-            val liveSession = if (currentApp.lastActiveTimestamp > 0)
-                maxOf(0, ((now - currentApp.lastActiveTimestamp) / 1000).toInt()) else 0
-            val remaining = maxOf(0, currentApp.durationSeconds - currentApp.usedSeconds - liveSession)
-            "\u25B6 ${currentApp.appName}  \u2022  ${formatTime(remaining)} remaining"
-        } else if (ranked.any { it.status == "blocked" }) {
-            "\u26D4 Limit reached"
-        } else {
-            "\u23F2 Limitter active"
-        }
+    val liveSession = if (currentApp.lastActiveTimestamp > 0)
+        maxOf(0, ((now - currentApp.lastActiveTimestamp) / 1000).toInt()) else 0
+    val used = minOf(currentApp.durationSeconds, currentApp.usedSeconds + liveSession)
+    "\u25B6 ${currentApp.appName}  \u2022  ${formatTime(used)} used"
+} else if (ranked.any { it.status == "blocked" }) {
+    "\u26D4 Limit reached"
+} else {
+    "\u23F2 Limitter active"
+}
 
         val inbox = NotificationCompat.InboxStyle()
 
@@ -81,15 +81,15 @@ object NotificationHelper {
             val pct = pctText(used, t.durationSeconds)
 
             val line = when (t.status) {
-                "active" -> "${t.appName}  ${formatTime(remaining)} left  $bar $pct"
-                "blocked" -> "${t.appName}  \u26D4 Limit reached"
-                else -> {
-                    if (t.usedSeconds > 0)
-                        "${t.appName}  ${formatTime(remaining)} left  $bar $pct"
-                    else
-                        "${t.appName}  ${formatTime(t.durationSeconds)} limit"
-                }
-            }
+    "active" -> "${t.appName}  ${formatTime(used)} used  $bar $pct"
+    "blocked" -> "${t.appName}  \u26D4 Limit reached"
+    else -> {
+        if (t.usedSeconds > 0)
+            "${t.appName}  ${formatTime(used)} used  $bar $pct"
+        else
+            "${t.appName}  ${formatTime(t.durationSeconds)} limit"
+    }
+}
             inbox.addLine(line)
         }
 
@@ -99,11 +99,11 @@ object NotificationHelper {
         }
 
         val collapsed = if (currentApp != null) {
-            val liveSession = if (currentApp.lastActiveTimestamp > 0)
-                maxOf(0, ((now - currentApp.lastActiveTimestamp) / 1000).toInt()) else 0
-            val remaining = maxOf(0, currentApp.durationSeconds - currentApp.usedSeconds - liveSession)
-            "${currentApp.appName} \u2022 ${formatTime(remaining)} left"
-        } else {
+    val liveSession = if (currentApp.lastActiveTimestamp > 0)
+        maxOf(0, ((now - currentApp.lastActiveTimestamp) / 1000).toInt()) else 0
+    val used = minOf(currentApp.durationSeconds, currentApp.usedSeconds + liveSession)
+    "${currentApp.appName} \u2022 ${formatTime(used)} used"
+} else {
             "$totalTracked limit${if (totalTracked != 1) "s" else ""} tracked"
         }
 
