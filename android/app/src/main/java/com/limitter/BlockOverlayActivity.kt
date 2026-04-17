@@ -111,7 +111,7 @@ class BlockOverlayActivity : Activity() {
         val content = LinearLayout(this).apply {
             orientation = LinearLayout.VERTICAL
             gravity = Gravity.CENTER_HORIZONTAL
-            setPadding(dp(32), dp(80), dp(32), dp(48))
+            setPadding(dp(32), dp(40), dp(32), dp(48))
         }
 
         val pulseRing = View(this).apply {

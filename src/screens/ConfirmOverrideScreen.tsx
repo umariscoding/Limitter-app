@@ -62,7 +62,7 @@ export default function ConfirmOverrideScreen() {
     if (!user?.uid) { Alert.alert('Error', 'User not logged in'); return; }
 
     if (!hasCredits) {
-      navigation.navigate('SubscriptionPlansScreen', { fromBlockingOverride: true, packageName, appName: appNameFromRoute });
+      navigation.navigate('BuyOverrides');
       return;
     }
 
@@ -102,7 +102,7 @@ export default function ConfirmOverrideScreen() {
       const status = error?.response?.status;
       if (status === 402 || msg.toLowerCase().includes('no free override credits') || msg.toLowerCase().includes('no override credits')) {
         Alert.alert('No Credits', 'You have no override credits remaining.', [
-          { text: 'Buy Credits', onPress: () => navigation.navigate('SubscriptionPlansScreen', { fromBlockingOverride: true, packageName, appName: appNameFromRoute }) },
+          { text: 'Buy Credits', onPress: () => navigation.navigate('BuyOverrides') },
           { text: 'Cancel', style: 'cancel' },
         ]);
       } else {
@@ -179,10 +179,10 @@ export default function ConfirmOverrideScreen() {
             <Text style={styles.infoText}>{overrideLabels.noPaymentRequired}</Text>
           </View>
         ) : (
-          <TouchableOpacity style={styles.upgradeBox} onPress={() => navigation.navigate('SubscriptionPlansScreen')} activeOpacity={0.8}>
+          <TouchableOpacity style={styles.upgradeBox} onPress={() => navigation.navigate('BuyOverrides')} activeOpacity={0.8}>
             <View>
               <Text style={styles.upgradeTitle}>Need more overrides?</Text>
-              <Text style={styles.upgradeDesc}>Upgrade your plan or purchase override packs</Text>
+              <Text style={styles.upgradeDesc}>Buy any number of overrides at $1.99 each</Text>
             </View>
             <ArrowUpRight size={20} color="#6366F1" />
           </TouchableOpacity>

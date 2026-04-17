@@ -25,7 +25,7 @@ import {
   RefreshCcw,
 } from 'lucide-react-native';
 import { preloadInstalledApps } from '../services/appListService';
-
+import NoOverridesModal from '../components/NoOverridesModal';
 import { useUser } from '../context/UserContext';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
@@ -61,7 +61,12 @@ export default function DashboardScreen() {
   const [visibleCount, setVisibleCount] = useState(10);
   const justOverriddenPackageRef = React.useRef<string | null>(null);
   const fetchInProgressRef = React.useRef(false);
-
+  //new 
+  const [noOverridesModal, setNoOverridesModal] = useState<{
+    visible: boolean;
+    appName: string;
+  }>({ visible: false, appName: '' });
+  //new 
   const matchesLimitPackage = React.useRef(
     (item: any, packageName?: string) => {
       if (!packageName) return false;
@@ -182,11 +187,8 @@ export default function DashboardScreen() {
     const targetType = limit.target_type || 'app';
 
     if ((user?.overrides_left ?? 0) <= 0) {
-      navigation.navigate('SubscriptionPlansScreen', {
-        fromBlockingOverride: true,
-        packageName: pkg,
-        appName,
-      });
+      // Show the popup asking "Buy Override or Buy Plan?"
+      setNoOverridesModal({ visible: true, appName });
       return;
     }
 
@@ -213,7 +215,19 @@ export default function DashboardScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="light-content" backgroundColor="#059669" />
       <Toast visible={showToast} message={toastMessage} onHide={() => setShowToast(false)} type="success" />
-
+      <NoOverridesModal
+        visible={noOverridesModal.visible}
+        appName={noOverridesModal.appName}
+        onBuyOverride={() => {
+          setNoOverridesModal({ visible: false, appName: '' });
+          navigation.navigate('BuyOverrides');
+        }}
+        onBuyPlan={() => {
+          setNoOverridesModal({ visible: false, appName: '' });
+          navigation.navigate('SubscriptionPlansScreen');
+        }}
+        onCancel={() => setNoOverridesModal({ visible: false, appName: '' })}
+      />
       <CreateLimitModal
         visible={showCreateModal}
         onClose={() => setShowCreateModal(false)}

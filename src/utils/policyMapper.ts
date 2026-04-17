@@ -155,15 +155,6 @@ export function mergeLiveTimerUsageIntoPolicies(
   policies: UIPolicy[],
   timers: NativeTimerForLiveTimerUsageMerge[],
 ): UIPolicy[] {
-  // const byPkg = new Map<string, NativeTimerForLiveTimerUsageMerge>();
-  // timers.forEach(t => {
-  //   const k = String(t.package || '').trim().toLowerCase();
-  //   if (!k) return;
-  //   byPkg.set(k, t);
-  //   if (!k.startsWith('website:')) {
-  //     byPkg.set(`website:${k}`, t);
-  //   }
-  // });
   const byPkg = new Map<string, NativeTimerForLiveTimerUsageMerge>();
   timers.forEach(t => {
     const k = String(t.package || '').trim().toLowerCase();
@@ -178,10 +169,12 @@ export function mergeLiveTimerUsageIntoPolicies(
     lookupKey: getPolicyPackageKey(p),
   })));
   return policies.map(item => {
+    console.log('🔍 POLICY:', item.target_label, 'type:', item.target_type, 'backend is_blocked:', item.is_blocked);
     if (item.target_type !== 'app' && item.target_type !== 'website') return item;
     const key = getPolicyPackageKey(item);
     const timer = byPkg.get(key);
-    // No native timer for this policy → fall back to backend data unchanged.
+    console.log('🔍 native timer for', key, ': ', timer ? `status=${timer.status}, remaining=${timer.remainingSeconds}s` : 'NOT FOUND');
+
     if (!timer) return item;
 
     const budget = Math.max(0, Number(timer.liveTimerUsageBudgetSeconds) || 0);
