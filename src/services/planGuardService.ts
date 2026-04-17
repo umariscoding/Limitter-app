@@ -88,14 +88,3 @@ export const getPlanCode = async (): Promise<string> => {
   const limits = await getPlanLimits();
   return limits.planCode;
 };
-
-export const upgradePlanAPI = async (
-  planCode: "free" | "pro" | "elite",
-): Promise<{ accountId: string; planCode: string }> => {
-  const result = await axiosService.post<{ accountId: string; planCode: string }>(
-    API.UpgradePlan,
-    { planCode },
-  );
-  invalidatePlanCache();
-  return result;
-};

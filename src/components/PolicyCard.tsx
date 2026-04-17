@@ -72,15 +72,12 @@ export default function PolicyCard({ limit, onOverride }: PolicyCardProps) {
       </View>
 
       <TouchableOpacity onPress={() => onOverride(limit)} activeOpacity={0.8} disabled={!isBlocked}>
-        <LinearGradient
-          colors={isBlocked ? ['#EF4444', '#DC2626'] : ['#CBD5E1', '#CBD5E1']}
-          start={{ x: 0, y: 0 }}
-          end={{ x: 1, y: 0 }}
-          style={[s.overrideBtn, !isBlocked && { opacity: 0.4 }]}
-        >
-          <Zap size={16} color="#FFFFFF" />
-          <Text style={s.overrideBtnText}>{isBlocked ? 'Use Override' : 'Override'}</Text>
-        </LinearGradient>
+        <View style={[s.overrideBtn, isBlocked ? s.overrideBtnActive : s.overrideBtnDisabled]}>
+          <Zap size={16} color={isBlocked ? '#FFFFFF' : '#94A3B8'} />
+          <Text style={[s.overrideBtnText, !isBlocked && s.overrideBtnTextDisabled]}>
+            {isBlocked ? 'Use Override' : 'Override available when blocked'}
+          </Text>
+        </View>
       </TouchableOpacity>
     </View>
   );
@@ -168,5 +165,8 @@ const s = StyleSheet.create({
     borderRadius: 12,
     marginTop: 12,
   },
+  overrideBtnActive: { backgroundColor: '#EF4444' },
+  overrideBtnDisabled: { backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
   overrideBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
+  overrideBtnTextDisabled: { color: '#64748B', fontWeight: '600', fontSize: 13 },
 });

@@ -46,12 +46,6 @@ export const useOverrideAPI = async (
   });
 };
 
-export const grantOverrideCreditsAPI = async (
-  credits: number,
-): Promise<{ grantedCredits: number; grantedRemaining: number }> => {
-  return await axiosService.post(API.OverrideGrant, { credits });
-};
-
 export const getOverrideBalanceAPI = async (): Promise<OverrideBalanceResponse> => {
   return await axiosService.get<OverrideBalanceResponse>(API.OverrideBalance);
 };

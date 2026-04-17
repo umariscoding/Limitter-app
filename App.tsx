@@ -8,12 +8,14 @@ import MainNavigator from "./src/navigation/MainNavigator";
 import { UserContextProvider, useUser } from "./src/context/UserContext";
 import { UsageContextProvider } from "./src/context/UsageContext";
 import { PolicyContextProvider, usePolicyContext } from "./src/context/PolicyContext";
-import { onAuthStateChanged, bootstrap } from "./src/auth/firebaseAuthService";
+import { onAuthStateChanged } from "./src/auth/firebaseAuthService";
+import { refreshBootstrap } from "./src/services/bootstrapService";
 import { startTimerRealtimeTracking, stopTimerRealtimeTracking } from "./src/services/timerRealtimeService";
 import { getOverrideBalanceAPI, useOverrideAPI } from "./src/services/overrideService";
 import { grantTemporaryOverrideAccess, grantTemporaryWebsiteOverride } from "./src/services/appBlockerService";
 import { resolveCurrentDeviceId } from "./src/services/currentDeviceService";
 import { getPolicyPackageKey } from "./src/utils/policyMapper";
+import { useFcm } from "./src/hooks/useFcm";
 
 const navigationRef = createNavigationContainerRef<any>();
 
@@ -132,12 +134,23 @@ function AppInner(): React.JSX.Element {
   const loadAccountRef = React.useRef(async () => {
     try {
       setBootstrapError(null);
-      const accountData = await bootstrap();
+      const accountData = await refreshBootstrap();
       depsRef.current.setAccountData(accountData);
     } catch (err: any) {
       setBootstrapError(err?.message || "Failed to load account. Check your connection.");
     }
   });
+
+  const fcmRefreshRef = React.useRef(async () => {
+    try {
+      const accountData = await refreshBootstrap();
+      depsRef.current.setAccountData(accountData);
+    } catch (err: any) {
+      console.warn(`[App] FCM-triggered refresh failed: ${err?.message || err}`);
+    }
+  });
+
+  useFcm(user?.device?.deviceId || null, () => fcmRefreshRef.current());
 
   React.useEffect(() => {
     const unsubscribe = onAuthStateChanged(async (fbUser) => {

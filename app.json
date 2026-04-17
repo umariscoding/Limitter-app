@@ -4,8 +4,20 @@
     "slug": "limitter",
     "scheme": "limitter",
     "version": "1.0.0",
+    "plugins": [
+      "@react-native-firebase/app",
+      [
+        "expo-build-properties",
+        {
+          "android": {
+            "extraMavenRepos": []
+          }
+        }
+      ]
+    ],
     "android": {
       "package": "com.limitter",
+      "googleServicesFile": "./android/app/google-services.json",
       "permissions": [
         "android.permission.INTERNET",
         "android.permission.FOREGROUND_SERVICE",
@@ -16,7 +28,8 @@
         "android.permission.QUERY_ALL_PACKAGES",
         "android.permission.SCHEDULE_EXACT_ALARM",
         "android.permission.WAKE_LOCK",
-        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS"
+        "android.permission.REQUEST_IGNORE_BATTERY_OPTIMIZATIONS",
+        "com.android.vending.BILLING"
       ]
     },
     "ios": {

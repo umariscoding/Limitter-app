@@ -1,4 +1,4 @@
-export const BASE_URL = "https://5ea3-154-80-29-205.ngrok-free.app";
+export const BASE_URL = "https://11c9-154-80-29-205.ngrok-free.app";
 
 export const API = {
   SetupAccount: "/api/auth/setup-account",
@@ -10,6 +10,7 @@ export const API = {
 
   RegisterDevice: "/api/devices/register",
   GetDevices: "/api/devices",
+  DeviceFcmToken: "/api/devices/fcm-token",
 
   Policies: "/api/policies",
 
@@ -21,10 +22,12 @@ export const API = {
 
   AccountProfile: "/api/account/profile",
   PlanLimits: "/api/account/plan-limits",
-  UpgradePlan: "/api/account/upgrade-plan",
 
   OverrideUse: "/api/overrides/use",
-  OverrideGrant: "/api/overrides/grant",
   OverrideHistory: "/api/overrides/history",
   OverrideBalance: "/api/overrides/balance",
+
+  BillingVerifyPurchase: "/api/billing/verify-purchase",
+  BillingRefresh: "/api/billing/refresh",
+  BillingPurchases: "/api/billing/purchases",
 };

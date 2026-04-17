@@ -11,18 +11,15 @@ import {
   ActivityIndicator,
   Keyboard,
   Modal,
+  Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import { ChevronLeft, Check, X, Zap, Shield, ShieldCheck } from 'lucide-react-native';
 import { subscriptionPlans } from '../data/appData';
 import { useUser } from '../context/UserContext';
-import { useDeviceResolver } from '../hooks/useDeviceResolver';
-import { grantTemporaryOverrideAccess } from '../services/appBlockerService';
-import { grantOverrideCreditsAPI, useOverrideAPI, getOverrideBalanceAPI } from '../services/overrideService';
-import { getPoliciesAPI } from '../services/policyService';
-import { getPlanOverrideLimit, normalizePlan } from '../utils/planRules';
-import { upgradePlanAPI } from '../services/planGuardService';
+import { useBilling, PlanCode } from '../hooks/useBilling';
+import { normalizePlan } from '../utils/planRules';
 import BottomNav from '../components/BottomNav';
 
 const PLAN_GRADIENTS: Record<string, [string, string]> = {
@@ -37,11 +34,13 @@ const OVERRIDE_PACKS = [
   { count: 10, total: 19.90 },
 ];
 
+const USER_CANCEL_CODES = new Set(['E_USER_CANCELLED', 'E_USER_CANCELED']);
+
 export default function SubscriptionPlansScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { user, updateUser } = useUser();
-  const { deviceId } = useDeviceResolver(user?.uid);
+  const { user } = useUser();
+  const { buyOverrides, buyPlan, connected } = useBilling();
   const currentUserPlan = normalizePlan(user?.plan);
 
   const defaultSelectedPlanId = currentUserPlan === 'elite' ? '3' : currentUserPlan === 'pro' ? '2' : '1';
@@ -72,55 +71,64 @@ export default function SubscriptionPlansScreen() {
   const handleConfirmPay = async () => {
     Keyboard.dismiss();
     const newPlan = mapPlanIdToUserPlan(selectedPlanId);
-    if (newPlan === currentUserPlan) { Alert.alert('Already Active', `You are already on the ${selectedPlan.name} plan.`); return; }
+    if (newPlan === currentUserPlan) {
+      Alert.alert('Already Active', `You are already on the ${selectedPlan.name} plan.`);
+      return;
+    }
+    if (newPlan === 'free') {
+      Alert.alert('Manage in Play Store', 'To downgrade to Free, cancel your subscription from the Play Store.');
+      return;
+    }
+    if (!connected) {
+      Alert.alert('Not Connected', 'Billing is still connecting. Try again in a moment.');
+      return;
+    }
 
     setIsProcessing(true);
     try {
-      const result = await upgradePlanAPI(newPlan);
-      const confirmedPlan = result?.planCode || newPlan;
-
-      // Fetch fresh override balance from backend after upgrade
-      let overrideCount = getPlanOverrideLimit(confirmedPlan);
-      try {
-        const balance = await getOverrideBalanceAPI();
-        overrideCount = balance.totalAvailable;
-      } catch { /* use fallback */ }
-      updateUser({ plan: confirmedPlan, overrides_left: overrideCount });
-      Alert.alert('Plan Activated!', `You are now on the ${selectedPlan.name} plan.`, [{
-        text: 'Go to Dashboard',
-        onPress: () => navigation.navigate('DashboardScreen', { planUpdatedAt: Date.now() }),
-      }]);
+      await buyPlan(newPlan as PlanCode);
+      Alert.alert('Plan Activated!', `You are now on the ${selectedPlan.name} plan.`, [
+        {
+          text: 'Go to Dashboard',
+          onPress: () => navigation.navigate('DashboardScreen', { planUpdatedAt: Date.now() }),
+        },
+      ]);
     } catch (error: any) {
+      if (USER_CANCEL_CODES.has(error?.code)) return;
       Alert.alert('Error', error?.message || 'Failed to upgrade plan.');
-    } finally { setIsProcessing(false); }
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   const handlePurchaseOverridePack = async (count: number) => {
+    if (!connected) {
+      Alert.alert('Not Connected', 'Billing is still connecting. Try again in a moment.');
+      return;
+    }
+
     setIsProcessing(true);
     try {
-      const result = await grantOverrideCreditsAPI(count);
-      updateUser({ overrides_left: result.grantedRemaining });
-
-      if (blockingPackage && deviceId) {
-        try {
-          const policies = await getPoliciesAPI() as any[];
-          const match = (policies || []).find((p: any) => (p.policy || p).targetKey === blockingPackage);
-          const resolvedPolicyId = match ? (match.policy || match).policyId || match.id : undefined;
-          if (resolvedPolicyId) {
-            await useOverrideAPI(resolvedPolicyId, deviceId);
-            await grantTemporaryOverrideAccess(blockingPackage, blockingAppName || blockingPackage, 5);
-          }
-        } catch {}
-      }
+      const result = await buyOverrides(count);
+      const credits = result.appliedCredits ?? count;
 
       setShowBuyOverridesModal(false);
-      Alert.alert('Overrides Added', `${count} override credits purchased.`, [{
-        text: 'OK',
-        onPress: () => navigation.navigate('DashboardScreen', { refreshAt: Date.now(), justOverriddenPackage: blockingPackage || null }),
-      }]);
+      Alert.alert('Overrides Added', `${credits} override credit${credits === 1 ? '' : 's'} purchased.`, [
+        {
+          text: 'OK',
+          onPress: () =>
+            navigation.navigate('DashboardScreen', {
+              refreshAt: Date.now(),
+              justOverriddenPackage: blockingPackage || null,
+            }),
+        },
+      ]);
     } catch (error: any) {
+      if (USER_CANCEL_CODES.has(error?.code)) return;
       Alert.alert('Error', error?.message || 'Failed to purchase overrides.');
-    } finally { setIsProcessing(false); }
+    } finally {
+      setIsProcessing(false);
+    }
   };
 
   return (
@@ -245,7 +253,7 @@ export default function SubscriptionPlansScreen() {
 
         <View style={s.trustRow}>
           <ShieldCheck size={16} color="#10B981" />
-          <Text style={s.trustText}>30-day money back guarantee</Text>
+          <Text style={s.trustText}>Managed by Google Play</Text>
         </View>
 
         <View style={{ height: 180 }} />
