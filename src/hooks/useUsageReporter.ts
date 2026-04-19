@@ -117,6 +117,33 @@ async function replayUsageQueue() {
   }
 }
 
+// ─── Module-level flush hook (callable from outside the React tree) ───
+//
+// Logout happens outside this hook's scope, but the last 0–14s of unflushed
+// usage lives only inside its closures. We expose the tick + flush callbacks
+// via module-level refs so `SettingsScreen.handleSignOut` can drain them
+// BEFORE wiping native state. See `flushPendingUsage` below.
+
+let activeTickHandler: (() => Promise<void>) | null = null;
+let activeFlushHandler: (() => Promise<void>) | null = null;
+
+export async function flushPendingUsage(timeoutMs: number = 5000): Promise<void> {
+  const tick = activeTickHandler;
+  const flush = activeFlushHandler;
+  if (!tick && !flush) return;
+
+  const drain = async () => {
+    if (tick) await tick();
+    if (flush) await flush();
+  };
+
+  // Race against a timeout so a slow/offline backend can't block logout.
+  await Promise.race([
+    drain(),
+    new Promise<void>(resolve => setTimeout(resolve, timeoutMs)),
+  ]);
+}
+
 // ─── Hook ───
 
 export function useUsageReporter(
@@ -319,6 +346,19 @@ export function useUsageReporter(
     return () => {
       unsubTick();
       if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
+    };
+  }, []);
+
+  // Expose flush handlers to `flushPendingUsage` (above) so the logout flow
+  // can drain unflushed usage before native state is cleared. Cleared on
+  // unmount so a stale closure from a previous mount never fires after
+  // sign-out.
+  useEffect(() => {
+    activeTickHandler = () => sendTick.current();
+    activeFlushHandler = () => flushToFirestore.current();
+    return () => {
+      activeTickHandler = null;
+      activeFlushHandler = null;
     };
   }, []);
 

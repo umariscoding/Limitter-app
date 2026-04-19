@@ -19,6 +19,7 @@ import { useUser } from '../context/UserContext';
 import { usePolicyContext } from '../context/PolicyContext';
 import { signOut, updateDisplayName, resetPassword } from '../auth/firebaseAuthService';
 import { updateBlockedApps, stopAllTimers } from '../services/appBlockerService';
+import { flushPendingUsage } from '../hooks/useUsageReporter';
 import axiosService from '../services/axiosService';
 import { API } from '../config/config';
 import BottomNav from '../components/BottomNav';
@@ -117,6 +118,17 @@ export default function SettingsScreen() {
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out', style: 'destructive', onPress: async () => {
+          // Drain any in-flight usage (tick + Firestore flush) BEFORE wiping
+          // native state. Without this, the last 0–14s of foreground usage
+          // that lives only in useUsageReporter's in-memory session is lost,
+          // and the next login hydrates from a stale backend snapshot.
+          // Wrapped in try/catch so an offline / slow backend never blocks
+          // logout; racing against a 5s timeout for the same reason.
+          try {
+            await flushPendingUsage(5000);
+          } catch (err: any) {
+            console.warn(`[SettingsScreen] usage flush on logout failed: ${err?.message || err}`);
+          }
           await stopAllTimers();
           updateBlockedApps([]);
           setPolicies([]);
