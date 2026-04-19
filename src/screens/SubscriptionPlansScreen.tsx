@@ -40,8 +40,8 @@ export default function SubscriptionPlansScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user } = useUser();
-  const { buyOverrides, buyPlan, connected, playStorePlan } = useBilling();
-  const currentUserPlan = playStorePlan !== "free" ? playStorePlan : normalizePlan(user?.plan);
+  const { buyOverrides, buyPlan, connected } = useBilling();
+  const currentUserPlan = normalizePlan(user?.plan);
 
   const defaultSelectedPlanId = currentUserPlan === 'elite' ? '3' : currentUserPlan === 'pro' ? '2' : '1';
   const [selectedPlanId, setSelectedPlanId] = useState(defaultSelectedPlanId);

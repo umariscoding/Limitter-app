@@ -27,6 +27,7 @@ import {
 import { preloadInstalledApps } from '../services/appListService';
 
 import { useUser } from '../context/UserContext';
+import { refreshBootstrap } from '../services/bootstrapService';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
 import { useNativeTimerSync } from '../hooks/useNativeTimerSync';
@@ -48,7 +49,7 @@ import type { CreateLimitState } from '../hooks/useCreateLimit';
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { user } = useUser();
+  const { user, setAccountData } = useUser();
   const { policies: limits, isLoading: loading, setPolicies: setLimits, setIsLoading: setLoading } = usePolicyContext();
   const { fetchPolicies } = usePolicyFetcher();
   const { deviceId } = useDeviceResolver(user?.uid);
@@ -150,7 +151,14 @@ export default function DashboardScreen() {
     // blocked/active state unpredictably when stale backend data arrived.
   }, [deviceId, route?.params?.refreshAt]);
 
-  const onRefresh = () => { setRefreshing(true); fetchLimits(); };
+  const onRefresh = async () => {
+    setRefreshing(true);
+    try {
+      const data = await refreshBootstrap();
+      setAccountData(data);
+    } catch {}
+    fetchLimits();
+  };
 
   const handleOpenCreateModal = () => {
     setShowCreateModal(true); // 🚀 instant open

@@ -6,10 +6,8 @@ import {
   fetchAvailableProducts,
   finishPurchase,
   getActivePurchases,
-  getActiveSubscriptionPlan,
   initBilling,
   OVERRIDE_SKU,
-  skuToPlan,
   isSubscriptionSku,
 } from "../services/billing";
 import type { BillingProduct, BillingPurchase, PlanCode } from "../services/billing";
@@ -29,7 +27,6 @@ const PLAN_TO_SKU: Record<string, string> = {
 
 export interface UseBillingState {
   connected: boolean;
-  playStorePlan: PlanCode;
   subscriptions: BillingProduct[];
   overrideProduct: BillingProduct | null;
   lastError: Error | null;
@@ -39,17 +36,14 @@ export interface UseBillingState {
 }
 
 export function useBilling(): UseBillingState {
-  const { setAccountData, updateUser } = useUser();
+  const { setAccountData } = useUser();
   const [connected, setConnected] = useState(false);
   const [subscriptions, setSubscriptions] = useState<BillingProduct[]>([]);
   const [overrideProduct, setOverrideProduct] = useState<BillingProduct | null>(null);
   const [lastError, setLastError] = useState<Error | null>(null);
-  const [playStorePlan, setPlayStorePlan] = useState<PlanCode>("free");
   const mountedRef = useRef(true);
   const setAccountDataRef = useRef(setAccountData);
   setAccountDataRef.current = setAccountData;
-  const updateUserRef = useRef(updateUser);
-  updateUserRef.current = updateUser;
 
   const applyRefreshedDataRef = useRef(async () => {
     try {
@@ -112,13 +106,6 @@ export function useBilling(): UseBillingState {
         setConnected(true);
         await reloadProductsRef.current();
         await replayPendingRef.current();
-        const plan = await getActiveSubscriptionPlan();
-        if (mountedRef.current) {
-          setPlayStorePlan(plan);
-          if (plan !== "free") {
-            updateUserRef.current({ plan, planCode: plan });
-          }
-        }
       } catch (err: any) {
         if (!mountedRef.current) return;
         setLastError(err);
@@ -175,17 +162,14 @@ export function useBilling(): UseBillingState {
     } catch (err: any) {
       console.warn(`[useBilling] verify subscription failed, purchase succeeded on store: ${err?.message || err}`);
       result = { replay: false } as VerifyPurchaseResponse;
-      updateUserRef.current({ plan: planCode, planCode });
     }
 
-    setPlayStorePlan(planCode);
     await applyRefreshedDataRef.current();
     return result;
   });
 
   return {
     connected,
-    playStorePlan,
     subscriptions,
     overrideProduct,
     lastError,

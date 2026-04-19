@@ -34,16 +34,6 @@ export async function getActivePurchases(): Promise<BillingPurchase[]> {
   return getProvider().getActivePurchases();
 }
 
-export async function getActiveSubscriptionPlan(): Promise<PlanCode> {
-  const purchases = await getActivePurchases();
-  for (const p of purchases) {
-    if (isSubscriptionSku(p.productId)) {
-      return skuToPlan(p.productId);
-    }
-  }
-  return "free";
-}
-
 export async function buySubscription(productId: string): Promise<BillingPurchase> {
   if (!initialized) await initBilling();
   return getProvider().buySubscription(productId);

@@ -16,7 +16,6 @@ import { grantTemporaryOverrideAccess, grantTemporaryWebsiteOverride } from "./s
 import { resolveCurrentDeviceId } from "./src/services/currentDeviceService";
 import { getPolicyPackageKey } from "./src/utils/policyMapper";
 import { useFcm } from "./src/hooks/useFcm";
-import { initBilling, getActiveSubscriptionPlan } from "./src/services/billing";
 
 const navigationRef = createNavigationContainerRef<any>();
 
@@ -137,13 +136,6 @@ function AppInner(): React.JSX.Element {
       setBootstrapError(null);
       const accountData = await refreshBootstrap();
       depsRef.current.setAccountData(accountData);
-      try {
-        await initBilling();
-        const storePlan = await getActiveSubscriptionPlan();
-        if (storePlan !== "free") {
-          depsRef.current.updateUser({ plan: storePlan, planCode: storePlan });
-        }
-      } catch {}
     } catch (err: any) {
       setBootstrapError(err?.message || "Failed to load account. Check your connection.");
     }
