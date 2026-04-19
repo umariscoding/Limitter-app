@@ -1,4 +1,4 @@
-package com.limitter
+package com.limitter.app
 
 import android.accessibilityservice.AccessibilityService
 import android.accessibilityservice.AccessibilityServiceInfo

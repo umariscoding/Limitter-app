@@ -1,4 +1,4 @@
-package com.limitter
+package com.limitter.app
 
 import android.content.Intent
 import android.content.pm.ApplicationInfo

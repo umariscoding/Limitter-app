@@ -1,4 +1,4 @@
-package com.limitter
+package com.limitter.app
 
 import android.app.usage.UsageEvents
 import android.app.usage.UsageStatsManager

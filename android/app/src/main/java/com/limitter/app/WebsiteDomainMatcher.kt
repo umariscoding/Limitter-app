@@ -1,4 +1,4 @@
-package com.limitter
+package com.limitter.app
 
 object WebsiteDomainMatcher {
 

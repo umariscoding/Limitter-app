@@ -16,7 +16,7 @@
       ]
     ],
     "android": {
-      "package": "com.limitter",
+      "package": "com.limitter.app",
       "googleServicesFile": "./android/app/google-services.json",
       "permissions": [
         "android.permission.INTERNET",
