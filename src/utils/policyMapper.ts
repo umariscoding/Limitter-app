@@ -203,9 +203,14 @@ export function mergeLiveTimerUsageIntoPolicies(
     const nativeIsActive = nativeStatus === 'active' || nativeStatus === 'running';
 
     if (!nativeIsActive) {
+      // Native is the authoritative source for used time (CLAUDE.md §3: local
+      // state is a cache, not truth). Do not preserve a higher backend value
+      // here — a stale/inflated backend total must not override native's
+      // exact committed usage, or the UI shows e.g. "2m / 1m" after the real
+      // value has dropped.
       return {
         ...item,
-        time_used_minutes: Math.max(item.time_used_minutes, cappedUsed),
+        time_used_minutes: cappedUsed,
         _nativeBudgetSeconds: budget > 0 ? budget : undefined,
       };
     }

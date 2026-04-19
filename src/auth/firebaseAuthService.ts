@@ -139,6 +139,12 @@ export async function signOut() {
 export async function updateDisplayName(name: string) {
   const user = auth.currentUser;
   if (!user) throw new Error("Not authenticated");
+  // Firestore is the durable source of truth (CLAUDE.md §2.2). Persist there
+  // first so that the profile endpoint — which reads from Firestore — returns
+  // the new name on refresh. Firebase Auth is updated afterwards to keep the
+  // auth-provider record in sync for any consumer that reads user.displayName
+  // directly (tokens, ID claims, etc.).
+  await axiosService.patch(API.AccountProfile, { displayName: name });
   await updateProfile(user, { displayName: name });
 }
 

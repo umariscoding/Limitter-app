@@ -161,7 +161,7 @@ class LimitterForegroundService : Service() {
 
                     if (remaining <= 0) {
                         TimerStateManager.updateTimer(pkg, timer.copy(
-                            usedSeconds = effectiveUsed,
+                            usedSeconds = timer.durationSeconds,
                             status = "blocked",
                             lastActiveTimestamp = now
                         ))
@@ -185,8 +185,10 @@ class LimitterForegroundService : Service() {
                     // If this commit pushes us past the limit, transition directly to "blocked"
                     // so a subsequent dashboard refresh correctly reflects the state.
                     val newStatus = if (newUsed >= timer.durationSeconds) "blocked" else "waiting"
+                    // Cap usedSeconds at the limit so the dashboard never shows "2m / 1m".
+                    val cappedUsed = if (newStatus == "blocked") timer.durationSeconds else newUsed
                     TimerStateManager.updateTimer(pkg, timer.copy(
-                        usedSeconds = newUsed,
+                        usedSeconds = cappedUsed,
                         status = newStatus,
                         lastActiveTimestamp = 0
                     ))
@@ -203,9 +205,10 @@ class LimitterForegroundService : Service() {
         val isBrowserForeground = foregroundPkg != null && WebsiteDomainMatcher.isBrowser(foregroundPkg)
         val currentUrl = WebsiteAccessibilityService.currentBrowserUrl
 
-        if (!isBrowserForeground) {
-            websiteLastConfirmed.clear()
-        }
+        // Note: we do NOT bulk-clear websiteLastConfirmed when the browser leaves
+        // foreground. Session-end below reads lastConfirmed as the anchor for
+        // committed usage, so it must remain intact until the per-key session
+        // ends. Individual keys are removed on their own session end (below).
 
         for ((key, timer) in TimerStateManager.activeTimers.toMap()) {
             if (!TimerStateManager.isWebsiteTimer(key)) continue
@@ -253,7 +256,7 @@ class LimitterForegroundService : Service() {
 
                     if (remaining <= 0) {
                         TimerStateManager.updateTimer(key, timer.copy(
-                            usedSeconds = effectiveUsed,
+                            usedSeconds = timer.durationSeconds,
                             status = "blocked",
                             lastActiveTimestamp = now
                         ))
@@ -268,11 +271,20 @@ class LimitterForegroundService : Service() {
                 }
             } else {
                 if (timer.status == "active") {
-                    // Session end — commit elapsed time from this single session once
-                    val sessionSeconds = maxOf(0, ((now - timer.lastActiveTimestamp) / 1000).toInt())
+                    // Session end — anchor commit at the last moment the URL was
+                    // confirmed on the target domain, NOT at `now`. Otherwise the
+                    // grace-period window (up to WEBSITE_GRACE_MS) would be charged
+                    // to the user even though they had already left the site, and
+                    // similarly any poll lag between the user leaving and this poll
+                    // detecting the absence would inflate committed usage. Falling
+                    // back to `now` only if we somehow never recorded a confirmation
+                    // (defensive; session start always sets it).
+                    val lastConfirmedAt = websiteLastConfirmed[key] ?: 0L
+                    val sessionEndTs = if (lastConfirmedAt > timer.lastActiveTimestamp) lastConfirmedAt else now
+                    val sessionSeconds = maxOf(0, ((sessionEndTs - timer.lastActiveTimestamp) / 1000).toInt())
                     websiteLastConfirmed.remove(key)
                     TimerStateManager.updateTimer(key, timer.copy(
-                        usedSeconds = timer.usedSeconds + sessionSeconds,
+                        usedSeconds = minOf(timer.durationSeconds, timer.usedSeconds + sessionSeconds),
                         status = "waiting",
                         lastActiveTimestamp = 0
                     ))

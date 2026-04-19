@@ -5,10 +5,7 @@ import { getPolicyPackageKey } from '../utils/policyMapper';
 import {
   startAppBlockerService,
   updateBlockedApps,
-  grantTemporaryOverrideAccess,
-  grantTemporaryWebsiteOverride,
 } from '../services/appBlockerService';
-import type { UIPolicy } from '../utils/policyMapper';
 
 let lastNativeUpdateAt = 0;
 export const setLastNativeUpdateAt = (ts: number) => { lastNativeUpdateAt = ts; };
@@ -37,7 +34,6 @@ export function useLockStateSync(accountId: string | undefined) {
       }
 
       const newlyBlocked: Array<{ package_name: string; app_name: string; blocked_until_timestamp: number }> = [];
-      const newlyUnblocked: UIPolicy[] = [];
 
       setPoliciesRef.current(prev => {
         let changed = false;
@@ -58,12 +54,6 @@ export function useLockStateSync(accountId: string | undefined) {
             return { ...item, is_blocked: true, status: 'blocked' as const };
           }
 
-          if (!isLockedRemotely && item.is_blocked) {
-            changed = true;
-            newlyUnblocked.push(item);
-            return { ...item, is_blocked: false, time_used_minutes: 0, status: 'active' as const };
-          }
-
           return item;
         });
         return changed ? next : prev;
@@ -72,16 +62,6 @@ export function useLockStateSync(accountId: string | undefined) {
       if (newlyBlocked.length > 0) {
         startAppBlockerService(newlyBlocked).catch(() => {});
         updateBlockedApps(newlyBlocked);
-      }
-
-      for (const item of newlyUnblocked) {
-        const pkg = item.app_name || item.package_name || item.packageName;
-        if (!pkg) continue;
-        if (item.target_type === 'website') {
-          grantTemporaryWebsiteOverride(pkg, 5).catch(() => {});
-        } else {
-          grantTemporaryOverrideAccess(pkg, item.target_label || pkg, 5).catch(() => {});
-        }
       }
     });
 

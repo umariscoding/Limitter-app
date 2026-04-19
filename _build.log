@@ -1,0 +1,20 @@
+Error: protocol fault (couldn't read status): connection reset
+Error: C:\Users\User\AppData\Local\Android\Sdk/platform-tools/adb start-server exited with non-zero code: 4294967295
+    at ChildProcess.completionListener (E:\subhan-projects\limitter\Limitter-app\node_modules\@expo\spawn-async\src\spawnAsync.ts:67:13)
+    at Object.onceWrapper (node:events:633:26)
+    at ChildProcess.emit (node:events:518:28)
+    at ChildProcess.cp.emit (E:\subhan-projects\limitter\Limitter-app\node_modules\cross-spawn\lib\enoent.js:34:29)
+    at maybeClose (node:internal/child_process:1101:16)
+    at Socket.<anonymous> (node:internal/child_process:456:11)
+    at Socket.emit (node:events:518:28)
+    at Pipe.<anonymous> (node:net:346:12)
+    ...
+    at spawnAsync (E:\subhan-projects\limitter\Limitter-app\node_modules\@expo\spawn-async\src\spawnAsync.ts:28:21)
+    at ADBServer.startAsync (E:\subhan-projects\limitter\Limitter-app\node_modules\@expo\cli\src\start\platforms\android\ADBServer.ts:49:59)
+    at ADBServer.runAsync (E:\subhan-projects\limitter\Limitter-app\node_modules\@expo\cli\src\start\platforms\android\ADBServer.ts:82:16)
+    at getAttachedDevicesAsync (E:\subhan-projects\limitter\Limitter-app\node_modules\@expo\cli\src\start\platforms\android\adb.ts:214:36)
+    at getDevicesAsync (E:\subhan-projects\limitter\Limitter-app\node_modules\@expo\cli\src\start\platforms\android\getDevices.ts:7:54)
+    at Function.resolveAsync (E:\subhan-projects\limitter\Limitter-app\node_modules\@expo\cli\src\start\platforms\android\AndroidDeviceManager.ts:41:42)
+    at resolveDeviceAsync (E:\subhan-projects\limitter\Limitter-app\node_modules\@expo\cli\src\run\android\resolveDevice.ts:9:48)
+    at resolveOptionsAsync (E:\subhan-projects\limitter\Limitter-app\node_modules\@expo\cli\src\run\android\resolveOptions.ts:39:42)
+    at runAndroidAsync (E:\subhan-projects\limitter\Limitter-app\node_modules\@expo\cli\src\run\android\runAndroidAsync.ts:30:42)

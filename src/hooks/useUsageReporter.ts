@@ -203,7 +203,7 @@ export function useUsageReporter(
           setPoliciesRef.current(prev =>
             prev.map(item => {
               if (getPolicyPackageKey(item) !== pkg && getPolicyPackageKey(item) !== `website:${pkg}`) return item;
-              return { ...item, time_used_minutes: (response.totalUsageSeconds || 0) / 60, is_blocked: false, status: 'active' as const };
+              return { ...item, is_blocked: false, status: 'active' as const };
             }),
           );
           continue;
@@ -216,14 +216,6 @@ export function useUsageReporter(
         const localUsed = session.accumulatedSeconds;
         if (serverUsed > localUsed) {
           session.accumulatedSeconds = serverUsed;
-          const serverUsedMinutes = serverUsed / 60;
-          setPoliciesRef.current(prev =>
-            prev.map(item => {
-              if (getPolicyPackageKey(item) !== pkg && getPolicyPackageKey(item) !== `website:${pkg}`) return item;
-              if (item.time_used_minutes >= serverUsedMinutes) return item;
-              return { ...item, time_used_minutes: serverUsedMinutes };
-            }),
-          );
         }
 
         if (response.isExhausted || locallyExhausted()) {
