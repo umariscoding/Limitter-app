@@ -157,7 +157,7 @@ export default function OverrideLogsScreen() {
                 </View>
 
                 <TouchableOpacity
-                  onPress={() => navigation.navigate('SubscriptionPlansScreen', { showBuyOverrides: true })}
+                  onPress={() => navigation.navigate('BuyOverrides')}
                   activeOpacity={0.8}
                 >
                   <LinearGradient colors={['#F59E0B', '#D97706']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.buyBtn}>

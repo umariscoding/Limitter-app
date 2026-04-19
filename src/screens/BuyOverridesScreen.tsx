@@ -9,17 +9,23 @@ import {
     TextInput,
     Alert,
     ScrollView,
+    ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft, Minus, Plus, ShoppingCart } from 'lucide-react-native';
+import { useBilling } from '../hooks/useBilling';
 
 const PRICE_PER_OVERRIDE = 1.99;
 const MIN_OVERRIDES = 1;
 const MAX_OVERRIDES = 999;
 
+const USER_CANCEL_CODES = new Set(['E_USER_CANCELLED', 'E_USER_CANCELED']);
+
 export default function BuyOverridesScreen() {
     const navigation = useNavigation<any>();
+    const { buyOverrides, connected } = useBilling();
     const [countText, setCountText] = useState('1');
+    const [isProcessing, setIsProcessing] = useState(false);
 
     const count = useMemo(() => {
         const parsed = parseInt(countText, 10);
@@ -48,28 +54,34 @@ export default function BuyOverridesScreen() {
         setCountText(String(newValue));
     };
 
-    const handleBuy = () => {
+    const handleBuy = async () => {
         if (!isValid) {
-            Alert.alert(
-                'Invalid amount',
-                `Please enter a number between ${MIN_OVERRIDES} and ${MAX_OVERRIDES}.`
-            );
+            Alert.alert('Invalid amount', `Please enter a number between ${MIN_OVERRIDES} and ${MAX_OVERRIDES}.`);
             return;
         }
-        Alert.alert(
-            'Confirm Purchase',
-            `Buy ${count} override${count > 1 ? 's' : ''} for $${totalPrice}?`,
-            [
-                { text: 'Cancel', style: 'cancel' },
-                {
-                    text: 'Proceed',
-                    onPress: () => {
-                        // Payment integration goes here later.
-                        console.log('Purchase initiated:', { count, totalPrice });
-                    },
-                },
-            ],
-        );
+        if (!connected) {
+            Alert.alert('Not Connected', 'Billing is still connecting. Try again in a moment.');
+            return;
+        }
+
+        setIsProcessing(true);
+        try {
+            const result = await buyOverrides(count);
+            const credits = result.appliedCredits ?? count;
+            Alert.alert(
+                'Overrides Added',
+                `${credits} override credit${credits === 1 ? '' : 's'} purchased.`,
+                [{
+                    text: 'OK',
+                    onPress: () => navigation.navigate('DashboardScreen', { refreshAt: Date.now() }),
+                }],
+            );
+        } catch (error: any) {
+            if (USER_CANCEL_CODES.has(error?.code)) return;
+            Alert.alert('Error', error?.message || 'Failed to purchase overrides.');
+        } finally {
+            setIsProcessing(false);
+        }
     };
 
     return (
@@ -98,7 +110,7 @@ export default function BuyOverridesScreen() {
                     <TouchableOpacity
                         style={[s.stepBtn, count <= MIN_OVERRIDES && s.stepBtnDisabled]}
                         onPress={decrement}
-                        disabled={count <= MIN_OVERRIDES}
+                        disabled={count <= MIN_OVERRIDES || isProcessing}
                     >
                         <Minus size={22} color={count <= MIN_OVERRIDES ? '#CBD5E1' : '#4338CA'} />
                     </TouchableOpacity>
@@ -111,12 +123,13 @@ export default function BuyOverridesScreen() {
                         maxLength={3}
                         textAlign="center"
                         selectTextOnFocus
+                        editable={!isProcessing}
                     />
 
                     <TouchableOpacity
                         style={[s.stepBtn, count >= MAX_OVERRIDES && s.stepBtnDisabled]}
                         onPress={increment}
-                        disabled={count >= MAX_OVERRIDES}
+                        disabled={count >= MAX_OVERRIDES || isProcessing}
                     >
                         <Plus size={22} color={count >= MAX_OVERRIDES ? '#CBD5E1' : '#4338CA'} />
                     </TouchableOpacity>
@@ -139,17 +152,21 @@ export default function BuyOverridesScreen() {
                 </View>
 
                 <TouchableOpacity
-                    style={[s.buyBtn, !isValid && s.buyBtnDisabled]}
+                    style={[s.buyBtn, (!isValid || isProcessing) && s.buyBtnDisabled]}
                     onPress={handleBuy}
-                    disabled={!isValid}
+                    disabled={!isValid || isProcessing}
                 >
-                    <Text style={s.buyBtnText}>
-                        {isValid ? `Proceed to Payment • $${totalPrice}` : 'Enter a valid quantity'}
-                    </Text>
+                    {isProcessing ? (
+                        <ActivityIndicator color="#FFFFFF" size="small" />
+                    ) : (
+                        <Text style={s.buyBtnText}>
+                            {isValid ? `Proceed to Payment • $${totalPrice}` : 'Enter a valid quantity'}
+                        </Text>
+                    )}
                 </TouchableOpacity>
 
                 <Text style={s.footnote}>
-                    You'll be charged only after confirming payment on the next screen.
+                    Payment is processed securely through Google Play.
                 </Text>
             </ScrollView>
         </SafeAreaView>
