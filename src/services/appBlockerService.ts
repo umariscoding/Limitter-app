@@ -29,7 +29,8 @@ export interface WebsiteBlockerStatus {
 export const startAppUsageTimer = async (
   packageName: string,
   appName: string,
-  durationSeconds: number
+  durationSeconds: number,
+  usedSeconds: number = 0
 ) => {
   try {
     if (!LimitterModule?.sendCommand) {
@@ -37,12 +38,14 @@ export const startAppUsageTimer = async (
     }
 
     const safeDuration = Math.max(1, Math.floor(durationSeconds));
+    const safeUsed = Math.max(0, Math.floor(usedSeconds));
     const response = await LimitterModule.sendCommand('START_TIMERS', {
       apps: [
         {
           package: packageName,
           appName,
           duration: String(safeDuration),
+          usedSeconds: String(safeUsed),
         },
       ],
     });
@@ -130,7 +133,7 @@ export const startWebsiteTimer = async ({
 };
 
 export const startBulkWebsiteTimers = async (
-  websites: Array<{ domain: string; durationSeconds: number }>,
+  websites: Array<{ domain: string; durationSeconds: number; usedSeconds?: number }>,
 ): Promise<boolean> => {
   try {
     if (!LimitterModule?.sendCommand || websites.length === 0) return false;
@@ -138,6 +141,7 @@ export const startBulkWebsiteTimers = async (
     const websitesMaps = websites.map(w => ({
       domain: w.domain,
       duration: String(w.durationSeconds),
+      usedSeconds: String(w.usedSeconds || 0),
     }));
 
     await LimitterModule.sendCommand('START_WEBSITE_TIMERS', { websites: websitesMaps });

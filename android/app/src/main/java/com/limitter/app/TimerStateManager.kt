@@ -38,12 +38,13 @@ object TimerStateManager {
                 val pkg = obj.getString("package")
                 val appName = obj.optString("appName", pkg)
                 val duration = obj.optString("duration", "0").toIntOrNull() ?: 0
+                val initialUsed = obj.optString("usedSeconds", "0").toIntOrNull() ?: 0
 
                 if (duration <= 0 || pkg.isEmpty()) continue
 
                 val existing = activeTimers[pkg]
                 if (existing != null && existing.startDate == today) {
-                    val cappedUsed = minOf(existing.usedSeconds, duration)
+                    val cappedUsed = maxOf(existing.usedSeconds, minOf(initialUsed, duration))
                     val newStatus = when {
                         existing.status == "blocked" -> "blocked"
                         cappedUsed >= duration -> "blocked"
@@ -58,13 +59,17 @@ object TimerStateManager {
                     if (newStatus == "blocked") blockedPackages.add(pkg)
                     Log.w(TAG, "KEEP timer: $appName ($pkg) ${duration}s, used=${cappedUsed}s [${newStatus}]")
                 } else {
+                    val cappedInitialUsed = minOf(initialUsed, duration)
+                    val newStatus = if (cappedInitialUsed >= duration) "blocked" else "waiting"
                     activeTimers[pkg] = TimerEntry(
                         packageName = pkg,
                         appName = appName,
-                        durationSeconds = duration
+                        durationSeconds = duration,
+                        usedSeconds = cappedInitialUsed,
+                        status = newStatus
                     )
-                    blockedPackages.remove(pkg)
-                    Log.w(TAG, "NEW timer: $appName ($pkg) ${duration}s")
+                    if (newStatus == "blocked") blockedPackages.add(pkg) else blockedPackages.remove(pkg)
+                    Log.w(TAG, "NEW timer: $appName ($pkg) ${duration}s, used=${cappedInitialUsed}s [${newStatus}]")
                 }
             }
 
@@ -83,13 +88,14 @@ object TimerStateManager {
                 val obj = arr.getJSONObject(i)
                 val domain = obj.getString("domain").trim().lowercase()
                 val duration = obj.optString("duration", "0").toIntOrNull() ?: 0
+                val initialUsed = obj.optString("usedSeconds", "0").toIntOrNull() ?: 0
 
                 if (duration <= 0 || domain.isEmpty()) continue
 
                 val key = "website:$domain"
                 val existing = activeTimers[key]
                 if (existing != null && existing.startDate == today) {
-                    val cappedUsed = minOf(existing.usedSeconds, duration)
+                    val cappedUsed = maxOf(existing.usedSeconds, minOf(initialUsed, duration))
                     val newStatus = when {
                         existing.status == "blocked" -> "blocked"
                         cappedUsed >= duration -> "blocked"
@@ -104,13 +110,17 @@ object TimerStateManager {
                     if (newStatus == "blocked") blockedPackages.add(key)
                     Log.w(TAG, "KEEP website timer: $domain ${duration}s, used=${cappedUsed}s [${newStatus}]")
                 } else {
+                    val cappedInitialUsed = minOf(initialUsed, duration)
+                    val newStatus = if (cappedInitialUsed >= duration) "blocked" else "waiting"
                     activeTimers[key] = TimerEntry(
                         packageName = key,
                         appName = domain,
-                        durationSeconds = duration
+                        durationSeconds = duration,
+                        usedSeconds = cappedInitialUsed,
+                        status = newStatus
                     )
-                    blockedPackages.remove(key)
-                    Log.w(TAG, "NEW website timer: $domain ${duration}s")
+                    if (newStatus == "blocked") blockedPackages.add(key) else blockedPackages.remove(key)
+                    Log.w(TAG, "NEW website timer: $domain ${duration}s, used=${cappedInitialUsed}s [${newStatus}]")
                 }
             }
 

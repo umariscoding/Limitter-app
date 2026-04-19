@@ -97,6 +97,7 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
                         obj.put("package", app.getString("package") ?: "")
                         obj.put("appName", app.getString("appName") ?: "")
                         obj.put("duration", app.getString("duration") ?: "0")
+                        obj.put("usedSeconds", app.getString("usedSeconds") ?: "0")
                         jsonArray.put(obj)
                     }
 
@@ -119,6 +120,7 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
                         val obj = JSONObject()
                         obj.put("domain", site.getString("domain") ?: "")
                         obj.put("duration", site.getString("duration") ?: "0")
+                        obj.put("usedSeconds", site.getString("usedSeconds") ?: "0")
                         jsonArray.put(obj)
                     }
 

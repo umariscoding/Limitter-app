@@ -117,13 +117,11 @@ function startTimersInBackground(finalLimits: any[]) {
     const pkg = limit.app_name || limit.package_name || (limit as any).packageName;
     if (!pkg) continue;
 
-    const remainingSeconds = Math.max(
-      0,
-      (limit.max_time_minutes - (limit.time_used_minutes || 0)) * 60,
-    );
-    if (remainingSeconds <= 0) continue;
+    const totalSeconds = Math.max(0, limit.max_time_minutes * 60);
+    const usedSeconds = Math.max(0, (limit.time_used_minutes || 0) * 60);
+    if (usedSeconds >= totalSeconds) continue;
     appTimerPromises.push(
-      startAppUsageTimer(pkg, limit.target_label || pkg, remainingSeconds).catch(() => {}),
+      startAppUsageTimer(pkg, limit.target_label || pkg, totalSeconds, usedSeconds).catch(() => {}),
     );
   }
 
@@ -134,12 +132,10 @@ function startTimersInBackground(finalLimits: any[]) {
     const domain = limit.app_name || limit.package_name || (limit as any).packageName;
     if (!domain) continue;
 
-    const remainingSeconds = Math.max(
-      0,
-      (limit.max_time_minutes - (limit.time_used_minutes || 0)) * 60,
-    );
-    if (remainingSeconds <= 0) continue;
-    websiteTimersToStart.push({ domain, durationSeconds: remainingSeconds });
+    const totalSeconds = Math.max(0, limit.max_time_minutes * 60);
+    const usedSeconds = Math.max(0, (limit.time_used_minutes || 0) * 60);
+    if (usedSeconds >= totalSeconds) continue;
+    websiteTimersToStart.push({ domain, durationSeconds: totalSeconds, usedSeconds });
   }
 
   if (websiteTimersToStart.length > 0) {
