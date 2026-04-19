@@ -42,9 +42,22 @@ object TimerStateManager {
                 if (duration <= 0 || pkg.isEmpty()) continue
 
                 val existing = activeTimers[pkg]
-                if (existing != null && existing.startDate == today && existing.durationSeconds == duration) {
-    Log.w(TAG, "KEEP timer: $appName ($pkg) ${duration}s, used=${existing.usedSeconds}s [${existing.status}]")
-} else {
+                if (existing != null && existing.startDate == today) {
+                    val cappedUsed = minOf(existing.usedSeconds, duration)
+                    val newStatus = when {
+                        existing.status == "blocked" -> "blocked"
+                        cappedUsed >= duration -> "blocked"
+                        else -> existing.status
+                    }
+                    activeTimers[pkg] = existing.copy(
+                        appName = appName,
+                        durationSeconds = duration,
+                        usedSeconds = cappedUsed,
+                        status = newStatus
+                    )
+                    if (newStatus == "blocked") blockedPackages.add(pkg)
+                    Log.w(TAG, "KEEP timer: $appName ($pkg) ${duration}s, used=${cappedUsed}s [${newStatus}]")
+                } else {
                     activeTimers[pkg] = TimerEntry(
                         packageName = pkg,
                         appName = appName,
@@ -75,17 +88,30 @@ object TimerStateManager {
 
                 val key = "website:$domain"
                 val existing = activeTimers[key]
-if (existing != null && existing.startDate == today && existing.durationSeconds == duration) {
-    Log.w(TAG, "KEEP website timer: $domain ${duration}s, used=${existing.usedSeconds}s [${existing.status}]")
-} else {
-    activeTimers[key] = TimerEntry(
-        packageName = key,
-        appName = domain,
-        durationSeconds = duration
-    )
-    blockedPackages.remove(key)
-    Log.w(TAG, "NEW website timer: $domain ${duration}s")
-}
+                if (existing != null && existing.startDate == today) {
+                    val cappedUsed = minOf(existing.usedSeconds, duration)
+                    val newStatus = when {
+                        existing.status == "blocked" -> "blocked"
+                        cappedUsed >= duration -> "blocked"
+                        else -> existing.status
+                    }
+                    activeTimers[key] = existing.copy(
+                        appName = domain,
+                        durationSeconds = duration,
+                        usedSeconds = cappedUsed,
+                        status = newStatus
+                    )
+                    if (newStatus == "blocked") blockedPackages.add(key)
+                    Log.w(TAG, "KEEP website timer: $domain ${duration}s, used=${cappedUsed}s [${newStatus}]")
+                } else {
+                    activeTimers[key] = TimerEntry(
+                        packageName = key,
+                        appName = domain,
+                        durationSeconds = duration
+                    )
+                    blockedPackages.remove(key)
+                    Log.w(TAG, "NEW website timer: $domain ${duration}s")
+                }
             }
 
             Log.w(TAG, "Total active timers (apps + websites): ${activeTimers.size}")
@@ -121,8 +147,13 @@ if (existing != null && existing.startDate == today && existing.durationSeconds 
     }
 
     fun updateTimer(pkg: String, timer: TimerEntry) {
-        activeTimers[pkg] = timer
+    val previous = activeTimers[pkg]
+    if (previous != null && previous.status == "blocked" && timer.status != "blocked") {
+        Log.w(TAG, "PROTECT: refused to un-block $pkg (was blocked used=${previous.usedSeconds}/${previous.durationSeconds}, attempted status=${timer.status})")
+        return
     }
+    activeTimers[pkg] = timer
+}
 
     fun persistToPrefs(context: Context) {
         try {

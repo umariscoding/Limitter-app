@@ -94,7 +94,7 @@ echo.
 echo ============================================================
 echo.
 
-npx expo run:android --port %METRO_PORT%
+call npx expo run:android --port %METRO_PORT%
 
 echo.
 echo ============================================================

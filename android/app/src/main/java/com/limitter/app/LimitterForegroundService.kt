@@ -161,7 +161,7 @@ class LimitterForegroundService : Service() {
 
                     if (remaining <= 0) {
                         TimerStateManager.updateTimer(pkg, timer.copy(
-                            usedSeconds = effectiveUsed,
+                            usedSeconds = timer.durationSeconds,
                             status = "blocked",
                             lastActiveTimestamp = now
                         ))
@@ -185,8 +185,10 @@ class LimitterForegroundService : Service() {
                     // If this commit pushes us past the limit, transition directly to "blocked"
                     // so a subsequent dashboard refresh correctly reflects the state.
                     val newStatus = if (newUsed >= timer.durationSeconds) "blocked" else "waiting"
+                    // Cap usedSeconds at the limit so the dashboard never shows "2m / 1m".
+                    val cappedUsed = if (newStatus == "blocked") timer.durationSeconds else newUsed
                     TimerStateManager.updateTimer(pkg, timer.copy(
-                        usedSeconds = newUsed,
+                        usedSeconds = cappedUsed,
                         status = newStatus,
                         lastActiveTimestamp = 0
                     ))
@@ -253,7 +255,7 @@ class LimitterForegroundService : Service() {
 
                     if (remaining <= 0) {
                         TimerStateManager.updateTimer(key, timer.copy(
-                            usedSeconds = effectiveUsed,
+                            usedSeconds = timer.durationSeconds,
                             status = "blocked",
                             lastActiveTimestamp = now
                         ))

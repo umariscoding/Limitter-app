@@ -51,7 +51,7 @@ const PLAN_COLORS: Record<string, [string, string]> = {
 
 export default function SettingsScreen() {
   const navigation = useNavigation<any>();
-  const { clearUser } = useUser();
+  const { clearUser, updateUser } = useUser();
   const { setPolicies } = usePolicyContext();
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
@@ -64,7 +64,7 @@ export default function SettingsScreen() {
     try {
       const data = await axiosService.get<ProfileData>(API.AccountProfile);
       setProfile(data);
-    } catch {}
+    } catch { }
     finally { setLoading(false); setRefreshing(false); }
   };
 
@@ -86,6 +86,7 @@ export default function SettingsScreen() {
     try {
       await updateDisplayName(trimmed);
       setProfile(prev => prev ? { ...prev, user: { ...prev.user, displayName: trimmed } } : prev);
+      updateUser({ name: trimmed, displayName: trimmed })
       setShowEditName(false);
       Alert.alert('Success', 'Name updated successfully');
     } catch (err: any) {
@@ -98,27 +99,31 @@ export default function SettingsScreen() {
     if (!email) return;
     Alert.alert('Reset Password', `We'll send a password reset link to ${email}`, [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Send', onPress: async () => {
-        try {
-          await resetPassword(email);
-          Alert.alert('Email Sent', 'Check your inbox for the password reset link.');
-        } catch (err: any) {
-          Alert.alert('Error', err?.message || 'Failed to send reset email');
+      {
+        text: 'Send', onPress: async () => {
+          try {
+            await resetPassword(email);
+            Alert.alert('Email Sent', 'Check your inbox for the password reset link.');
+          } catch (err: any) {
+            Alert.alert('Error', err?.message || 'Failed to send reset email');
+          }
         }
-      }},
+      },
     ]);
   };
 
   const handleSignOut = () => {
     Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
-      { text: 'Sign Out', style: 'destructive', onPress: async () => {
-        await stopAllTimers();
-        updateBlockedApps([]);
-        setPolicies([]);
-        await signOut();
-        clearUser();
-      } },
+      {
+        text: 'Sign Out', style: 'destructive', onPress: async () => {
+          await stopAllTimers();
+          updateBlockedApps([]);
+          setPolicies([]);
+          await signOut();
+          clearUser();
+        }
+      },
     ]);
   };
 
