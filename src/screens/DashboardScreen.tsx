@@ -129,7 +129,7 @@ export default function DashboardScreen() {
     if (!deviceId) return;
     const overriddenPackage = route?.params?.justOverriddenPackage as string | undefined;
     if (overriddenPackage) justOverriddenPackageRef.current = overriddenPackage;
-    setLoading(true);
+    if (limits.length === 0) setLoading(true);
     fetchLimits();
   };
   useEffect(() => {
