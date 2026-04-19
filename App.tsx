@@ -34,22 +34,52 @@ function AppInner(): React.JSX.Element {
   const depsRef = React.useRef({ policies, user, updateUser, setAccountData, setFirebaseUser, setIsLoading, clearUser });
   depsRef.current = { policies, user, updateUser, setAccountData, setFirebaseUser, setIsLoading, clearUser };
 
+  // const parseOverrideLink = React.useRef(
+  //   (url: string): OverrideLinkPayload | null => {
+  //     try {
+  //       const parsed = new URL(url);
+  //       const packageName = parsed.searchParams.get("package") || "";
+  //       const appName = parsed.searchParams.get("appName") || packageName;
+  //       if (parsed.hostname?.toLowerCase() === "override" && packageName) {
+  //         return { packageName, appName };
+  //       }
+  //     } catch (_) { }
+
+  //     const overrideMatch = url.match(/limitter:\/\/override\?(.*)$/i);
+  //     if (!overrideMatch) return null;
+  //     const params = new URLSearchParams(overrideMatch[1] || "");
+  //     const packageName = params.get("package") || "";
+  //     const appName = params.get("appName") || packageName;
+  //     if (!packageName) return null;
+  //     return { packageName, appName };
+  //   },
+  // ).current;
   const parseOverrideLink = React.useRef(
     (url: string): OverrideLinkPayload | null => {
-      try {
-        const parsed = new URL(url);
-        const packageName = parsed.searchParams.get("package") || "";
-        const appName = parsed.searchParams.get("appName") || packageName;
-        if (parsed.hostname?.toLowerCase() === "override" && packageName) {
-          return { packageName, appName };
+      // Small helper: parses "?package=foo&appName=bar" into an object.
+      // We avoid URLSearchParams/URL because they have weak TypeScript types in React Native.
+      const parseQuery = (query: string): Record<string, string> => {
+        const result: Record<string, string> = {};
+        for (const pair of query.split('&')) {
+          if (!pair) continue;
+          const [rawKey, rawValue = ''] = pair.split('=');
+          try {
+            result[decodeURIComponent(rawKey)] = decodeURIComponent(rawValue);
+          } catch {
+            result[rawKey] = rawValue;
+          }
         }
-      } catch (_) {}
+        return result;
+      };
 
-      const overrideMatch = url.match(/limitter:\/\/override\?(.*)$/i);
+      // Match both forms: "limitter://override?..." and anything ending in "/override?..."
+      const overrideMatch = url.match(/(?:^|\/\/)override\?(.*)$/i)
+        || url.match(/limitter:\/\/override\?(.*)$/i);
       if (!overrideMatch) return null;
-      const params = new URLSearchParams(overrideMatch[1] || "");
-      const packageName = params.get("package") || "";
-      const appName = params.get("appName") || packageName;
+
+      const params = parseQuery(overrideMatch[1] || '');
+      const packageName = params.package || '';
+      const appName = params.appName || packageName;
       if (!packageName) return null;
       return { packageName, appName };
     },
@@ -63,12 +93,10 @@ function AppInner(): React.JSX.Element {
 
     const { policies, user, updateUser } = depsRef.current;
 
+    // CHANGED: was navigating to SubscriptionPlansScreen; now goes straight to the new Buy Overrides page.
     const goToPlans = () =>
-      navigationRef.navigate("SubscriptionPlansScreen", {
-        fromBlockingOverride: true,
-        packageName: payload.packageName,
-        appName: payload.appName,
-      });
+      navigationRef.navigate("BuyOverrides");
+
     const goToConfirm = (targetType: string) =>
       navigationRef.navigate("ConfirmOverrideScreen", {
         packageName: payload.packageName,
@@ -104,7 +132,7 @@ function AppInner(): React.JSX.Element {
     let deviceId: string | null = null;
     try {
       deviceId = await resolveCurrentDeviceId(user?.uid);
-    } catch {}
+    } catch { }
 
     if (!limitId || !deviceId) {
       goToConfirm(targetType);
@@ -185,7 +213,7 @@ function AppInner(): React.JSX.Element {
       try {
         const payload = parseOverrideLink(url);
         if (payload) openOverrideFlow(payload);
-      } catch {}
+      } catch { }
     };
 
     const sub = Linking.addEventListener("url", onDeepLink);

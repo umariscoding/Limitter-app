@@ -20,6 +20,7 @@ import {
   VerifyEmailScreen,
   PoliciesScreen,
 } from "../screens";
+import BuyOverridesScreen from '../screens/BuyOverridesScreen';
 
 const Stack = createNativeStackNavigator();
 
@@ -44,6 +45,7 @@ const MainNavigator = () => {
           <Stack.Screen name="Signup" component={SignupScreen} />
           <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
           <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
+
         </>
       ) : (
         <>
@@ -59,6 +61,12 @@ const MainNavigator = () => {
           <Stack.Screen name="ConfirmOverrideScreen" component={ConfirmOverrideScreen} />
           <Stack.Screen name="DailyLimitsGraphScreen" component={DailyLimitsGraphScreen} />
           <Stack.Screen name="PoliciesScreen" component={PoliciesScreen} />
+          <Stack.Screen
+            name="BuyOverrides"
+            component={BuyOverridesScreen}
+            options={{ headerShown: false }}
+          />
+
         </>
       )}
     </Stack.Navigator>

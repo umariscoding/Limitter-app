@@ -159,17 +159,22 @@ export function mergeLiveTimerUsageIntoPolicies(
   timers.forEach(t => {
     const k = String(t.package || '').trim().toLowerCase();
     if (!k) return;
-    byPkg.set(k, t);
-    if (!k.startsWith('website:')) {
-      byPkg.set(`website:${k}`, t);
-    }
-  });
 
+    byPkg.set(k, t);
+  });
+  console.log(' NATIVE TIMER KEYS:', Array.from(byPkg.keys()));
+  console.log(' POLICY LOOKUP KEYS:', policies.map(p => ({
+    label: p.target_label,
+    type: p.target_type,
+    lookupKey: getPolicyPackageKey(p),
+  })));
   return policies.map(item => {
+    console.log('🔍 POLICY:', item.target_label, 'type:', item.target_type, 'backend is_blocked:', item.is_blocked);
     if (item.target_type !== 'app' && item.target_type !== 'website') return item;
     const key = getPolicyPackageKey(item);
     const timer = byPkg.get(key);
-    // No native timer for this policy → fall back to backend data unchanged.
+    console.log('🔍 native timer for', key, ': ', timer ? `status=${timer.status}, remaining=${timer.remainingSeconds}s` : 'NOT FOUND');
+
     if (!timer) return item;
 
     const budget = Math.max(0, Number(timer.liveTimerUsageBudgetSeconds) || 0);
@@ -178,10 +183,7 @@ export function mergeLiveTimerUsageIntoPolicies(
     const maxMin = Number(item.max_time_minutes) || 0;
     const nativeStatus = String(timer.status || '').toLowerCase();
 
-    // Native is the authoritative source of truth for this device's current state.
-    // Backend aggregates can be stale (not-yet-flushed usage, or stale "blocked" rows that
-    // survive an override), which was causing the refresh-flicker bug where the card would
-    // randomly flip between blocked and active after an override.
+
     if (nativeStatus === 'blocked') {
       return {
         ...item,
@@ -196,6 +198,17 @@ export function mergeLiveTimerUsageIntoPolicies(
     const cappedUsed = maxMin > 0
       ? Math.min(nativeUsedMinutes, maxMin)
       : nativeUsedMinutes;
+
+
+    const nativeIsActive = nativeStatus === 'active' || nativeStatus === 'running';
+
+    if (!nativeIsActive) {
+      return {
+        ...item,
+        time_used_minutes: Math.max(item.time_used_minutes, cappedUsed),
+        _nativeBudgetSeconds: budget > 0 ? budget : undefined,
+      };
+    }
 
     return {
       ...item,

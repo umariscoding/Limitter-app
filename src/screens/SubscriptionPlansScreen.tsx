@@ -10,12 +10,11 @@ import {
   Alert,
   ActivityIndicator,
   Keyboard,
-  Modal,
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { ChevronLeft, Check, X, Zap, Shield, ShieldCheck } from 'lucide-react-native';
+import { ChevronLeft, Check, X, Zap, Shield, ShieldCheck, ChevronRight } from 'lucide-react-native';
 import { subscriptionPlans } from '../data/appData';
 import { useUser } from '../context/UserContext';
 import { useBilling, PlanCode } from '../hooks/useBilling';
@@ -28,12 +27,6 @@ const PLAN_GRADIENTS: Record<string, [string, string]> = {
   '3': ['#F59E0B', '#D97706'],
 };
 
-const OVERRIDE_PACKS = [
-  { count: 2, total: 3.98 },
-  { count: 5, total: 9.95 },
-  { count: 10, total: 19.90 },
-];
-
 const USER_CANCEL_CODES = new Set(['E_USER_CANCELLED', 'E_USER_CANCELED']);
 
 export default function SubscriptionPlansScreen() {
@@ -43,23 +36,13 @@ export default function SubscriptionPlansScreen() {
   const { buyOverrides, buyPlan, connected } = useBilling();
   const currentUserPlan = normalizePlan(user?.plan);
 
-  const defaultSelectedPlanId = currentUserPlan === 'elite' ? '3' : currentUserPlan === 'pro' ? '2' : '1';
+  const defaultSelectedPlanId =
+    currentUserPlan === 'elite' ? '3' : currentUserPlan === 'pro' ? '2' : '1';
   const [selectedPlanId, setSelectedPlanId] = useState(defaultSelectedPlanId);
   const [isProcessing, setIsProcessing] = useState(false);
-  const [showOverrideChoice, setShowOverrideChoice] = useState(false);
-  const [showBuyOverridesModal, setShowBuyOverridesModal] = useState(false);
 
-  const blockingPackage = route?.params?.packageName as string | undefined;
-  const blockingAppName = route?.params?.appName as string | undefined;
-  const fromBlockingOverride = Boolean(route?.params?.fromBlockingOverride && blockingPackage);
-  const showBuyOverridesParam = Boolean(route?.params?.showBuyOverrides);
-
-  useEffect(() => {
-    if (fromBlockingOverride) setShowOverrideChoice(true);
-    if (showBuyOverridesParam) setShowBuyOverridesModal(true);
-  }, [fromBlockingOverride, showBuyOverridesParam]);
-
-  const selectedPlan = subscriptionPlans.find(p => p.id === selectedPlanId) || subscriptionPlans[1];
+  const selectedPlan =
+    subscriptionPlans.find(p => p.id === selectedPlanId) || subscriptionPlans[1];
   const isCurrentPlan = normalizePlan(selectedPlan.name) === currentUserPlan;
 
   const mapPlanIdToUserPlan = (planId: string): 'free' | 'pro' | 'elite' => {
@@ -101,92 +84,9 @@ export default function SubscriptionPlansScreen() {
     }
   };
 
-  const handlePurchaseOverridePack = async (count: number) => {
-    if (!connected) {
-      Alert.alert('Not Connected', 'Billing is still connecting. Try again in a moment.');
-      return;
-    }
-
-    setIsProcessing(true);
-    try {
-      const result = await buyOverrides(count);
-      const credits = result.appliedCredits ?? count;
-
-      setShowBuyOverridesModal(false);
-      Alert.alert('Overrides Added', `${credits} override credit${credits === 1 ? '' : 's'} purchased.`, [
-        {
-          text: 'OK',
-          onPress: () =>
-            navigation.navigate('DashboardScreen', {
-              refreshAt: Date.now(),
-              justOverriddenPackage: blockingPackage || null,
-            }),
-        },
-      ]);
-    } catch (error: any) {
-      if (USER_CANCEL_CODES.has(error?.code)) return;
-      Alert.alert('Error', error?.message || 'Failed to purchase overrides.');
-    } finally {
-      setIsProcessing(false);
-    }
-  };
-
   return (
     <SafeAreaView style={s.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
-
-      <Modal visible={showOverrideChoice} transparent animationType="fade" onRequestClose={() => { setShowOverrideChoice(false); navigation.goBack(); }}>
-        <View style={s.modalOverlay}>
-          <View style={s.modalCard}>
-            <View style={s.modalIconWrap}>
-              <Zap size={28} color="#F59E0B" />
-            </View>
-            <Text style={s.modalTitle}>No Overrides Left</Text>
-            <Text style={s.modalBody}>
-              {blockingAppName || 'Selected app'} reached its daily limit. Buy overrides or upgrade your plan.
-            </Text>
-            <TouchableOpacity style={s.modalBtnPrimary} onPress={() => { setShowOverrideChoice(false); setShowBuyOverridesModal(true); }}>
-              <Text style={s.modalBtnPrimaryText}>Buy Overrides</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.modalBtnSecondary} onPress={() => setShowOverrideChoice(false)}>
-              <Text style={s.modalBtnSecondaryText}>Browse Plans</Text>
-            </TouchableOpacity>
-            <TouchableOpacity style={s.modalBtnGhost} onPress={() => { setShowOverrideChoice(false); navigation.goBack(); }}>
-              <Text style={s.modalBtnGhostText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
-
-      <Modal visible={showBuyOverridesModal} transparent animationType="fade" onRequestClose={() => setShowBuyOverridesModal(false)}>
-        <View style={s.modalOverlay}>
-          <View style={s.modalCard}>
-            <View style={s.modalIconWrap}>
-              <Zap size={28} color="#6366F1" />
-            </View>
-            <Text style={s.modalTitle}>Buy Overrides</Text>
-            <Text style={s.modalBody}>Each override is $1.99. Choose a pack:</Text>
-            {OVERRIDE_PACKS.map(pack => (
-              <TouchableOpacity
-                key={pack.count}
-                style={[s.packBtn, isProcessing && s.packBtnDisabled]}
-                disabled={isProcessing}
-                onPress={() => handlePurchaseOverridePack(pack.count)}
-                activeOpacity={0.8}
-              >
-                <LinearGradient colors={['#6366F1', '#4F46E5']} start={{ x: 0, y: 0 }} end={{ x: 1, y: 0 }} style={s.packGradient}>
-                  <Zap size={16} color="#FFFFFF" />
-                  <Text style={s.packText}>{pack.count} Overrides</Text>
-                  <Text style={s.packPrice}>${pack.total.toFixed(2)}</Text>
-                </LinearGradient>
-              </TouchableOpacity>
-            ))}
-            <TouchableOpacity style={s.modalBtnGhost} disabled={isProcessing} onPress={() => setShowBuyOverridesModal(false)}>
-              <Text style={s.modalBtnGhostText}>Cancel</Text>
-            </TouchableOpacity>
-          </View>
-        </View>
-      </Modal>
 
       <View style={s.header}>
         <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
@@ -216,7 +116,7 @@ export default function SubscriptionPlansScreen() {
               )}
 
               <View style={s.planHeader}>
-                <LinearGradient colors={gradientColors as [string, string]} style={s.planIconWrap}>
+                <LinearGradient colors={gradientColors} style={s.planIconWrap}>
                   <Shield size={18} color="#FFFFFF" />
                 </LinearGradient>
                 <View style={s.planTitleWrap}>
@@ -233,8 +133,14 @@ export default function SubscriptionPlansScreen() {
               <View style={s.featuresList}>
                 {plan.features.map(f => (
                   <View key={f.text} style={s.featureRow}>
-                    {f.enabled ? <Check size={16} color="#10B981" strokeWidth={3} /> : <X size={16} color="#CBD5E1" strokeWidth={3} />}
-                    <Text style={[s.featureText, !f.enabled && s.featureDisabled]}>{f.text}</Text>
+                    {f.enabled ? (
+                      <Check size={16} color="#10B981" strokeWidth={3} />
+                    ) : (
+                      <X size={16} color="#CBD5E1" strokeWidth={3} />
+                    )}
+                    <Text style={[s.featureText, !f.enabled && s.featureDisabled]}>
+                      {f.text}
+                    </Text>
                   </View>
                 ))}
               </View>
@@ -242,13 +148,17 @@ export default function SubscriptionPlansScreen() {
           );
         })}
 
-        <TouchableOpacity style={s.buyOverridesCard} onPress={() => setShowBuyOverridesModal(true)} activeOpacity={0.8}>
+        <TouchableOpacity
+          style={s.buyOverridesCard}
+          onPress={() => navigation.navigate('BuyOverrides')}
+          activeOpacity={0.8}
+        >
           <Zap size={20} color="#F59E0B" />
           <View style={s.buyOverridesContent}>
             <Text style={s.buyOverridesTitle}>Need overrides?</Text>
-            <Text style={s.buyOverridesDesc}>Purchase override packs at $1.99 each</Text>
+            <Text style={s.buyOverridesDesc}>Buy any number of overrides at $1.99 each</Text>
           </View>
-          <ChevronLeft size={16} color="#CBD5E1" style={{ transform: [{ rotate: '180deg' }] }} />
+          <ChevronRight size={16} color="#CBD5E1" />
         </TouchableOpacity>
 
         <View style={s.trustRow}>
@@ -277,7 +187,9 @@ export default function SubscriptionPlansScreen() {
               {isProcessing ? (
                 <ActivityIndicator color="#FFFFFF" size="small" />
               ) : (
-                <Text style={s.footerBtnText}>{isCurrentPlan ? 'Current Plan' : 'Upgrade Now'}</Text>
+                <Text style={s.footerBtnText}>
+                  {isCurrentPlan ? 'Current Plan' : 'Upgrade Now'}
+                </Text>
               )}
             </LinearGradient>
           </TouchableOpacity>
@@ -295,7 +207,6 @@ const s = StyleSheet.create({
   backBtn: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' },
   headerTitle: { fontSize: 17, fontWeight: '700', color: '#0F172A' },
   scrollContent: { padding: 20 },
-
   planCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 14, borderWidth: 2, borderColor: '#E8ECF4', position: 'relative', shadowColor: '#64748B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
   planCardSelected: { borderColor: '#6366F1', backgroundColor: '#FAFAFF' },
   planBadge: { position: 'absolute', top: -8, right: 16, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10, zIndex: 10 },
@@ -311,15 +222,12 @@ const s = StyleSheet.create({
   featureRow: { flexDirection: 'row', alignItems: 'center', gap: 10 },
   featureText: { fontSize: 13, color: '#334155', fontWeight: '500' },
   featureDisabled: { textDecorationLine: 'line-through', color: '#CBD5E1' },
-
   buyOverridesCard: { flexDirection: 'row', alignItems: 'center', backgroundColor: '#FFFBEB', borderRadius: 16, padding: 16, borderWidth: 1, borderColor: '#FDE68A', gap: 12, marginTop: 4, marginBottom: 12 },
   buyOverridesContent: { flex: 1 },
   buyOverridesTitle: { fontSize: 14, fontWeight: '700', color: '#92400E' },
   buyOverridesDesc: { fontSize: 12, color: '#B45309', marginTop: 2 },
-
   trustRow: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 8, marginTop: 8 },
   trustText: { fontSize: 12, color: '#10B981', fontWeight: '600' },
-
   footer: { position: 'absolute', bottom: Platform.OS === 'ios' ? 88 : 72, left: 0, right: 0, backgroundColor: '#FFFFFF', paddingHorizontal: 20, paddingVertical: 16, borderTopWidth: 1, borderTopColor: '#F1F5F9', shadowColor: '#000', shadowOffset: { width: 0, height: -4 }, shadowOpacity: 0.05, shadowRadius: 10, elevation: 10 },
   footerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'center' },
   footerPlan: { fontSize: 12, color: '#94A3B8', fontWeight: '600' },
@@ -327,21 +235,4 @@ const s = StyleSheet.create({
   footerBtn: { paddingHorizontal: 28, paddingVertical: 14, borderRadius: 14 },
   footerBtnDisabled: { opacity: 0.7 },
   footerBtnText: { color: '#FFFFFF', fontWeight: '800', fontSize: 15 },
-
-  modalOverlay: { flex: 1, backgroundColor: 'rgba(15, 23, 42, 0.5)', justifyContent: 'center', paddingHorizontal: 24 },
-  modalCard: { backgroundColor: '#FFFFFF', borderRadius: 24, padding: 24, alignItems: 'center' },
-  modalIconWrap: { width: 56, height: 56, borderRadius: 18, backgroundColor: '#FEF3C7', alignItems: 'center', justifyContent: 'center', marginBottom: 16 },
-  modalTitle: { fontSize: 20, fontWeight: '800', color: '#0F172A', marginBottom: 8 },
-  modalBody: { fontSize: 14, color: '#64748B', textAlign: 'center', lineHeight: 20, marginBottom: 20 },
-  modalBtnPrimary: { width: '100%', backgroundColor: '#6366F1', paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginBottom: 8 },
-  modalBtnPrimaryText: { color: '#FFFFFF', fontWeight: '700', fontSize: 15 },
-  modalBtnSecondary: { width: '100%', backgroundColor: '#EEF2FF', paddingVertical: 14, borderRadius: 14, alignItems: 'center', marginBottom: 8 },
-  modalBtnSecondaryText: { color: '#4F46E5', fontWeight: '700', fontSize: 15 },
-  modalBtnGhost: { width: '100%', paddingVertical: 12, alignItems: 'center' },
-  modalBtnGhostText: { color: '#94A3B8', fontWeight: '600', fontSize: 14 },
-  packBtn: { width: '100%', marginBottom: 8 },
-  packBtnDisabled: { opacity: 0.6 },
-  packGradient: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 18, paddingVertical: 14, borderRadius: 14 },
-  packText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14, flex: 1, marginLeft: 10 },
-  packPrice: { color: 'rgba(255,255,255,0.8)', fontWeight: '800', fontSize: 14 },
 });

@@ -42,9 +42,9 @@ object TimerStateManager {
                 if (duration <= 0 || pkg.isEmpty()) continue
 
                 val existing = activeTimers[pkg]
-                if (existing != null && existing.startDate == today && existing.durationSeconds == duration && existing.status != "blocked") {
-                    Log.w(TAG, "KEEP timer: $appName ($pkg) ${duration}s, used=${existing.usedSeconds}s [${existing.status}]")
-                } else {
+                if (existing != null && existing.startDate == today && existing.durationSeconds == duration) {
+    Log.w(TAG, "KEEP timer: $appName ($pkg) ${duration}s, used=${existing.usedSeconds}s [${existing.status}]")
+} else {
                     activeTimers[pkg] = TimerEntry(
                         packageName = pkg,
                         appName = appName,
@@ -75,17 +75,17 @@ object TimerStateManager {
 
                 val key = "website:$domain"
                 val existing = activeTimers[key]
-                if (existing != null && existing.startDate == today && existing.durationSeconds == duration && existing.status != "blocked") {
-                    Log.w(TAG, "KEEP website timer: $domain ${duration}s, used=${existing.usedSeconds}s [${existing.status}]")
-                } else {
-                    activeTimers[key] = TimerEntry(
-                        packageName = key,
-                        appName = domain,
-                        durationSeconds = duration
-                    )
-                    blockedPackages.remove(key)
-                    Log.w(TAG, "NEW website timer: $domain ${duration}s")
-                }
+if (existing != null && existing.startDate == today && existing.durationSeconds == duration) {
+    Log.w(TAG, "KEEP website timer: $domain ${duration}s, used=${existing.usedSeconds}s [${existing.status}]")
+} else {
+    activeTimers[key] = TimerEntry(
+        packageName = key,
+        appName = domain,
+        durationSeconds = duration
+    )
+    blockedPackages.remove(key)
+    Log.w(TAG, "NEW website timer: $domain ${duration}s")
+}
             }
 
             Log.w(TAG, "Total active timers (apps + websites): ${activeTimers.size}")
