@@ -6,7 +6,6 @@ import {
   TouchableOpacity,
   SafeAreaView,
   StatusBar,
-  Alert,
   ScrollView,
   ActivityIndicator,
   RefreshControl,
@@ -23,6 +22,7 @@ import { flushPendingUsage } from '../hooks/useUsageReporter';
 import axiosService from '../services/axiosService';
 import { API } from '../config/config';
 import BottomNav from '../components/BottomNav';
+import { showAlert } from '../components/AppAlert';
 import {
   User,
   CreditCard,
@@ -82,31 +82,31 @@ export default function SettingsScreen() {
 
   const handleSaveName = async () => {
     const trimmed = editNameValue.trim();
-    if (!trimmed) { Alert.alert('Validation', 'Name cannot be empty'); return; }
+    if (!trimmed) { showAlert('Validation', 'Name cannot be empty'); return; }
     setSavingName(true);
     try {
       await updateDisplayName(trimmed);
       setProfile(prev => prev ? { ...prev, user: { ...prev.user, displayName: trimmed } } : prev);
       updateUser({ name: trimmed, displayName: trimmed })
       setShowEditName(false);
-      Alert.alert('Success', 'Name updated successfully');
+      showAlert('Success', 'Name updated successfully');
     } catch (err: any) {
-      Alert.alert('Error', err?.message || 'Failed to update name');
+      showAlert('Error', err?.message || 'Failed to update name');
     } finally { setSavingName(false); }
   };
 
   const handleResetPassword = () => {
     const email = profile?.user.email;
     if (!email) return;
-    Alert.alert('Reset Password', `We'll send a password reset link to ${email}`, [
+    showAlert('Reset Password', `We'll send a password reset link to ${email}`, [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Send', onPress: async () => {
           try {
             await resetPassword(email);
-            Alert.alert('Email Sent', 'Check your inbox for the password reset link.');
+            showAlert('Email Sent', 'Check your inbox for the password reset link.');
           } catch (err: any) {
-            Alert.alert('Error', err?.message || 'Failed to send reset email');
+            showAlert('Error', err?.message || 'Failed to send reset email');
           }
         }
       },
@@ -114,7 +114,7 @@ export default function SettingsScreen() {
   };
 
   const handleSignOut = () => {
-    Alert.alert('Sign Out', 'Are you sure you want to sign out?', [
+    showAlert('Sign Out', 'Are you sure you want to sign out?', [
       { text: 'Cancel', style: 'cancel' },
       {
         text: 'Sign Out', style: 'destructive', onPress: async () => {

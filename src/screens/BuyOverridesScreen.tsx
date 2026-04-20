@@ -7,13 +7,13 @@ import {
     SafeAreaView,
     StatusBar,
     TextInput,
-    Alert,
     ScrollView,
     ActivityIndicator,
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft, Minus, Plus, ShoppingCart } from 'lucide-react-native';
 import { useBilling } from '../hooks/useBilling';
+import { showAlert } from '../components/AppAlert';
 
 const PRICE_PER_OVERRIDE = 1.99;
 const MIN_OVERRIDES = 1;
@@ -56,11 +56,11 @@ export default function BuyOverridesScreen() {
 
     const handleBuy = async () => {
         if (!isValid) {
-            Alert.alert('Invalid amount', `Please enter a number between ${MIN_OVERRIDES} and ${MAX_OVERRIDES}.`);
+            showAlert('Invalid amount', `Please enter a number between ${MIN_OVERRIDES} and ${MAX_OVERRIDES}.`);
             return;
         }
         if (!connected) {
-            Alert.alert('Not Connected', 'Billing is still connecting. Try again in a moment.');
+            showAlert('Not Connected', 'Billing is still connecting. Try again in a moment.');
             return;
         }
 
@@ -68,7 +68,7 @@ export default function BuyOverridesScreen() {
         try {
             const result = await buyOverrides(count);
             const credits = result.appliedCredits ?? count;
-            Alert.alert(
+            showAlert(
                 'Overrides Added',
                 `${credits} override credit${credits === 1 ? '' : 's'} purchased.`,
                 [{
@@ -78,7 +78,7 @@ export default function BuyOverridesScreen() {
             );
         } catch (error: any) {
             if (USER_CANCEL_CODES.has(error?.code)) return;
-            Alert.alert('Error', error?.message || 'Failed to purchase overrides.');
+            showAlert('Error', error?.message || 'Failed to purchase overrides.');
         } finally {
             setIsProcessing(false);
         }

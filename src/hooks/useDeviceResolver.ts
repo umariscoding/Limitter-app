@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react';
-import { Alert } from 'react-native';
 import { resolveCurrentDeviceId } from '../services/currentDeviceService';
+import { showAlert } from '../components/AppAlert';
 
 export function useDeviceResolver(uid: string | undefined) {
   const [deviceId, setDeviceId] = useState<string>('');
@@ -25,7 +25,7 @@ export function useDeviceResolver(uid: string | undefined) {
         const msg = err?.message || 'Failed to register device';
         if (msg.includes('plan') || msg.includes('device limit') || msg.includes('Device limit')) {
           setDeviceLimitError(msg);
-          Alert.alert('Device Limit Reached', msg);
+          showAlert('Device Limit Reached', msg);
         }
         setIsResolving(false);
       });

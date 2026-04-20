@@ -7,7 +7,6 @@ import {
   StatusBar,
   Platform,
   ScrollView,
-  Alert,
   ActivityIndicator,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -29,6 +28,7 @@ import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
 import { useDeviceResolver } from '../hooks/useDeviceResolver';
 import { grantTemporaryOverrideAccess, grantTemporaryWebsiteOverride } from '../services/appBlockerService';
 import { useOverrideAPI, getOverrideBalanceAPI, type OverrideBalanceResponse } from '../services/overrideService';
+import { showAlert } from '../components/AppAlert';
 
 export default function ConfirmOverrideScreen() {
   const navigation = useNavigation<any>();
@@ -59,7 +59,7 @@ export default function ConfirmOverrideScreen() {
   const hasCredits = totalAvailable > 0;
 
   const handleConfirm = async () => {
-    if (!user?.uid) { Alert.alert('Error', 'User not logged in'); return; }
+    if (!user?.uid) { showAlert('Error', 'User not logged in'); return; }
 
     if (!hasCredits) {
       navigation.navigate('BuyOverrides');
@@ -68,7 +68,7 @@ export default function ConfirmOverrideScreen() {
 
     setIsLoading(true);
     try {
-      if (!deviceId) { Alert.alert('Error', 'Unable to resolve your device.'); return; }
+      if (!deviceId) { showAlert('Error', 'Unable to resolve your device.'); return; }
 
       let resolvedLimitId = limitId;
       if (!resolvedLimitId && packageName) {
@@ -79,7 +79,7 @@ export default function ConfirmOverrideScreen() {
         if (!resolvedLimitId) await fetchPolicies();
       }
 
-      if (!resolvedLimitId) { Alert.alert('Error', 'Unable to resolve limit for override'); return; }
+      if (!resolvedLimitId) { showAlert('Error', 'Unable to resolve limit for override'); return; }
 
       await useOverrideAPI(resolvedLimitId, deviceId);
       updateUser({ overrides_left: Math.max(0, totalAvailable - 1) });
@@ -93,7 +93,7 @@ export default function ConfirmOverrideScreen() {
       }
 
       const overriddenKey = targetType === 'website' && packageName ? `website:${packageName}` : packageName;
-      Alert.alert(overrideLabels.alertUnlockedTitle, 'Override applied successfully', [{
+      showAlert(overrideLabels.alertUnlockedTitle, 'Override applied successfully', [{
         text: 'OK',
         onPress: () => navigation.navigate('DashboardScreen', { refreshAt: Date.now(), justOverriddenPackage: overriddenKey || null }),
       }]);
@@ -101,12 +101,12 @@ export default function ConfirmOverrideScreen() {
       const msg = error?.message || 'Failed to use override';
       const status = error?.response?.status;
       if (status === 402 || msg.toLowerCase().includes('no free override credits') || msg.toLowerCase().includes('no override credits')) {
-        Alert.alert('No Credits', 'You have no override credits remaining.', [
+        showAlert('No Credits', 'You have no override credits remaining.', [
           { text: 'Buy Credits', onPress: () => navigation.navigate('BuyOverrides') },
           { text: 'Cancel', style: 'cancel' },
         ]);
       } else {
-        Alert.alert('Error', msg);
+        showAlert('Error', msg);
       }
     } finally { setIsLoading(false); }
   };

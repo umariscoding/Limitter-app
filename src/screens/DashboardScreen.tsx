@@ -7,7 +7,6 @@ import {
   ScrollView,
   StatusBar,
   ActivityIndicator,
-  Alert,
   RefreshControl,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
@@ -45,6 +44,7 @@ import CreateLimitModal from '../components/CreateLimitModal';
 import PolicyCard from '../components/PolicyCard';
 import BottomNav from '../components/BottomNav';
 import type { CreateLimitState } from '../hooks/useCreateLimit';
+import { showAlert } from '../components/AppAlert';
 
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
@@ -172,7 +172,7 @@ export default function DashboardScreen() {
 
       if (!check.allowed) {
         setShowCreateModal(false);
-        Alert.alert('Plan Limit Reached', check.reason || 'Upgrade required', [
+        showAlert('Plan Limit Reached', check.reason || 'Upgrade required', [
           { text: 'Cancel', style: 'cancel' },
           { text: 'Upgrade', onPress: () => navigation.navigate('SubscriptionPlansScreen') },
         ]);

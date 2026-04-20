@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   ActivityIndicator,
   FlatList,
-  Alert,
   Modal,
   TextInput as RNTextInput,
   KeyboardAvoidingView,
@@ -37,6 +36,7 @@ import {
   formatRemainingTime,
   type UIPolicy,
 } from '../utils/policyMapper';
+import { showAlert } from '../components/AppAlert';
 
 export default function PoliciesScreen() {
   const navigation = useNavigation<any>();
@@ -64,7 +64,7 @@ export default function PoliciesScreen() {
   }, []);
 
   const handleDelete = (policy: UIPolicy) => {
-    Alert.alert(
+    showAlert(
       'Delete Limit',
       `Remove the limit for "${policy.target_label}"?\n\nYour usage data will be preserved.`,
       [
@@ -77,7 +77,7 @@ export default function PoliciesScreen() {
               await archivePolicyAPI(policy.id);
               setPolicies((prev) => prev.filter((p) => p.id !== policy.id));
             } catch (err: any) {
-              Alert.alert('Error', err?.message || 'Failed to delete limit');
+              showAlert('Error', err?.message || 'Failed to delete limit');
             }
           },
         },

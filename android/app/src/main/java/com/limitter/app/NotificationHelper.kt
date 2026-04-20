@@ -85,17 +85,17 @@ object NotificationHelper {
 
         if (currentApp != null) {
             val remaining = maxOf(0, currentApp.durationSeconds - liveUsed)
-            title = "\u25B6 ${currentApp.appName}"
-            subtitle = "${formatTime(remaining)} remaining \u2022 ${pct(liveUsed, currentApp.durationSeconds)}% used"
+            title = currentApp.appName
+            subtitle = "${formatTime(remaining)} remaining - ${pct(liveUsed, currentApp.durationSeconds)}% used"
             progressMax = currentApp.durationSeconds
             progressCurrent = liveUsed
         } else if (blockedCount > 0) {
-            title = "\u26D4 ${blockedCount} limit${if (blockedCount > 1) "s" else ""} reached"
+            title = "${blockedCount} limit${if (blockedCount > 1) "s" else ""} reached"
             subtitle = "$totalTracked limit${if (totalTracked != 1) "s" else ""} tracked"
             progressMax = 0
             progressCurrent = 0
         } else {
-            title = "\u2705 Limitter active"
+            title = "Limitter active"
             subtitle = "$totalTracked limit${if (totalTracked != 1) "s" else ""} tracked"
             progressMax = 0
             progressCurrent = 0
@@ -113,7 +113,7 @@ object NotificationHelper {
             val line = when (t.status) {
                 "active" -> styledLine(
                     t.appName,
-                    "${formatTime(remaining)} left \u2022 ${percent}%",
+                    "${formatTime(remaining)} left - ${percent}%",
                     Color.parseColor("#059669")
                 )
                 "blocked" -> styledLine(

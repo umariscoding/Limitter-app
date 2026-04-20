@@ -1,6 +1,6 @@
 import { useState } from 'react';
-import { Alert } from 'react-native';
 import { createPolicyAPI } from '../services/policyService';
+import { showAlert } from '../components/AppAlert';
 import { enforceDailyLimitMinutes, invalidatePlanCache } from '../services/planGuardService';
 import {
   startAppClockTimer,
@@ -42,11 +42,11 @@ export function useCreateLimit(
 
   const createLimit = async (state: CreateLimitState) => {
     if (!uid) {
-      Alert.alert('Error', 'User not logged in');
+      showAlert('Error', 'User not logged in');
       return false;
     }
     if (!deviceId) {
-      Alert.alert('Error', 'Device not ready yet. Please try again in a moment.');
+      showAlert('Error', 'Device not ready yet. Please try again in a moment.');
       return false;
     }
 
@@ -72,29 +72,29 @@ export function useCreateLimit(
 
     if (targetType === 'app') {
       if (!selectedInstalledApp || !appName) {
-        Alert.alert('Validation', 'Please select an app from your installed apps list');
+        showAlert('Validation', 'Please select an app from your installed apps list');
         return false;
       }
     } else if (targetType === 'category') {
       if (!category) {
-        Alert.alert('Validation', 'Category is required');
+        showAlert('Validation', 'Category is required');
         return false;
       }
     } else {
       if (!websiteUrl) {
-        Alert.alert('Validation', 'Website URL is required');
+        showAlert('Validation', 'Website URL is required');
         return false;
       }
       const domainPattern = /^([a-zA-Z0-9]([a-zA-Z0-9-]*[a-zA-Z0-9])?\.)+[a-zA-Z]{2,}$/;
       const cleaned = websiteUrl.replace(/^(https?:\/\/)?(www\.)?/, '').replace(/\/.*$/, '');
       if (!domainPattern.test(cleaned)) {
-        Alert.alert('Validation', 'Enter a valid website URL (e.g. youtube.com)');
+        showAlert('Validation', 'Enter a valid website URL (e.g. youtube.com)');
         return false;
       }
     }
 
     if (!Number.isFinite(totalSeconds) || totalSeconds < 60) {
-      Alert.alert('Validation', 'Minimum limit is 1 minute (60 seconds)');
+      showAlert('Validation', 'Minimum limit is 1 minute (60 seconds)');
       return false;
     }
 
@@ -135,7 +135,7 @@ export function useCreateLimit(
                 );
 
           if (!timerStartResult.success) {
-            Alert.alert(
+            showAlert(
               'Permission Required',
               'Enable Display over other apps and Usage access for Limitter.',
             );
@@ -153,7 +153,7 @@ export function useCreateLimit(
           });
 
           if (!timerStartResult.success) {
-            Alert.alert(
+            showAlert(
               'Permission Required',
               'Enable Display over other apps and accessibility service for website blocking.',
             );
@@ -169,17 +169,17 @@ export function useCreateLimit(
         onSuccess(label);
         return true;
       } else {
-        Alert.alert('Error', 'Failed to create limit');
+        showAlert('Error', 'Failed to create limit');
         return false;
       }
     } catch (error: any) {
       const msg = error?.message || 'Failed to create limit';
       if (msg.includes('plan limit') || msg.includes('Plan limit')) {
-        Alert.alert('Plan Limit Reached', msg);
+        showAlert('Plan Limit Reached', msg);
       } else if (msg.includes('already exists')) {
-        Alert.alert('Already Added', 'A limit for this app/site already exists.');
+        showAlert('Already Added', 'A limit for this app/site already exists.');
       } else {
-        Alert.alert('Error', msg);
+        showAlert('Error', msg);
       }
       return false;
     } finally {

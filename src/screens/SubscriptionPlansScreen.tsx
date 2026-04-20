@@ -7,24 +7,30 @@ import {
   ScrollView,
   SafeAreaView,
   StatusBar,
-  Alert,
   ActivityIndicator,
   Keyboard,
   Platform,
 } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
-import { ChevronLeft, Check, X, Zap, Shield, ShieldCheck, ChevronRight } from 'lucide-react-native';
+import { ChevronLeft, Check, X, Zap, Shield, ShieldCheck, ChevronRight, Sparkles, Crown } from 'lucide-react-native';
 import { subscriptionPlans } from '../data/appData';
 import { useUser } from '../context/UserContext';
 import { useBilling, PlanCode } from '../hooks/useBilling';
 import { normalizePlan } from '../utils/planRules';
 import BottomNav from '../components/BottomNav';
+import { showAlert } from '../components/AppAlert';
 
 const PLAN_GRADIENTS: Record<string, [string, string]> = {
-  '1': ['#64748B', '#475569'],
-  '2': ['#6366F1', '#4F46E5'],
-  '3': ['#F59E0B', '#D97706'],
+  '1': ['#94A3B8', '#64748B'],
+  '2': ['#818CF8', '#6366F1'],
+  '3': ['#FBBF24', '#F59E0B'],
+};
+
+const PLAN_ICONS: Record<string, React.ReactNode> = {
+  '1': <Shield size={20} color="#FFFFFF" />,
+  '2': <Sparkles size={20} color="#FFFFFF" />,
+  '3': <Crown size={20} color="#FFFFFF" />,
 };
 
 const USER_CANCEL_CODES = new Set(['E_USER_CANCELLED', 'E_USER_CANCELED']);
@@ -55,22 +61,22 @@ export default function SubscriptionPlansScreen() {
     Keyboard.dismiss();
     const newPlan = mapPlanIdToUserPlan(selectedPlanId);
     if (newPlan === currentUserPlan) {
-      Alert.alert('Already Active', `You are already on the ${selectedPlan.name} plan.`);
+      showAlert('Already Active', `You are already on the ${selectedPlan.name} plan.`);
       return;
     }
     if (newPlan === 'free') {
-      Alert.alert('Manage in Play Store', 'To downgrade to Free, cancel your subscription from the Play Store.');
+      showAlert('Manage in Play Store', 'To downgrade to Free, cancel your subscription from the Play Store.');
       return;
     }
     if (!connected) {
-      Alert.alert('Not Connected', 'Billing is still connecting. Try again in a moment.');
+      showAlert('Not Connected', 'Billing is still connecting. Try again in a moment.');
       return;
     }
 
     setIsProcessing(true);
     try {
       await buyPlan(newPlan as PlanCode);
-      Alert.alert('Plan Activated!', `You are now on the ${selectedPlan.name} plan.`, [
+      showAlert('Plan Activated!', `You are now on the ${selectedPlan.name} plan.`, [
         {
           text: 'Go to Dashboard',
           onPress: () => navigation.navigate('DashboardScreen', { planUpdatedAt: Date.now() }),
@@ -78,7 +84,7 @@ export default function SubscriptionPlansScreen() {
       ]);
     } catch (error: any) {
       if (USER_CANCEL_CODES.has(error?.code)) return;
-      Alert.alert('Error', error?.message || 'Failed to upgrade plan.');
+      showAlert('Error', error?.message || 'Failed to upgrade plan.');
     } finally {
       setIsProcessing(false);
     }
@@ -117,7 +123,7 @@ export default function SubscriptionPlansScreen() {
 
               <View style={s.planHeader}>
                 <LinearGradient colors={gradientColors} style={s.planIconWrap}>
-                  <Shield size={18} color="#FFFFFF" />
+                  {PLAN_ICONS[plan.id] || <Shield size={20} color="#FFFFFF" />}
                 </LinearGradient>
                 <View style={s.planTitleWrap}>
                   <Text style={s.planName}>{plan.name}</Text>
@@ -212,7 +218,7 @@ const s = StyleSheet.create({
   planBadge: { position: 'absolute', top: -8, right: 16, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10, zIndex: 10 },
   planBadgeText: { color: '#FFFFFF', fontSize: 10, fontWeight: '800', textTransform: 'uppercase' },
   planHeader: { flexDirection: 'row', alignItems: 'center', marginBottom: 14, gap: 12 },
-  planIconWrap: { width: 40, height: 40, borderRadius: 12, alignItems: 'center', justifyContent: 'center' },
+  planIconWrap: { width: 44, height: 44, borderRadius: 14, alignItems: 'center', justifyContent: 'center', shadowColor: '#000', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.15, shadowRadius: 4, elevation: 3 },
   planTitleWrap: { flex: 1 },
   planName: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
   planPrice: { fontSize: 14, fontWeight: '600', color: '#6366F1', marginTop: 1 },

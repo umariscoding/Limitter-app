@@ -8,11 +8,11 @@ import {
   TextInput,
   FlatList,
   Platform,
-  Alert,
 } from 'react-native';
 import { getInstalledApps, getCachedApps, InstalledApp } from '../services/appListService';
 import { filterInstalledApps } from '../helpers/helper';
 import type { CreateLimitState } from '../hooks/useCreateLimit';
+import { showAlert } from './AppAlert';
 interface PlanLimitsData {
   planCode: string;
   maxPolicies: number | null;
@@ -104,7 +104,7 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
       const normalized = createWebsiteUrl.trim().toLowerCase()
         .replace(/^(https?:\/\/)?(www\.)?/, '').replace(/\/.*$/, '');
       if (existingTargetKeys.has(`website:${normalized}`)) {
-        Alert.alert('Already Added', 'A limit for this website already exists.');
+        showAlert('Already Added', 'A limit for this website already exists.');
         return;
       }
     }

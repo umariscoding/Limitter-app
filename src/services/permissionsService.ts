@@ -1,11 +1,11 @@
 import {
   Platform,
-  Alert,
   Linking,
   AppState,
   PermissionsAndroid,
   type AppStateStatus,
 } from "react-native";
+import { showAlert } from '../components/AppAlert';
 
 import { LimitterModule, warnIfCustomNativeMissing } from "../config/nativeModules";
 
@@ -96,15 +96,15 @@ function promptStep(step: PermissionStep): Promise<PromptChoice> {
   const { title, message } = stepCopy(step);
   return new Promise((resolve) => {
     if (step === "usage") {
-      Alert.alert(title, message, [
+      showAlert(title, message, [
         { text: "This app's settings", onPress: () => resolve("appinfo") },
         { text: "Usage access list", onPress: () => resolve("open") },
-      ], { cancelable: false });
+      ]);
       return;
     }
-    Alert.alert(title, message, [
+    showAlert(title, message, [
       { text: "Open settings", onPress: () => resolve("open") },
-    ], { cancelable: false });
+    ]);
   });
 }
 

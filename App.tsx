@@ -16,6 +16,7 @@ import { grantTemporaryOverrideAccess, grantTemporaryWebsiteOverride } from "./s
 import { resolveCurrentDeviceId } from "./src/services/currentDeviceService";
 import { getPolicyPackageKey } from "./src/utils/policyMapper";
 import { useFcm } from "./src/hooks/useFcm";
+import { AppAlertProvider } from "./src/components/AppAlert";
 
 const navigationRef = createNavigationContainerRef<any>();
 
@@ -266,13 +267,15 @@ function AppInner(): React.JSX.Element {
 
 function App(): React.JSX.Element {
   return (
-    <UserContextProvider>
-      <UsageContextProvider>
-        <PolicyContextProvider>
-          <AppInner />
-        </PolicyContextProvider>
-      </UsageContextProvider>
-    </UserContextProvider>
+    <AppAlertProvider>
+      <UserContextProvider>
+        <UsageContextProvider>
+          <PolicyContextProvider>
+            <AppInner />
+          </PolicyContextProvider>
+        </UsageContextProvider>
+      </UserContextProvider>
+    </AppAlertProvider>
   );
 }
 
