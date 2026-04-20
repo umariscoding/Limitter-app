@@ -65,7 +65,7 @@ export default function ActivityScreen() {
         ) : (
           limits.map((item: any) => (
             <View key={item.id} style={styles.card}>
-              <Text style={styles.cardTitle}>{item.app_name || item.category || 'Untitled'}</Text>
+              <Text style={styles.cardTitle}>{item.target_label || item.category || 'Untitled'}</Text>
               <Text style={styles.cardLine}>
                 Used: {formatLimitTime(item.time_used_minutes || 0)} / {formatLimitTime(item.max_time_minutes || 0)}
               </Text>

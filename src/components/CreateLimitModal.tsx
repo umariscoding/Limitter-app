@@ -179,7 +179,6 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
                     }}
                   >
                     <Text style={s.suggestionText}>{app.appName}</Text>
-                    <Text style={s.suggestionSub}>{app.packageName}</Text>
                   </TouchableOpacity>
                 )}
                 ListHeaderComponent={loadingApps ? <Text style={s.loadingAppsText}>Loading apps...</Text> : null}
@@ -267,7 +266,7 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
 
           <View style={s.targetBox}>
             <Text style={s.targetText}>
-              {targetType === 'app' ? createAppName || 'No app selected'
+              {targetType === 'app' ? (selectedInstalledApp?.appName || appSearch || 'No app selected')
                 : targetType === 'category' ? createCategory || 'No category selected'
                   : createWebsiteUrl || 'No website selected'}
             </Text>
@@ -305,7 +304,6 @@ const s = StyleSheet.create({
   suggestionList: { maxHeight: 180, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, backgroundColor: '#FFFFFF' },
   suggestionItem: { paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   suggestionText: { color: '#0F172A', fontSize: 14, fontWeight: '500' },
-  suggestionSub: { color: '#94A3B8', fontSize: 11, marginTop: 3 },
   loadingAppsText: { color: '#64748B', fontSize: 13, textAlign: 'center', padding: 12, fontWeight: '600' },
   emptyAppsText: { color: '#94A3B8', fontSize: 12, textAlign: 'center', paddingVertical: 12 },
   categoryWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 10 },

@@ -12,7 +12,6 @@ import { LimitterModule, warnIfCustomNativeMissing } from "../config/nativeModul
 // Must match android/app/src/main/res/values/strings.xml app_name (launcher + Usage access list).
 const ANDROID_APP_LABEL = "Limitter";
 
-const ANDROID_PACKAGE_ID = "com.limitter";
 
 export interface PermissionStatus {
   overlay: boolean;
@@ -71,27 +70,25 @@ async function openStepSettings(step: PermissionStep): Promise<void> {
 function stepCopy(step: PermissionStep): { title: string; message: string } {
   if (step === 'usage') {
     return {
-      title: 'Enable Usage Access',
+      title: 'Usage Access Required',
       message:
-        'Find "' + ANDROID_APP_LABEL + '" in the list and turn ON usage access.\n\n' +
-        'Xiaomi (Redmi/POCO): Settings > Apps > Special app access > Usage data access > find ' + ANDROID_APP_LABEL + ' > turn ON.\n\n' +
-        'If not there: Settings > Apps > Manage apps > find ' + ANDROID_APP_LABEL + ' > Other permissions > Usage access > Allow.\n\n' +
-        'Package: ' + ANDROID_PACKAGE_ID,
+        ANDROID_APP_LABEL + ' needs usage access to track your app screen time.\n\n' +
+        'On the next screen, find "' + ANDROID_APP_LABEL + '" and turn it ON.',
     };
   }
   if (step === 'overlay') {
     return {
-      title: 'Display over other apps',
+      title: 'Overlay Permission Required',
       message:
-        ANDROID_APP_LABEL + ' needs permission to draw over other apps when a limit is reached.\n\n' +
-        'On the next screen, find ' + ANDROID_APP_LABEL + ' and allow display over other apps.',
+        ANDROID_APP_LABEL + ' needs this to show a block screen when your time limit is reached.\n\n' +
+        'On the next screen, find "' + ANDROID_APP_LABEL + '" and allow it.',
     };
   }
   return {
-    title: 'Battery / background',
+    title: 'Background Access',
     message:
-      'For reliable timers in the background, allow ' + ANDROID_APP_LABEL + ' to ignore battery optimization.\n\n' +
-      'On the next screen, tap Allow if you want maximum reliability.',
+      ANDROID_APP_LABEL + ' needs to run in the background so your timers stay accurate.\n\n' +
+      'Tap Allow on the next screen.',
   };
 }
 

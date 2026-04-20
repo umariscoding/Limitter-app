@@ -3,7 +3,13 @@ package com.limitter.app
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
+import android.app.PendingIntent
 import android.content.Context
+import android.content.Intent
+import android.text.SpannableStringBuilder
+import android.text.style.ForegroundColorSpan
+import android.text.Spanned
+import android.graphics.Color
 import androidx.core.app.NotificationCompat
 
 object NotificationHelper {
@@ -14,7 +20,7 @@ object NotificationHelper {
         val channel = NotificationChannel(
             CHANNEL_ID,
             "Limitter Tracking",
-            NotificationManager.IMPORTANCE_DEFAULT
+            NotificationManager.IMPORTANCE_LOW
         ).apply {
             description = "Shows real-time usage and remaining time for your limits"
             setShowBadge(false)
@@ -30,22 +36,27 @@ object NotificationHelper {
         val m = (totalSeconds % 3600) / 60
         val s = totalSeconds % 60
         return when {
-            h > 0 -> "${h}h ${m}m"
-            m > 0 -> "${m}m ${s}s"
+            h > 0 && m > 0 -> "${h}h ${m}m"
+            h > 0 -> "${h}h"
+            m > 0 && s > 0 -> "${m}m ${s}s"
+            m > 0 -> "${m}m"
             else -> "${s}s"
         }
     }
 
-    private fun progressBar(used: Int, total: Int, width: Int = 10): String {
-        if (total <= 0) return "\u2588".repeat(width)
-        val filled = minOf(width, (used.toLong() * width / total).toInt())
-        val empty = width - filled
-        return "\u2593".repeat(filled) + "\u2591".repeat(empty)
+    private fun pct(used: Int, total: Int): Int {
+        if (total <= 0) return 100
+        return minOf(100, (used.toLong() * 100 / total).toInt())
     }
 
-    private fun pctText(used: Int, total: Int): String {
-        if (total <= 0) return "100%"
-        return "${minOf(100, (used.toLong() * 100 / total).toInt())}%"
+    private fun styledLine(name: String, detail: String, detailColor: Int): SpannableStringBuilder {
+        val ssb = SpannableStringBuilder()
+        ssb.append(name)
+        ssb.append("  ")
+        val start = ssb.length
+        ssb.append(detail)
+        ssb.setSpan(ForegroundColorSpan(detailColor), start, ssb.length, Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        return ssb
     }
 
     fun build(context: Context, foregroundPkg: String?): Notification {
@@ -55,20 +66,40 @@ object NotificationHelper {
             .sortedWith(compareByDescending<TimerStateManager.TimerEntry> { it.status == "active" }
                 .thenByDescending { it.status == "blocked" }
                 .thenByDescending { it.usedSeconds })
-            .take(3)
+            .take(4)
 
         val currentApp = ranked.firstOrNull { it.status == "active" }
+        val blockedCount = TimerStateManager.activeTimers.values.count { it.status == "blocked" }
+        val totalTracked = TimerStateManager.activeTimers.size
 
-        val title = if (currentApp != null) {
-    val liveSession = if (currentApp.lastActiveTimestamp > 0)
-        maxOf(0, ((now - currentApp.lastActiveTimestamp) / 1000).toInt()) else 0
-    val used = minOf(currentApp.durationSeconds, currentApp.usedSeconds + liveSession)
-    "\u25B6 ${currentApp.appName}  \u2022  ${formatTime(used)} used"
-} else if (ranked.any { it.status == "blocked" }) {
-    "\u26D4 Limit reached"
-} else {
-    "\u23F2 Limitter active"
-}
+        val liveUsed = if (currentApp != null) {
+            val liveSession = if (currentApp.lastActiveTimestamp > 0)
+                maxOf(0, ((now - currentApp.lastActiveTimestamp) / 1000).toInt()) else 0
+            minOf(currentApp.durationSeconds, currentApp.usedSeconds + liveSession)
+        } else 0
+
+        val title: String
+        val subtitle: String
+        val progressMax: Int
+        val progressCurrent: Int
+
+        if (currentApp != null) {
+            val remaining = maxOf(0, currentApp.durationSeconds - liveUsed)
+            title = "\u25B6 ${currentApp.appName}"
+            subtitle = "${formatTime(remaining)} remaining \u2022 ${pct(liveUsed, currentApp.durationSeconds)}% used"
+            progressMax = currentApp.durationSeconds
+            progressCurrent = liveUsed
+        } else if (blockedCount > 0) {
+            title = "\u26D4 ${blockedCount} limit${if (blockedCount > 1) "s" else ""} reached"
+            subtitle = "$totalTracked limit${if (totalTracked != 1) "s" else ""} tracked"
+            progressMax = 0
+            progressCurrent = 0
+        } else {
+            title = "\u2705 Limitter active"
+            subtitle = "$totalTracked limit${if (totalTracked != 1) "s" else ""} tracked"
+            progressMax = 0
+            progressCurrent = 0
+        }
 
         val inbox = NotificationCompat.InboxStyle()
 
@@ -77,44 +108,67 @@ object NotificationHelper {
                 maxOf(0, ((now - t.lastActiveTimestamp) / 1000).toInt()) else 0
             val used = minOf(t.durationSeconds, t.usedSeconds + liveSession)
             val remaining = maxOf(0, t.durationSeconds - used)
-            val bar = progressBar(used, t.durationSeconds)
-            val pct = pctText(used, t.durationSeconds)
+            val percent = pct(used, t.durationSeconds)
 
             val line = when (t.status) {
-    "active" -> "${t.appName}  ${formatTime(used)} used  $bar $pct"
-    "blocked" -> "${t.appName}  \u26D4 Limit reached"
-    else -> {
-        if (t.usedSeconds > 0)
-            "${t.appName}  ${formatTime(used)} used  $bar $pct"
-        else
-            "${t.appName}  ${formatTime(t.durationSeconds)} limit"
-    }
-}
+                "active" -> styledLine(
+                    t.appName,
+                    "${formatTime(remaining)} left \u2022 ${percent}%",
+                    Color.parseColor("#059669")
+                )
+                "blocked" -> styledLine(
+                    t.appName,
+                    "Limit reached",
+                    Color.parseColor("#DC2626")
+                )
+                else -> {
+                    if (t.usedSeconds > 0)
+                        styledLine(
+                            t.appName,
+                            "${formatTime(used)} / ${formatTime(t.durationSeconds)}",
+                            Color.parseColor("#64748B")
+                        )
+                    else
+                        styledLine(
+                            t.appName,
+                            "${formatTime(t.durationSeconds)} limit",
+                            Color.parseColor("#64748B")
+                        )
+                }
+            }
             inbox.addLine(line)
         }
 
-        val totalTracked = TimerStateManager.activeTimers.size
-        if (totalTracked > 3) {
-            inbox.setSummaryText("+${totalTracked - 3} more limit${if (totalTracked - 3 > 1) "s" else ""}")
+        if (totalTracked > 4) {
+            inbox.setSummaryText("+${totalTracked - 4} more")
         }
 
-        val collapsed = if (currentApp != null) {
-    val liveSession = if (currentApp.lastActiveTimestamp > 0)
-        maxOf(0, ((now - currentApp.lastActiveTimestamp) / 1000).toInt()) else 0
-    val used = minOf(currentApp.durationSeconds, currentApp.usedSeconds + liveSession)
-    "${currentApp.appName} \u2022 ${formatTime(used)} used"
-} else {
-            "$totalTracked limit${if (totalTracked != 1) "s" else ""} tracked"
-        }
+        val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
+        val pendingIntent = if (launchIntent != null) {
+            PendingIntent.getActivity(context, 0, launchIntent, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        } else null
 
-        return NotificationCompat.Builder(context, CHANNEL_ID)
+        val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(title)
-            .setContentText(collapsed)
+            .setContentText(subtitle)
             .setStyle(inbox)
-            .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
+            .setSmallIcon(R.drawable.ic_notif_shield)
+            .setColor(Color.parseColor("#10B981"))
+            .setColorized(false)
             .setOngoing(true)
             .setSilent(true)
-            .build()
+            .setShowWhen(false)
+            .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+
+        if (pendingIntent != null) {
+            builder.setContentIntent(pendingIntent)
+        }
+
+        if (progressMax > 0) {
+            builder.setProgress(progressMax, progressCurrent, false)
+        }
+
+        return builder.build()
     }
 
     fun update(context: Context, foregroundPkg: String?) {
