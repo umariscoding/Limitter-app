@@ -43,6 +43,18 @@ class TimerEventModule(private val reactContext: ReactApplicationContext) :
                     .emit("TIMER_BLOCKED", map)
             } catch (_: Exception) {}
         }
+
+        fun sendSessionEndEvent(packageName: String, appName: String, sessionSeconds: Int) {
+            val ctx = reactCtx ?: return
+            try {
+                val map = WritableNativeMap()
+                map.putString("package", packageName)
+                map.putString("appName", appName)
+                map.putInt("sessionSeconds", sessionSeconds)
+                ctx.getJSModule(DeviceEventManagerModule.RCTDeviceEventEmitter::class.java)
+                    .emit("TIMER_SESSION_END", map)
+            } catch (_: Exception) {}
+        }
     }
 
     override fun getName(): String = "TimerEventModule"
