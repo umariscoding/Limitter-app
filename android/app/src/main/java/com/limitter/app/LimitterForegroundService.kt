@@ -192,6 +192,7 @@ class LimitterForegroundService : Service() {
                         status = newStatus,
                         lastActiveTimestamp = 0
                     ))
+                    TimerEventModule.sendSessionEndEvent(pkg, timer.appName, sessionSeconds)
                     if (newStatus == "blocked") {
                         TimerStateManager.markBlocked(pkg)
                         TimerEventModule.sendBlockedEvent(pkg, timer.appName)
@@ -288,6 +289,7 @@ class LimitterForegroundService : Service() {
                         status = "waiting",
                         lastActiveTimestamp = 0
                     ))
+                    TimerEventModule.sendSessionEndEvent(key, domain, sessionSeconds)
                 }
             }
         }

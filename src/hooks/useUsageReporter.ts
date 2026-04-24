@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { AppState, type AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { subscribeTimerTicks } from '../services/timerRealtimeService';
+import { subscribeTimerTicks, subscribeTimerSessionEnd } from '../services/timerRealtimeService';
 import { tickUsageAPI, recordUsageAPI } from '../services/usageService';
 import { startAppBlockerService, updateBlockedApps } from '../services/appBlockerService';
 import { usePolicyContext } from '../context/PolicyContext';
@@ -21,6 +21,7 @@ interface PolicySession {
   targetKey: string;
   accumulatedSeconds: number;
   lastSentSeconds: number;
+  lastFlushedSeconds: number;
   limitSeconds: number;
   unsentDelta: number;
 }
@@ -226,6 +227,7 @@ export function useUsageReporter(
         if (response.wasReset) {
           session.accumulatedSeconds = 0;
           session.lastSentSeconds = 0;
+          session.lastFlushedSeconds = 0;
           session.unsentDelta = 0;
           setPoliciesRef.current(prev =>
             prev.map(item => {
@@ -274,26 +276,23 @@ export function useUsageReporter(
     if (flushingRef.current) return;
 
     const entries = Array.from(sessionsRef.current.entries());
-    const toFlush = entries.filter(([_, s]) => s.accumulatedSeconds > 0);
+    const toFlush = entries.filter(([_, s]) => s.accumulatedSeconds > s.lastFlushedSeconds);
     if (toFlush.length === 0) return;
 
     flushingRef.current = true;
 
     for (const [_, session] of toFlush) {
-      const seconds = session.accumulatedSeconds;
-      if (seconds <= 0) continue;
+      const flushDelta = session.accumulatedSeconds - session.lastFlushedSeconds;
+      if (flushDelta <= 0) continue;
 
       try {
-        await recordUsageAPI(session.policyId, currentDeviceId, seconds);
-        session.accumulatedSeconds = 0;
-        session.lastSentSeconds = 0;
-        session.unsentDelta = 0;
+        await recordUsageAPI(session.policyId, currentDeviceId, flushDelta);
+        session.lastFlushedSeconds = session.accumulatedSeconds;
       } catch {
-        // Queue failed flush for replay on reconnect
         enqueueUsage({
           policyId: session.policyId,
           deviceId: currentDeviceId,
-          deltaSeconds: seconds,
+          deltaSeconds: flushDelta,
           timestamp: Date.now(),
         });
       }
@@ -331,6 +330,7 @@ export function useUsageReporter(
           targetKey: rawPkg,
           accumulatedSeconds: 1,
           lastSentSeconds: 0,
+          lastFlushedSeconds: 0,
           limitSeconds: policyInfo.maxMinutes * 60,
           unsentDelta: 1,
         });
@@ -347,6 +347,13 @@ export function useUsageReporter(
       unsubTick();
       if (saveDebounceRef.current) clearTimeout(saveDebounceRef.current);
     };
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeTimerSessionEnd(() => {
+      sendTick.current();
+    });
+    return () => unsub();
   }, []);
 
   // Expose flush handlers to `flushPendingUsage` (above) so the logout flow

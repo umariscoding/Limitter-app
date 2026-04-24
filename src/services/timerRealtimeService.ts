@@ -18,12 +18,20 @@ export type TimerBlockedEvent = {
   blockedAt?: number;
 };
 
+export type TimerSessionEndEvent = {
+  package: string;
+  appName: string;
+  sessionSeconds: number;
+};
+
 const tickListeners = new Set<(event: TimerTickEvent) => void>();
 const blockedListeners = new Set<(event: TimerBlockedEvent) => void>();
+const sessionEndListeners = new Set<(event: TimerSessionEndEvent) => void>();
 
 let eventEmitter: NativeEventEmitter | null = null;
 let tickSubscription: { remove: () => void } | null = null;
 let blockedSubscription: { remove: () => void } | null = null;
+let sessionEndSubscription: { remove: () => void } | null = null;
 let isStarted = false;
 
 const handleTick = (event: TimerTickEvent) => {
@@ -32,6 +40,10 @@ const handleTick = (event: TimerTickEvent) => {
 
 const handleBlocked = (event: TimerBlockedEvent) => {
   blockedListeners.forEach(listener => listener(event));
+};
+
+const handleSessionEnd = (event: TimerSessionEndEvent) => {
+  sessionEndListeners.forEach(listener => listener(event));
 };
 
 export const startTimerRealtimeTracking = () => {
@@ -52,14 +64,20 @@ export const startTimerRealtimeTracking = () => {
     handleBlocked(event);
   });
 
+  sessionEndSubscription = eventEmitter.addListener('TIMER_SESSION_END', (event: TimerSessionEndEvent) => {
+    handleSessionEnd(event);
+  });
+
   isStarted = true;
 };
 
 export const stopTimerRealtimeTracking = () => {
   tickSubscription?.remove();
   blockedSubscription?.remove();
+  sessionEndSubscription?.remove();
   tickSubscription = null;
   blockedSubscription = null;
+  sessionEndSubscription = null;
   TimerEventModule?.stopListening?.();
   isStarted = false;
 };
@@ -75,6 +93,13 @@ export const subscribeTimerBlocked = (listener: (event: TimerBlockedEvent) => vo
   blockedListeners.add(listener);
   return () => {
     blockedListeners.delete(listener);
+  };
+};
+
+export const subscribeTimerSessionEnd = (listener: (event: TimerSessionEndEvent) => void) => {
+  sessionEndListeners.add(listener);
+  return () => {
+    sessionEndListeners.delete(listener);
   };
 };
 

@@ -134,7 +134,6 @@ export default function DashboardScreen() {
     if (!deviceId) return;
     const overriddenPackage = route?.params?.justOverriddenPackage as string | undefined;
     if (overriddenPackage) justOverriddenPackageRef.current = overriddenPackage;
-    if (limits.length === 0) setLoading(true);
     fetchLimits();
   };
   useEffect(() => {
@@ -204,17 +203,6 @@ export default function DashboardScreen() {
       targetType,
     });
   };
-
-  if (loading && !refreshing) {
-    return (
-      <SafeAreaView style={styles.container}>
-        <View style={styles.centerContent}>
-          <ActivityIndicator size="large" color="#10B981" />
-          <Text style={styles.loadingText}>Loading your limits...</Text>
-        </View>
-      </SafeAreaView>
-    );
-  }
 
   return (
     <SafeAreaView style={styles.container}>
@@ -297,7 +285,11 @@ export default function DashboardScreen() {
                 activeOpacity={0.8}
                 disabled={refreshing}
               >
-                <RefreshCcw size={16} color="#FFFFFF" />
+                {refreshing ? (
+                  <ActivityIndicator size={16} color="#FFFFFF" />
+                ) : (
+                  <RefreshCcw size={16} color="#FFFFFF" />
+                )}
               </TouchableOpacity>
               <TouchableOpacity style={styles.addBtn} onPress={handleOpenCreateModal} activeOpacity={0.8}>
                 <PlusIcon size={16} color="#FFFFFF" />
@@ -305,7 +297,12 @@ export default function DashboardScreen() {
             </View>
           </View>
 
-          {limits.length === 0 ? (
+          {loading && !refreshing ? (
+            <View style={styles.inlineLoader}>
+              <ActivityIndicator size="small" color="#10B981" />
+              <Text style={styles.inlineLoaderText}>Loading limits...</Text>
+            </View>
+          ) : limits.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconWrap}>
                 <Shield size={40} color="#CBD5E1" />
@@ -366,8 +363,8 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F1F5F9' },
-  centerContent: { flex: 1, justifyContent: 'center', alignItems: 'center' },
-  loadingText: { marginTop: 12, color: '#64748B', fontSize: 14, fontWeight: '500' },
+  inlineLoader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 32, backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: '#E8ECF4' },
+  inlineLoaderText: { color: '#64748B', fontSize: 14, fontWeight: '500' },
   scrollContent: { paddingBottom: 100 },
 
   headerGradient: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },

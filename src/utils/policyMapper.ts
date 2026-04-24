@@ -162,18 +162,10 @@ export function mergeLiveTimerUsageIntoPolicies(
 
     byPkg.set(k, t);
   });
-  console.log(' NATIVE TIMER KEYS:', Array.from(byPkg.keys()));
-  console.log(' POLICY LOOKUP KEYS:', policies.map(p => ({
-    label: p.target_label,
-    type: p.target_type,
-    lookupKey: getPolicyPackageKey(p),
-  })));
   return policies.map(item => {
-    console.log('🔍 POLICY:', item.target_label, 'type:', item.target_type, 'backend is_blocked:', item.is_blocked);
     if (item.target_type !== 'app' && item.target_type !== 'website') return item;
     const key = getPolicyPackageKey(item);
     const timer = byPkg.get(key);
-    console.log('🔍 native timer for', key, ': ', timer ? `status=${timer.status}, remaining=${timer.remainingSeconds}s` : 'NOT FOUND');
 
     if (!timer) return item;
 
@@ -202,24 +194,23 @@ export function mergeLiveTimerUsageIntoPolicies(
 
     const nativeIsActive = nativeStatus === 'active' || nativeStatus === 'running';
 
+    const backendUsed = Number(item.time_used_minutes) || 0;
+
     if (!nativeIsActive) {
-      // Native is the authoritative source for used time (CLAUDE.md §3: local
-      // state is a cache, not truth). Do not preserve a higher backend value
-      // here — a stale/inflated backend total must not override native's
-      // exact committed usage, or the UI shows e.g. "2m / 1m" after the real
-      // value has dropped.
+      const bestUsed = Math.max(cappedUsed, backendUsed);
       return {
         ...item,
-        time_used_minutes: cappedUsed,
+        time_used_minutes: bestUsed,
         _nativeBudgetSeconds: budget > 0 ? budget : undefined,
       };
     }
 
+    const bestUsed = Math.max(cappedUsed, backendUsed);
     return {
       ...item,
-      time_used_minutes: cappedUsed,
+      time_used_minutes: bestUsed,
       is_blocked: false,
-      status: cappedUsed > 0 ? ('active' as const) : item.status,
+      status: bestUsed > 0 ? ('active' as const) : item.status,
       _nativeBudgetSeconds: budget > 0 ? budget : undefined,
     };
   });
