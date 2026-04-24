@@ -54,6 +54,11 @@ export function useLockStateSync(accountId: string | undefined) {
             return { ...item, is_blocked: true, status: 'blocked' as const };
           }
 
+          if (!isLockedRemotely && item.is_blocked) {
+            changed = true;
+            return { ...item, is_blocked: false, status: 'active' as const };
+          }
+
           return item;
         });
         return changed ? next : prev;

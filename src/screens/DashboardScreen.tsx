@@ -150,10 +150,7 @@ export default function DashboardScreen() {
 
     lastFetchRef.current = now;
     focusHandlerRef.current();
-    // No onReconnect auto-refresh and no network-triggered refetch — the user wants
-    // the dashboard to only refresh via explicit actions (manual button, pull-to-refresh,
-    // override completion, limit creation). Spontaneous refreshes were flipping the
-    // blocked/active state unpredictably when stale backend data arrived.
+
   }, [deviceId, route?.params?.refreshAt]);
 
   const onRefresh = async () => {
@@ -161,12 +158,12 @@ export default function DashboardScreen() {
     try {
       const data = await refreshBootstrap();
       setAccountData(data);
-    } catch {}
+    } catch { }
     fetchLimits();
   };
 
   const handleOpenCreateModal = () => {
-    setShowCreateModal(true); // 🚀 instant open
+    setShowCreateModal(true);
 
     canCreatePolicy().then(check => {
       setPlanLimits(check.limits);
@@ -195,7 +192,7 @@ export default function DashboardScreen() {
     const targetType = limit.target_type || 'app';
 
     if ((user?.overrides_left ?? 0) <= 0) {
-      // Show the popup asking "Buy Override or Buy Plan?"
+
       setNoOverridesModal({ visible: true, appName });
       return;
     }
