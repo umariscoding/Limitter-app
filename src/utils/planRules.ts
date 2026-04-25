@@ -1,14 +1,16 @@
-export type NormalizedPlan = 'free' | 'pro' | 'elite';
+export type NormalizedPlan = 'free' | 'pro' | 'elite' | 'ultra_elite';
 
 const PLAN_OVERRIDE_LIMITS: Record<NormalizedPlan, number> = {
   free: 3,
   pro: 15,
   elite: 9999,
+  ultra_elite: 9999,
 };
 
 export const normalizePlan = (rawPlan?: string | null): NormalizedPlan => {
   const value = String(rawPlan || '').trim().toLowerCase();
 
+  if (value === 'ultra_elite' || value === 'ultra elite' || value === 'ultraelite') return 'ultra_elite';
   if (value === 'elite') return 'elite';
   if (value === 'pro' || value === 'medium') return 'pro';
   return 'free';
@@ -28,7 +30,7 @@ export const computeNextOverrides = (
   }
 
   const normalizedPlan = normalizePlan(rawPlan);
-  if (normalizedPlan === 'elite') {
+  if (normalizedPlan === 'elite' || normalizedPlan === 'ultra_elite') {
     return getPlanOverrideLimit(normalizedPlan);
   }
 

@@ -49,5 +49,5 @@ export async function finishPurchase(purchase: BillingPurchase, isConsumable: bo
 }
 
 export { SUBSCRIPTION_SKUS, CONSUMABLE_SKUS, OVERRIDE_SKU, skuToPlan, isSubscriptionSku };
-export { planToSku, isConsumableSku } from "./skus";
-export type { BillingProvider, BillingProduct, BillingPurchase, BillingProducts, PlanCode } from "./types";
+export { planToSku, isConsumableSku, skuToPlanCycle } from "./skus";
+export type { BillingProvider, BillingProduct, BillingPurchase, BillingProducts, PlanCode, BillingCycle } from "./types";

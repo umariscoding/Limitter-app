@@ -79,13 +79,18 @@ export const featureToggles = [
   },
 ];
 
-// ─── SUBSCRIPTION PLANS SCREEN 
+// ─── SUBSCRIPTION PLANS SCREEN
+// Yearly price formula: monthly * 12 * 0.9 (10% annual discount)
 export const subscriptionPlans = [
   {
     id: "1",
     name: "Free",
-    price: 0.00,
+    monthlyPrice: 0.00,
+    yearlyPrice: 0.00,
+    monthlyLabel: "$0 / mo",
+    yearlyLabel: "$0 / yr",
     priceLabel: "$0 / mo",
+    supportsCycle: false,
     badge: null,
     features: [
       { text: "1 Device", enabled: true },
@@ -99,8 +104,12 @@ export const subscriptionPlans = [
   {
     id: "2",
     name: "Pro",
-    price: 4.99,
+    monthlyPrice: 4.99,
+    yearlyPrice: 53.89,
+    monthlyLabel: "$4.99 / mo",
+    yearlyLabel: "$53.89 / yr",
     priceLabel: "$4.99 / mo",
+    supportsCycle: true,
     badge: null,
     features: [
       { text: "Up to 3 Devices", enabled: true },
@@ -114,9 +123,32 @@ export const subscriptionPlans = [
   {
     id: "3",
     name: "Elite",
-    price: 11.99,
+    monthlyPrice: 11.99,
+    yearlyPrice: 129.49,
+    monthlyLabel: "$11.99 / mo",
+    yearlyLabel: "$129.49 / yr",
     priceLabel: "$11.99 / mo",
+    supportsCycle: true,
     badge: "Most Popular",
+    features: [
+      { text: "Up to 10 Devices", enabled: true },
+      { text: "Unlimited Limits", enabled: true },
+      { text: "Custom Timers", enabled: true },
+      { text: "Unlimited Overrides", enabled: true },
+      { text: "Usage Analytics", enabled: true },
+      { text: "Journaling & AI Insights", enabled: true },
+    ],
+  },
+  {
+    id: "4",
+    name: "Ultra Elite",
+    monthlyPrice: 19.99,
+    yearlyPrice: 215.89,
+    monthlyLabel: "$19.99 / mo",
+    yearlyLabel: "$215.89 / yr",
+    priceLabel: "$19.99 / mo",
+    supportsCycle: true,
+    badge: "Best Value",
     features: [
       { text: "Up to 10 Devices", enabled: true },
       { text: "Unlimited Limits", enabled: true },

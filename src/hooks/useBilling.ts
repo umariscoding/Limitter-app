@@ -9,8 +9,9 @@ import {
   initBilling,
   OVERRIDE_SKU,
   isSubscriptionSku,
+  planToSku,
 } from "../services/billing";
-import type { BillingProduct, BillingPurchase, PlanCode } from "../services/billing";
+import type { BillingCycle, BillingProduct, BillingPurchase, PlanCode } from "../services/billing";
 import {
   verifyPurchaseAPI,
   VerifyPurchaseResponse,
@@ -18,12 +19,7 @@ import {
 import { refreshBootstrap } from "../services/bootstrapService";
 import { useUser } from "../context/UserContext";
 
-export type { PlanCode } from "../services/billing";
-
-const PLAN_TO_SKU: Record<string, string> = {
-  pro: "pro_monthly",
-  elite: "elite_monthly",
-};
+export type { PlanCode, BillingCycle } from "../services/billing";
 
 export interface UseBillingState {
   connected: boolean;
@@ -31,7 +27,7 @@ export interface UseBillingState {
   overrideProduct: BillingProduct | null;
   lastError: Error | null;
   buyOverrides: (count: number) => Promise<VerifyPurchaseResponse>;
-  buyPlan: (planCode: PlanCode) => Promise<VerifyPurchaseResponse>;
+  buyPlan: (planCode: PlanCode, cycle?: BillingCycle) => Promise<VerifyPurchaseResponse>;
   reloadProducts: () => Promise<void>;
 }
 
@@ -142,10 +138,10 @@ export function useBilling(): UseBillingState {
     return result;
   });
 
-  const buyPlanRef = useRef(async (planCode: PlanCode): Promise<VerifyPurchaseResponse> => {
+  const buyPlanRef = useRef(async (planCode: PlanCode, cycle: BillingCycle = "monthly"): Promise<VerifyPurchaseResponse> => {
     setLastError(null);
-    const sku = PLAN_TO_SKU[planCode];
-    if (!sku) throw new Error(`Unsupported plan: ${planCode}`);
+    const sku = planToSku(planCode, cycle);
+    if (!sku) throw new Error(`Unsupported plan/cycle combination: ${planCode}/${cycle}`);
 
     const purchase = await buySubscription(sku);
     if (!purchase.token) throw new Error("Missing purchase token from billing");
