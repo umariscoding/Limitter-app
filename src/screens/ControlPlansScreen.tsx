@@ -29,22 +29,24 @@ import { useUser } from '../context/UserContext';
 import axiosService from '../services/axiosService';
 import { API } from '../config/config';
 import BottomNav from '../components/BottomNav';
+import { formatPlanName } from '../utils/planRules';
 
 interface ProfileData {
   account: { planCode: string };
   devices: {
     count: number;
-    max: number;
+    max: number | null;
     list: Array<{ deviceId: string; deviceName: string; platform: string; lastSeenAt: any }>;
   };
   planLimits: { maxPolicies: number | null; currentPolicies: number; customTimers: boolean };
-  overrides: { totalAvailable: number };
+  overrides: { totalAvailable: number; freeOverridesPerMonth: number };
 }
 
 const PLAN_COLORS: Record<string, [string, string]> = {
   free: ['#64748B', '#475569'],
   pro: ['#10B981', '#059669'],
   elite: ['#F59E0B', '#D97706'],
+  ultra_elite: ['#7C3AED', '#5B21B6'],
 };
 
 export default function ControlPlansScreen() {
@@ -70,8 +72,8 @@ export default function ControlPlansScreen() {
   const planCode = profile?.account.planCode || 'free';
   const planColors = PLAN_COLORS[planCode] || PLAN_COLORS.free;
   const deviceCount = profile?.devices.count || 0;
-  const deviceMax = profile?.devices.max || 1;
-  const devicePct = Math.min(100, (deviceCount / deviceMax) * 100);
+  const deviceMax = profile?.devices.max ?? null;
+  const devicePct = deviceMax != null ? Math.min(100, (deviceCount / deviceMax) * 100) : 0;
 
   const getDeviceIcon = (platform: string) => {
     const p = platform.toLowerCase();
@@ -107,7 +109,7 @@ export default function ControlPlansScreen() {
               <View style={s.planRow}>
                 <View>
                   <Text style={s.planLabel}>Current Plan</Text>
-                  <Text style={s.planName}>{planCode.toUpperCase()}</Text>
+                  <Text style={s.planName}>{formatPlanName(planCode)}</Text>
                 </View>
                 <TouchableOpacity
                   style={s.upgradeChip}
@@ -115,7 +117,7 @@ export default function ControlPlansScreen() {
                   activeOpacity={0.8}
                 >
                   <Text style={s.upgradeChipText}>
-                    {planCode === 'elite' ? 'Top Plan' : 'Upgrade'}
+                    {planCode === 'elite' || planCode === 'ultra_elite' ? 'Top Plan' : 'Upgrade'}
                   </Text>
                 </TouchableOpacity>
               </View>
@@ -127,12 +129,12 @@ export default function ControlPlansScreen() {
                 </View>
                 <View style={s.planStat}>
                   <Smartphone size={14} color="rgba(255,255,255,0.7)" />
-                  <Text style={s.planStatValue}>{deviceCount}/{deviceMax}</Text>
+                  <Text style={s.planStatValue}>{deviceCount}/{deviceMax ?? '\u221E'}</Text>
                   <Text style={s.planStatLabel}>Devices</Text>
                 </View>
                 <View style={s.planStat}>
                   <Zap size={14} color="rgba(255,255,255,0.7)" />
-                  <Text style={s.planStatValue}>{profile.overrides.totalAvailable}</Text>
+                  <Text style={s.planStatValue}>{profile.overrides.freeOverridesPerMonth >= 9999 ? '\u221E' : profile.overrides.totalAvailable}</Text>
                   <Text style={s.planStatLabel}>Overrides</Text>
                 </View>
               </View>
@@ -142,20 +144,24 @@ export default function ControlPlansScreen() {
             <View style={s.card}>
               <View style={s.quotaRow}>
                 <Text style={s.quotaLabel}>Used</Text>
-                <Text style={s.quotaValue}>{deviceCount} / {deviceMax}</Text>
+                <Text style={s.quotaValue}>{deviceCount} / {deviceMax ?? '\u221E'}</Text>
               </View>
-              <View style={s.progressTrack}>
-                <LinearGradient
-                  colors={devicePct >= 100 ? ['#EF4444', '#DC2626'] : ['#10B981', '#34D399']}
-                  start={{ x: 0, y: 0 }}
-                  end={{ x: 1, y: 0 }}
-                  style={[s.progressFill, { width: `${Math.max(devicePct, 4)}%` }]}
-                />
-              </View>
+              {deviceMax != null && (
+                <View style={s.progressTrack}>
+                  <LinearGradient
+                    colors={devicePct >= 100 ? ['#EF4444', '#DC2626'] : ['#10B981', '#34D399']}
+                    start={{ x: 0, y: 0 }}
+                    end={{ x: 1, y: 0 }}
+                    style={[s.progressFill, { width: `${Math.max(devicePct, 4)}%` }]}
+                  />
+                </View>
+              )}
               <Text style={s.quotaHint}>
-                {deviceMax - deviceCount > 0
-                  ? `${deviceMax - deviceCount} slot${deviceMax - deviceCount > 1 ? 's' : ''} remaining`
-                  : 'All slots used. Upgrade for more.'}
+                {deviceMax == null
+                  ? 'Unlimited devices'
+                  : deviceMax - deviceCount > 0
+                    ? `${deviceMax - deviceCount} slot${deviceMax - deviceCount > 1 ? 's' : ''} remaining`
+                    : 'All slots used. Upgrade for more.'}
               </Text>
             </View>
 

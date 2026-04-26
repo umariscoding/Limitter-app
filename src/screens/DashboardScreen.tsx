@@ -39,6 +39,7 @@ import { getPlanLimits, canCreatePolicy, invalidatePlanCache, type PlanLimits } 
 import { useLockStateSync } from '../hooks/useLockStateSync';
 import { requestRequiredPermissions } from '../services/permissionsService';
 import { getPolicyPackageKey } from '../utils/policyMapper';
+import { formatPlanName } from '../utils/planRules';
 import { Toast } from '../../components';
 import CreateLimitModal from '../components/CreateLimitModal';
 import PolicyCard from '../components/PolicyCard';
@@ -246,7 +247,7 @@ export default function DashboardScreen() {
               <View style={styles.statIconWrap}>
                 <Zap size={16} color="#F59E0B" />
               </View>
-              <Text style={styles.statValue}>{user?.plan?.toUpperCase() || 'FREE'}</Text>
+              <Text style={styles.statValue}>{formatPlanName(user?.plan)}</Text>
               <Text style={styles.statLabel}>Plan</Text>
             </TouchableOpacity>
 

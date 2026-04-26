@@ -14,7 +14,7 @@ import { getPlanOverrideLimit } from "../utils/planRules";
 const SUBSCRIPTION_CACHE_KEY = "@limitter/subscription";
 const OFFLINE_GRACE_MS = 24 * 60 * 60 * 1000;
 
-type PlanCode = "free" | "pro" | "elite";
+type PlanCode = "free" | "pro" | "elite" | "ultra_elite";
 
 export interface AccountContext {
   uid: string;
@@ -62,7 +62,7 @@ interface UserContextType {
 const UserContext = createContext<UserContextType | undefined>(undefined);
 
 function normalizePlanCode(value: any): PlanCode {
-  if (value === "pro" || value === "elite" || value === "free") return value;
+  if (value === "pro" || value === "elite" || value === "ultra_elite" || value === "free") return value;
   return "free";
 }
 
@@ -83,17 +83,17 @@ function parseAccountData(data: any, existing?: AccountContext | null): AccountC
     null;
 
   const overridesBlock = data.overrides || data.account?.overrides || null;
-  const freeRemaining =
-    overridesBlock?.freeRemaining ??
-    existing?.freeCreditsRemaining ??
-    getPlanOverrideLimit(planCode);
+  const unlimitedOverrides = planCode === 'elite' || planCode === 'ultra_elite';
+  const freeRemaining = unlimitedOverrides
+    ? getPlanOverrideLimit(planCode)
+    : (overridesBlock?.freeRemaining ?? existing?.freeCreditsRemaining ?? getPlanOverrideLimit(planCode));
   const grantedRemaining =
     overridesBlock?.grantedRemaining ??
     existing?.grantedCredits ??
     0;
-  const totalAvailable =
-    overridesBlock?.totalAvailable ??
-    (freeRemaining + grantedRemaining);
+  const totalAvailable = unlimitedOverrides
+    ? getPlanOverrideLimit(planCode)
+    : (overridesBlock?.totalAvailable ?? (freeRemaining + grantedRemaining));
 
   return {
     uid: data.user?.uid || data.uid || existing?.uid || "",

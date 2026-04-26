@@ -29,6 +29,7 @@ import { useDeviceResolver } from '../hooks/useDeviceResolver';
 import { grantTemporaryOverrideAccess, grantTemporaryWebsiteOverride } from '../services/appBlockerService';
 import { useOverrideAPI, getOverrideBalanceAPI, type OverrideBalanceResponse } from '../services/overrideService';
 import { showAlert } from '../components/AppAlert';
+import { formatPlanName } from '../utils/planRules';
 
 export default function ConfirmOverrideScreen() {
   const navigation = useNavigation<any>();
@@ -55,8 +56,9 @@ export default function ConfirmOverrideScreen() {
       .finally(() => setBalanceLoading(false));
   }, []);
 
+  const isUnlimited = balance?.unlimited === true;
   const totalAvailable = balance?.totalAvailable ?? 0;
-  const hasCredits = totalAvailable > 0;
+  const hasCredits = isUnlimited || totalAvailable > 0;
 
   const handleConfirm = async () => {
     if (!user?.uid) { showAlert('Error', 'User not logged in'); return; }
@@ -82,7 +84,9 @@ export default function ConfirmOverrideScreen() {
       if (!resolvedLimitId) { showAlert('Error', 'Unable to resolve limit for override'); return; }
 
       await useOverrideAPI(resolvedLimitId, deviceId);
-      updateUser({ overrides_left: Math.max(0, totalAvailable - 1) });
+      if (!isUnlimited) {
+        updateUser({ overrides_left: Math.max(0, (totalAvailable ?? 0) - 1) });
+      }
 
       if (packageName) {
         if (targetType === 'website') {
@@ -160,10 +164,14 @@ export default function ConfirmOverrideScreen() {
           <View style={styles.detailCard}>
             <Text style={styles.detailTitle}>Override Balance</Text>
             {[
-              { label: 'Plan', value: (balance.planCode || 'free').toUpperCase() },
-              ...(balance.freeOverridesPerMonth > 0 ? [{ label: 'Plan credits', value: `${balance.freeRemaining} / ${balance.freeOverridesPerMonth}` }] : []),
-              ...(balance.grantedCredits > 0 ? [{ label: 'Purchased', value: `${balance.grantedRemaining} / ${balance.grantedCredits}` }] : []),
-              { label: 'Total available', value: String(totalAvailable), color: totalAvailable > 0 ? '#10B981' : '#EF4444' },
+              { label: 'Plan', value: formatPlanName(balance.planCode) },
+              ...(isUnlimited
+                ? [{ label: 'Overrides', value: 'Unlimited', color: '#10B981' }]
+                : [
+                    ...(balance.freeOverridesPerMonth != null && balance.freeOverridesPerMonth > 0 ? [{ label: 'Plan credits', value: `${balance.freeRemaining} / ${balance.freeOverridesPerMonth}` }] : []),
+                    ...(balance.grantedCredits > 0 ? [{ label: 'Purchased', value: `${balance.grantedRemaining} / ${balance.grantedCredits}` }] : []),
+                    { label: 'Total available', value: String(totalAvailable), color: totalAvailable > 0 ? '#10B981' : '#EF4444' },
+                  ]),
             ].map((row, i) => (
               <View key={i} style={styles.detailRow}>
                 <Text style={styles.detailLabel}>{row.label}</Text>

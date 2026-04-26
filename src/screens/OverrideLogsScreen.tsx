@@ -130,7 +130,7 @@ export default function OverrideLogsScreen() {
                     </View>
                     <View>
                       <Text style={s.balanceTitle}>Available Credits</Text>
-                      <Text style={s.balanceTotal}>{balance.totalAvailable}</Text>
+                      <Text style={s.balanceTotal}>{balance.unlimited ? '\u221E' : balance.totalAvailable}</Text>
                     </View>
                   </View>
 
@@ -138,7 +138,7 @@ export default function OverrideLogsScreen() {
 
                   <View style={s.balanceGrid}>
                     <View style={s.balanceStat}>
-                      <Text style={s.balanceStatValue}>{balance.freeRemaining}</Text>
+                      <Text style={s.balanceStatValue}>{balance.unlimited ? '\u221E' : balance.freeRemaining}</Text>
                       <Text style={s.balanceStatLabel}>Free left</Text>
                     </View>
                     <View style={s.balanceStat}>
@@ -150,7 +150,7 @@ export default function OverrideLogsScreen() {
                       <Text style={s.balanceStatLabel}>Used</Text>
                     </View>
                     <View style={s.balanceStat}>
-                      <Text style={s.balanceStatValue}>{balance.freeOverridesPerMonth}</Text>
+                      <Text style={s.balanceStatValue}>{balance.unlimited ? '\u221E' : balance.freeOverridesPerMonth}</Text>
                       <Text style={s.balanceStatLabel}>Free / mo</Text>
                     </View>
                   </View>

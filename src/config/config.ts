@@ -1,4 +1,4 @@
-export const BASE_URL = "https://limitter-api-production.up.railway.app";
+export const BASE_URL = "https://9fc7-182-190-164-9.ngrok-free.app";
 export const API = {
   SetupAccount: "/api/auth/setup-account",
   Bootstrap: "/api/auth/bootstrap",

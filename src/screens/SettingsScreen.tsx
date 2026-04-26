@@ -23,6 +23,7 @@ import axiosService from '../services/axiosService';
 import { API } from '../config/config';
 import BottomNav from '../components/BottomNav';
 import { showAlert } from '../components/AppAlert';
+import { formatPlanName } from '../utils/planRules';
 import {
   User,
   CreditCard,
@@ -39,7 +40,7 @@ interface ProfileData {
   user: { uid: string; email: string; displayName: string | null };
   account: { accountId: string; name: string; planCode: string; status: string };
   subscription: any;
-  devices: { count: number; max: number; list: Array<{ deviceId: string; deviceName: string; platform: string }> };
+  devices: { count: number; max: number | null; list: Array<{ deviceId: string; deviceName: string; platform: string }> };
   overrides: { freeRemaining: number; grantedRemaining: number; totalAvailable: number; totalUsedThisMonth: number; freeOverridesPerMonth: number };
   planLimits: { maxPolicies: number | null; currentPolicies: number; customTimers: boolean };
 }
@@ -48,6 +49,7 @@ const PLAN_COLORS: Record<string, [string, string]> = {
   free: ['#64748B', '#475569'],
   pro: ['#6366F1', '#4F46E5'],
   elite: ['#F59E0B', '#D97706'],
+  ultra_elite: ['#7C3AED', '#5B21B6'],
 };
 
 export default function SettingsScreen() {
@@ -196,7 +198,7 @@ export default function SettingsScreen() {
                 <Text style={styles.profileEmail}>{profile.user.email}</Text>
               </View>
               <LinearGradient colors={planColors as [string, string]} style={styles.planBadge}>
-                <Text style={styles.planBadgeText}>{planCode.toUpperCase()}</Text>
+                <Text style={styles.planBadgeText}>{formatPlanName(planCode)}</Text>
               </LinearGradient>
             </View>
 
@@ -210,12 +212,12 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.statBox}>
                 <Smartphone size={18} color="#3B82F6" />
-                <Text style={styles.statValue}>{profile.devices.count}/{profile.devices.max}</Text>
+                <Text style={styles.statValue}>{profile.devices.count}/{profile.devices.max ?? '\u221E'}</Text>
                 <Text style={styles.statLabel}>Devices</Text>
               </View>
               <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('OverrideLogsScreen')} activeOpacity={0.8}>
                 <Zap size={18} color="#F59E0B" />
-                <Text style={styles.statValue}>{profile.overrides.totalAvailable}</Text>
+                <Text style={styles.statValue}>{profile.overrides.freeOverridesPerMonth >= 9999 ? '\u221E' : profile.overrides.totalAvailable}</Text>
                 <Text style={styles.statLabel}>Overrides</Text>
               </TouchableOpacity>
             </View>
@@ -241,7 +243,7 @@ export default function SettingsScreen() {
               <CreditCard size={20} color="#6366F1" />
               <View style={styles.menuContent}>
                 <Text style={styles.menuLabel}>Current Plan</Text>
-                <Text style={styles.menuValue}>{planCode.toUpperCase()}</Text>
+                <Text style={styles.menuValue}>{formatPlanName(planCode)}</Text>
               </View>
               <ChevronRight size={18} color="#CBD5E1" />
             </TouchableOpacity>

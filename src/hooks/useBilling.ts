@@ -79,10 +79,14 @@ export function useBilling(): UseBillingState {
           await finishPurchase(purchase, isConsumable);
           if (result && !result.replay) anyApplied = true;
         } catch (err: any) {
-          console.warn(`[useBilling] replay pending failed sku=${purchase.productId}: ${err?.message || err}`);
-          try {
-            await finishPurchase(purchase, isConsumable);
-          } catch {}
+          const status = err?.response?.status || err?.status;
+          const isTerminal = status === 403 || status === 409;
+          console.warn(`[useBilling] replay pending failed sku=${purchase.productId} status=${status}: ${err?.message || err}`);
+          if (isTerminal) {
+            try {
+              await finishPurchase(purchase, isConsumable);
+            } catch {}
+          }
         }
       }
       if (anyApplied) {

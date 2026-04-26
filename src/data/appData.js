@@ -150,7 +150,7 @@ export const subscriptionPlans = [
     supportsCycle: true,
     badge: "Best Value",
     features: [
-      { text: "Up to 10 Devices", enabled: true },
+      { text: "Unlimited Devices", enabled: true },
       { text: "Unlimited Limits", enabled: true },
       { text: "Custom Timers", enabled: true },
       { text: "Unlimited Overrides", enabled: true },

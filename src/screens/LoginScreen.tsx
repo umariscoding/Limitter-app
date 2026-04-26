@@ -16,7 +16,9 @@ import { useNavigation } from "@react-navigation/native";
 import { useUser } from "../context/UserContext";
 import { signIn } from "../auth/firebaseAuthService";
 import { BaseButton, TextInput, Toast } from "../../components";
-import { Shield } from "lucide-react-native";
+import { Image } from "react-native";
+
+const logo = require("../assets/logo.png");
 
 const LoginScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -66,7 +68,7 @@ const LoginScreen: React.FC = () => {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <LinearGradient colors={["#059669", "#10B981"]} style={styles.headerGradient}>
             <View style={styles.iconCircle}>
-              <Shield size={36} color="#FFFFFF" />
+              <Image source={logo} style={styles.logoImg} resizeMode="contain" />
             </View>
             <Text style={styles.appName}>Limitter</Text>
             <Text style={styles.tagline}>Take control of your screen time</Text>
@@ -130,7 +132,8 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1 },
 
   headerGradient: { alignItems: "center", paddingTop: 48, paddingBottom: 40 },
-  iconCircle: { width: 72, height: 72, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", marginBottom: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" },
+  iconCircle: { width: 72, height: 72, borderRadius: 24, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", marginBottom: 16, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)", overflow: "hidden" },
+  logoImg: { width: 52, height: 52 },
   appName: { fontSize: 32, fontWeight: "900", color: "#FFFFFF", letterSpacing: -0.5 },
   tagline: { fontSize: 14, color: "rgba(255,255,255,0.7)", marginTop: 6, fontWeight: "500" },
 

@@ -3,13 +3,14 @@ import axiosService from "./axiosService";
 
 export interface OverrideBalanceResponse {
   planCode: string;
-  freeOverridesPerMonth: number;
+  unlimited: boolean;
+  freeOverridesPerMonth: number | null;
   freeUsedThisMonth: number;
-  freeRemaining: number;
+  freeRemaining: number | null;
   grantedCredits: number;
   grantedUsed: number;
   grantedRemaining: number;
-  totalAvailable: number;
+  totalAvailable: number | null;
   overrideCostUsd: number;
   totalUsedThisMonth: number;
   totalAmountSpentThisMonth: number;

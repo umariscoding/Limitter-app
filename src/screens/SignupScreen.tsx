@@ -13,9 +13,11 @@ import {
 import { SafeAreaView } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { BaseButton, TextInput, Toast } from "../../components";
-import { Shield } from "lucide-react-native";
+import { Image } from "react-native";
 import { useNavigation } from "@react-navigation/native";
 import { signUp } from "../auth/firebaseAuthService";
+
+const logo = require("../assets/logo.png");
 
 const SignupScreen: React.FC = () => {
   const navigation = useNavigation<any>();
@@ -67,7 +69,7 @@ const SignupScreen: React.FC = () => {
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
           <LinearGradient colors={["#059669", "#10B981"]} style={styles.headerGradient}>
             <View style={styles.iconCircle}>
-              <Shield size={32} color="#FFFFFF" />
+              <Image source={logo} style={styles.logoImg} resizeMode="contain" />
             </View>
             <Text style={styles.headerTitle}>Create Account</Text>
             <Text style={styles.headerSubtitle}>Start managing your screen time</Text>
@@ -102,7 +104,8 @@ const styles = StyleSheet.create({
   scrollContent: { flexGrow: 1 },
 
   headerGradient: { alignItems: "center", paddingTop: 40, paddingBottom: 36 },
-  iconCircle: { width: 64, height: 64, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", marginBottom: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)" },
+  iconCircle: { width: 64, height: 64, borderRadius: 20, backgroundColor: "rgba(255,255,255,0.2)", alignItems: "center", justifyContent: "center", marginBottom: 14, borderWidth: 1, borderColor: "rgba(255,255,255,0.15)", overflow: "hidden" },
+  logoImg: { width: 46, height: 46 },
   headerTitle: { fontSize: 26, fontWeight: "900", color: "#FFFFFF" },
   headerSubtitle: { fontSize: 14, color: "rgba(255,255,255,0.7)", marginTop: 4, fontWeight: "500" },
 

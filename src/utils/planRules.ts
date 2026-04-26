@@ -7,6 +7,12 @@ const PLAN_OVERRIDE_LIMITS: Record<NormalizedPlan, number> = {
   ultra_elite: 9999,
 };
 
+export const formatPlanName = (rawPlan?: string | null): string => {
+  const plan = normalizePlan(rawPlan);
+  if (plan === 'ultra_elite') return 'Ultra Elite';
+  return plan.charAt(0).toUpperCase() + plan.slice(1);
+};
+
 export const normalizePlan = (rawPlan?: string | null): NormalizedPlan => {
   const value = String(rawPlan || '').trim().toLowerCase();
 

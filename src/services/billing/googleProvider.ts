@@ -5,6 +5,7 @@ import type {
   BillingPurchase,
   BillingProducts,
 } from "./types";
+import { SUBSCRIPTION_SKUS } from "./skus";
 
 const PURCHASE_TIMEOUT_MS = 5 * 60 * 1000;
 
@@ -78,7 +79,7 @@ export class GoogleProvider implements BillingProvider {
     try {
       const stale = await RNIap.getAvailablePurchases();
       for (const p of stale) {
-        const isConsumable = !p.productId || !["pro_monthly", "elite_monthly"].includes(p.productId);
+        const isConsumable = !p.productId || !SUBSCRIPTION_SKUS.includes(p.productId);
         try {
           await RNIap.finishTransaction({ purchase: p, isConsumable });
         } catch {}
@@ -135,7 +136,7 @@ export class GoogleProvider implements BillingProvider {
       const existingSub = active.find(
         (p) =>
           p.productId !== productId &&
-          ["pro_monthly", "elite_monthly"].includes(p.productId || ""),
+          SUBSCRIPTION_SKUS.includes(p.productId || ""),
       );
       if (existingSub) {
         const anyP = existingSub as any;
