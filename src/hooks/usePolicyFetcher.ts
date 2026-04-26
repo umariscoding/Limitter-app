@@ -1,6 +1,6 @@
 import { useRef } from 'react';
 import { usePolicyContext } from '../context/PolicyContext';
-import { getPoliciesAPI, getCachedPolicies } from '../services/policyService';
+import { getPoliciesAPI } from '../services/policyService';
 import {
   startAppBlockerService,
   startAppUsageTimer,
@@ -8,7 +8,6 @@ import {
   updateBlockedApps,
 } from '../services/appBlockerService';
 import { hydratePoliciesForUi } from '../helpers/helper';
-import { setLastNativeUpdateAt } from './useLockStateSync';
 
 export function usePolicyFetcher() {
   const { setPolicies, setIsLoading, setLastFetchedAt } = usePolicyContext();
@@ -16,10 +15,7 @@ export function usePolicyFetcher() {
   const depsRef = useRef({ setPolicies, setIsLoading, setLastFetchedAt });
   depsRef.current = { setPolicies, setIsLoading, setLastFetchedAt };
 
-  const fetchPolicies = useRef(async (options?: {
-    overriddenPackage?: string;
-    matchesLimitPackage?: (item: any, pkg: string) => boolean;
-  }) => {
+  const fetchPolicies = useRef(async () => {
     const { setPolicies, setIsLoading, setLastFetchedAt } = depsRef.current;
 
     let policiesResult: any;
@@ -34,61 +30,30 @@ export function usePolicyFetcher() {
           await new Promise<void>(r => setTimeout(r, 1000));
           continue;
         }
+        console.error('[PolicyFetcher] Failed to fetch policies:', error?.message || error);
         setIsLoading(false);
         return;
       }
     }
 
     try {
-      const reconciledLimits = await hydratePoliciesForUi(policiesResult);
+      const httpLimits = await hydratePoliciesForUi(policiesResult);
 
-      let finalLimits = reconciledLimits;
-
-      const reconcileWithContext = (prev: any[]) => {
-        const prevMap = new Map(prev.map((p: any) => [p.id, p]));
-        return reconciledLimits.map((item: any) => {
-          const existing = prevMap.get(item.id);
-          if (!existing) return item;
-
-          const freshUsed = item.time_used_minutes || 0;
-          const existingUsed = existing.time_used_minutes || 0;
-          const time_used_minutes = Math.max(freshUsed, existingUsed);
-
-          const is_blocked = item.is_blocked || (existing.is_blocked && freshUsed > 0);
-          const status = is_blocked ? 'blocked' as const : item.status;
-
-          return { ...item, time_used_minutes, is_blocked, status };
-        });
-      };
-
-      if (options?.overriddenPackage && options?.matchesLimitPackage) {
-        const overriddenPkg = options.overriddenPackage;
-        const match = options.matchesLimitPackage;
-
-        setPolicies(prev => {
-          const merged = reconcileWithContext(prev);
-          finalLimits = merged.map((item: any) =>
-            match(item, overriddenPkg)
-              ? { ...item, is_blocked: false, time_used_minutes: 0, status: 'active' }
-              : item,
-          );
-          return finalLimits;
-        });
-        setLastNativeUpdateAt(Date.now());
-      } else {
-        setPolicies(prev => {
-          finalLimits = reconcileWithContext(prev);
-          return finalLimits;
-        });
-        setLastNativeUpdateAt(Date.now());
-      }
+      // === STRICT RULE: HTTP writes ONLY metadata fields ===
+      // setPolicies here sets httpPolicies inside PolicyContext.
+      // The derived `policies` value is computed as:
+      //   httpPolicies.map(p => selectPolicyState(rtdbLocks, p))
+      // This means RTDB lock state automatically overlays on top — no merge needed here.
+      // We set the array directly; we do NOT read or preserve previous UI state.
+      setPolicies(httpLimits);
 
       setLastFetchedAt(Date.now());
       setIsLoading(false);
 
-      startTimersInBackground(finalLimits);
-    } catch { /* silenced */ }
-    finally {
+      startTimersInBackground(httpLimits);
+    } catch (err: any) {
+      console.error('[PolicyFetcher] Error reconciling policies:', err?.message || err);
+    } finally {
       setIsLoading(false);
     }
   }).current;
@@ -97,22 +62,12 @@ export function usePolicyFetcher() {
 }
 
 function startTimersInBackground(finalLimits: any[]) {
-  const blockedAppsList = finalLimits
-    .filter((l: any) => l.is_blocked && l.app_name)
-    .map((l: any) => ({
-      package_name: l.app_name || l.package_name || l.packageName,
-      app_name: l.app_name || l.package_name || l.packageName,
-      blocked_until_timestamp: l.blocked_until_timestamp,
-    }));
-
-  if (blockedAppsList.length > 0) {
-    startAppBlockerService(blockedAppsList).catch(() => {});
-  }
-  updateBlockedApps(blockedAppsList);
-
+  // We use the RAW HTTP limits here (not the RTDB-merged result) because we only want
+  // to start native timers for policies that are NOT currently blocked by RTDB.
+  // useLockStateSync handles native blocker commands for locked policies.
   const appTimerPromises: Promise<any>[] = [];
+
   for (const limit of finalLimits) {
-    if (limit.is_blocked) continue;
     if (limit.target_type !== 'app') continue;
     const pkg = limit.app_name || limit.package_name || (limit as any).packageName;
     if (!pkg) continue;
@@ -120,14 +75,16 @@ function startTimersInBackground(finalLimits: any[]) {
     const totalSeconds = Math.max(0, limit.max_time_minutes * 60);
     const usedSeconds = Math.max(0, (limit.time_used_minutes || 0) * 60);
     if (usedSeconds >= totalSeconds) continue;
+
     appTimerPromises.push(
-      startAppUsageTimer(pkg, limit.target_label || pkg, totalSeconds, usedSeconds).catch(() => {}),
+      startAppUsageTimer(pkg, limit.target_label || pkg, totalSeconds, usedSeconds).catch(err =>
+        console.error('[PolicyFetcher] startAppUsageTimer failed:', err),
+      ),
     );
   }
 
-  const websiteTimersToStart: Array<{ domain: string; durationSeconds: number }> = [];
+  const websiteTimers: Array<{ domain: string; durationSeconds: number; usedSeconds?: number }> = [];
   for (const limit of finalLimits) {
-    if (limit.is_blocked) continue;
     if (limit.target_type !== 'website') continue;
     const domain = limit.app_name || limit.package_name || (limit as any).packageName;
     if (!domain) continue;
@@ -135,14 +92,23 @@ function startTimersInBackground(finalLimits: any[]) {
     const totalSeconds = Math.max(0, limit.max_time_minutes * 60);
     const usedSeconds = Math.max(0, (limit.time_used_minutes || 0) * 60);
     if (usedSeconds >= totalSeconds) continue;
-    websiteTimersToStart.push({ domain, durationSeconds: totalSeconds, usedSeconds });
+
+    websiteTimers.push({ domain, durationSeconds: totalSeconds, usedSeconds });
   }
 
-  if (websiteTimersToStart.length > 0) {
+  if (websiteTimers.length > 0) {
     appTimerPromises.push(
-      startBulkWebsiteTimers(websiteTimersToStart).catch(() => {}),
+      startBulkWebsiteTimers(websiteTimers).catch(err =>
+        console.error('[PolicyFetcher] startBulkWebsiteTimers failed:', err),
+      ),
     );
   }
 
-  Promise.all(appTimerPromises).catch(() => {});
+  // Re-arm the native blocker for any RTDB-locked policies.
+  // This is handled exclusively by useLockStateSync.
+  // We intentionally do NOT call startAppBlockerService or updateBlockedApps here.
+
+  Promise.all(appTimerPromises).catch(err =>
+    console.error('[PolicyFetcher] timer startup error:', err),
+  );
 }

@@ -1,4 +1,5 @@
 import type { NativeTimerState } from '../services/appBlockerService';
+import type { LiveLockEvent } from '../services/timerRealtimeService';
 
 export interface UIPolicy {
   id: string;
@@ -14,7 +15,12 @@ export interface UIPolicy {
   status: 'active' | 'inactive' | 'blocked';
   blocked_until_timestamp: number;
   created_at: number;
+  daily_reset_time_local: string;
+  lock_until_timestamp_ms: number | null;
   _nativeBudgetSeconds?: number;
+  // lockVersion and updatedAt are SERVER-ONLY — never mutated by client code.
+  lockVersion?: number;
+  updatedAt?: number;
 }
 
 function humanizePackageName(packageName: string): string {
@@ -55,6 +61,54 @@ export function mapPolicyToUI(item: any): UIPolicy {
     status,
     blocked_until_timestamp: 0,
     created_at: p.createdAt?._seconds ? p.createdAt._seconds * 1000 : Date.now(),
+    daily_reset_time_local: typeof p.dailyResetTimeLocal === 'string' ? p.dailyResetTimeLocal : '00:00',
+    lock_until_timestamp_ms: typeof p.lockUntilTimestampMs === 'number' ? p.lockUntilTimestampMs : null,
+    // Do NOT set lockVersion/updatedAt here — they are read-only from the server.
+  };
+}
+
+
+
+export function selectPolicyState(rtdbLocks: Record<string, LiveLockEvent>, httpState: UIPolicy): UIPolicy {
+  const key = getPolicyPackageKey(httpState);
+  const rawKey = key.replace(/^website:/, '');
+
+  // Check both prefixed and unprefixed keys — RTDB stores by policyId but
+  // subscribeLockState returns the full lock object including targetKey.
+  const lock = rtdbLocks[key] || rtdbLocks[rawKey];
+  const now = Date.now();
+  const isLockedRemotely =
+    lock && lock.isLocked && typeof lock.blockedUntil === 'number' && lock.blockedUntil > now;
+
+  // === PATH 1: RTDB says locked → lock wins unconditionally ===
+  if (isLockedRemotely) {
+    if (!httpState.is_blocked) {
+      console.warn('[selectPolicyState] RTDB LOCK OVERRIDE HTTP STATE', key);
+    }
+    return {
+      ...httpState,
+      is_blocked: true,
+      status: 'blocked',
+      blocked_until_timestamp: lock.blockedUntil as number,
+    };
+  }
+
+  // === PATH 2: RTDB has NO active lock ===
+  // The HTTP `isExhaustedToday` flag is a valid usage signal (not a lock).
+  // We preserve it: if HTTP says the usage quota is exhausted but RTDB has no
+  // live lock, the policy is exhausted but NOT blocked (override may still apply).
+  // We only clear the lock-specific fields.
+  if (httpState.is_blocked) {
+    console.warn('[selectPolicyState] RTDB UNLOCK OVERRIDE HTTP LOCK STATE', key);
+  }
+
+  return {
+    ...httpState,
+    is_blocked: false,
+    // Keep the usage-derived status from HTTP (e.g. 'active'/'inactive') but
+    // clear 'blocked' since RTDB is the only authority for that.
+    status: httpState.status === 'blocked' ? 'active' : httpState.status,
+    blocked_until_timestamp: 0,
   };
 }
 
@@ -135,15 +189,11 @@ export function normalizeUiPolicy(item: UIPolicy): UIPolicy {
 
 export function mergeBlockedOverlaysIntoPolicies(
   normalizedPolicies: UIPolicy[],
-  nativeBlockedPackages: Set<string>,
+  _nativeBlockedPackages: Set<string>,
 ): UIPolicy[] {
-  return normalizedPolicies.map(item => {
-    const key = getPolicyPackageKey(item);
-    if (nativeBlockedPackages.has(key)) {
-      return { ...item, is_blocked: true };
-    }
-    return item;
-  });
+  // Server is the ONLY source of truth for blocked state.
+  // We no longer rely on local native blocked packages to determine UI status.
+  return normalizedPolicies;
 }
 
 export type NativeTimerForLiveTimerUsageMerge = Pick<
@@ -173,44 +223,26 @@ export function mergeLiveTimerUsageIntoPolicies(
     const remaining = Math.max(0, Number(timer.remainingSeconds) || 0);
     const liveTimerUsageSec = Math.max(0, Math.min(budget, budget - remaining));
     const maxMin = Number(item.max_time_minutes) || 0;
-    const nativeStatus = String(timer.status || '').toLowerCase();
-
-
-    if (nativeStatus === 'blocked') {
+    
+    // Server is the absolute source of truth for is_blocked and status.
+    // Only use local native timers to smoothly interpolate time_used_minutes for the progress bar.
+    if (item.is_blocked) {
       return {
         ...item,
-        is_blocked: true,
-        status: 'blocked' as const,
         time_used_minutes: maxMin > 0 ? maxMin : liveTimerUsageSec / 60,
         _nativeBudgetSeconds: budget > 0 ? budget : undefined,
       };
     }
 
     const nativeUsedMinutes = liveTimerUsageSec / 60;
-    const cappedUsed = maxMin > 0
-      ? Math.min(nativeUsedMinutes, maxMin)
-      : nativeUsedMinutes;
-
-
-    const nativeIsActive = nativeStatus === 'active' || nativeStatus === 'running';
-
+    const cappedUsed = maxMin > 0 ? Math.min(nativeUsedMinutes, maxMin) : nativeUsedMinutes;
     const backendUsed = Number(item.time_used_minutes) || 0;
-
-    if (!nativeIsActive) {
-      const bestUsed = Math.max(cappedUsed, backendUsed);
-      return {
-        ...item,
-        time_used_minutes: bestUsed,
-        _nativeBudgetSeconds: budget > 0 ? budget : undefined,
-      };
-    }
-
     const bestUsed = Math.max(cappedUsed, backendUsed);
+
     return {
       ...item,
       time_used_minutes: bestUsed,
-      is_blocked: false,
-      status: bestUsed > 0 ? ('active' as const) : item.status,
+      // Never override server's unblocked status, just update the visual usage.
       _nativeBudgetSeconds: budget > 0 ? budget : undefined,
     };
   });

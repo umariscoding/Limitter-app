@@ -14,6 +14,8 @@ export const createPolicyAPI = async (data: {
   warningThresholds?: number[];
   lockMode?: "until_reset" | "duration" | "until_time";
   overrideEnabled?: boolean;
+  dailyResetTimeLocal?: string;
+  lockUntilTimestampMs?: number | null;
 }) => {
   return await axiosService.post(API.Policies, data);
 };
@@ -51,9 +53,31 @@ export const updatePolicyAPI = async (
     warningThresholds?: number[];
     lockMode?: string;
     overrideEnabled?: boolean;
+    dailyResetTimeLocal?: string;
+    lockUntilTimestampMs?: number | null;
   },
 ) => {
   return await axiosService.put(`${API.Policies}/${policyId}`, data);
+};
+
+// Manually lock a policy immediately. Optional untilTimestampMs overrides the
+// policy's default end time for this single lock event.
+export interface LockNowResponse {
+  policy: any;
+  policyState: any;
+  blockedUntil: number;
+}
+
+export const lockNowAPI = async (
+  policyId: string,
+  untilTimestampMs?: number | null,
+): Promise<LockNowResponse> => {
+  const body: Record<string, any> = {};
+  if (untilTimestampMs) body.untilTimestampMs = untilTimestampMs;
+  return await axiosService.post<LockNowResponse>(
+    `${API.Policies}/${policyId}/lock-now`,
+    body,
+  );
 };
 
 export const archivePolicyAPI = async (policyId: string) => {

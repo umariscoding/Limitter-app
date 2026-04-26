@@ -7,7 +7,9 @@ export const stopAllTimers = async () => {
     if (LimitterModule?.sendCommand) {
       await LimitterModule.sendCommand('STOP', {});
     }
-  } catch { /* best effort */ }
+  } catch (error) { 
+    console.error('[stopAllTimers] Native error:', error);
+  }
   blockedApps.clear();
 };
 
@@ -189,7 +191,9 @@ export const grantTemporaryOverrideAccess = async (
     if (LimitterModule?.sendCommand) {
       await LimitterModule.sendCommand('UNBLOCK_APP', { package: packageName });
     }
-  } catch { /* best effort */ }
+  } catch (error) { 
+    console.error('[grantTemporaryOverrideAccess] Native error:', error);
+  }
   blockedApps.delete(packageName);
   return { success: true };
 };
@@ -203,7 +207,9 @@ export const grantTemporaryWebsiteOverride = async (
     if (LimitterModule?.sendCommand) {
       await LimitterModule.sendCommand('UNBLOCK_APP', { package: nativeKey });
     }
-  } catch { /* best effort */ }
+  } catch (error) { 
+    console.error('[grantTemporaryWebsiteOverride] Native error:', error);
+  }
   blockedApps.delete(nativeKey);
   return { success: true };
 };

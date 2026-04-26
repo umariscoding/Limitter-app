@@ -3,73 +3,109 @@ import { subscribeLockState, type LiveLockEvent } from '../services/timerRealtim
 import { usePolicyContext } from '../context/PolicyContext';
 import { getPolicyPackageKey } from '../utils/policyMapper';
 import {
+  grantTemporaryOverrideAccess,
+  grantTemporaryWebsiteOverride,
   startAppBlockerService,
   updateBlockedApps,
 } from '../services/appBlockerService';
 
-let lastNativeUpdateAt = 0;
-export const setLastNativeUpdateAt = (ts: number) => { lastNativeUpdateAt = ts; };
-
-const NATIVE_PRIORITY_WINDOW_MS = 3000;
-
 export function useLockStateSync(accountId: string | undefined) {
-  const { setPolicies } = usePolicyContext();
-  const setPoliciesRef = useRef(setPolicies);
-  setPoliciesRef.current = setPolicies;
+  // Only write to rtdbLocks — never touch setPolicies.
+  // The derived `policies` value in PolicyContext is computed as:
+  //   httpPolicies.map(p => selectPolicyState(rtdbLocks, p))
+  // so updating rtdbLocks is the ONLY correct way to propagate lock state.
+  const { setRtdbLocks, policies: currentPolicies } = usePolicyContext();
+  const setRtdbLocksRef = useRef(setRtdbLocks);
+  setRtdbLocksRef.current = setRtdbLocks;
+
+  // Keep a ref to current policies purely for side-effect commands (native blocker).
+  // We do NOT use them as merge inputs — they are read-only here.
+  const currentPoliciesRef = useRef(currentPolicies);
+  currentPoliciesRef.current = currentPolicies;
 
   useEffect(() => {
     if (!accountId) return;
 
     const unsubscribe = subscribeLockState(accountId, (locks: Record<string, LiveLockEvent>) => {
       const now = Date.now();
-      if (now - lastNativeUpdateAt < NATIVE_PRIORITY_WINDOW_MS) return;
 
-      const lockedTargets = new Set<string>();
-      for (const lock of Object.values(locks)) {
-        if (lock.isLocked && lock.targetKey) {
-          const raw = lock.targetKey.trim().toLowerCase();
-          lockedTargets.add(raw);
-          lockedTargets.add(`website:${raw}`);
+      // === SIDE EFFECTS ONLY (native blocker commands) ===
+      // Determine which targets are newly locked vs. newly unlocked so we can
+      // command the OS-level blocker. This is purely a side effect; it does NOT
+      // influence the React state derivation.
+      const newlyBlocked: Array<{ package_name: string; app_name: string; blocked_until_timestamp: number }> = [];
+      const newlyUnlocked: string[] = [];
+
+      const prevPolicies = currentPoliciesRef.current;
+      for (const [, lock] of Object.entries(locks)) {
+        if (!lock.isLocked || !lock.targetKey) continue;
+        if (typeof lock.blockedUntil === 'number' && lock.blockedUntil <= now) continue;
+
+        const raw = lock.targetKey.trim().toLowerCase();
+        const blockedUntil = typeof lock.blockedUntil === 'number'
+          ? lock.blockedUntil
+          : now + 24 * 60 * 60 * 1000; // safety fallback only — server should always provide this
+
+        // Find the matching UI policy to see if the native blocker already knows about it
+        const matchingPolicy = prevPolicies.find(p => {
+          const key = getPolicyPackageKey(p);
+          return key === raw || key === `website:${raw}` || key.replace(/^website:/, '') === raw;
+        });
+        if (matchingPolicy && !matchingPolicy.is_blocked) {
+          const pkg = matchingPolicy.app_name || matchingPolicy.package_name || matchingPolicy.packageName;
+          if (pkg) {
+            newlyBlocked.push({ package_name: pkg, app_name: pkg, blocked_until_timestamp: blockedUntil });
+          }
         }
       }
 
-      const newlyBlocked: Array<{ package_name: string; app_name: string; blocked_until_timestamp: number }> = [];
+      // Check for policies that were blocked but are no longer in the RTDB lock set
+      for (const policy of prevPolicies) {
+        if (!policy.is_blocked) continue;
+        const key = getPolicyPackageKey(policy);
+        const rawKey = key.replace(/^website:/, '');
+        const lock = locks[key] || locks[rawKey];
+        const isStillLocked =
+          lock &&
+          lock.isLocked &&
+          typeof lock.blockedUntil === 'number' &&
+          lock.blockedUntil > now;
 
-      setPoliciesRef.current(prev => {
-        let changed = false;
-        const next = prev.map(item => {
-          const key = getPolicyPackageKey(item);
-          const isLockedRemotely = lockedTargets.has(key);
+        if (!isStillLocked) {
+          newlyUnlocked.push(key);
+        }
+      }
 
-          if (isLockedRemotely && !item.is_blocked) {
-            changed = true;
-            const pkg = item.app_name || item.package_name || item.packageName;
-            if (pkg) {
-              newlyBlocked.push({
-                package_name: pkg,
-                app_name: pkg,
-                blocked_until_timestamp: now + 24 * 60 * 60 * 1000,
-              });
-            }
-            return { ...item, is_blocked: true, status: 'blocked' as const };
-          }
+      // === PURE STATE UPDATE ===
+      // Push the raw RTDB snapshot directly into state. No merging with UI state.
+      // PolicyContext will re-derive `policies` via selectPolicyState(rtdbLocks, httpPolicy).
+      setRtdbLocksRef.current(locks);
 
-          if (!isLockedRemotely && item.is_blocked) {
-            changed = true;
-            return { ...item, is_blocked: false, status: 'active' as const };
-          }
-
-          return item;
-        });
-        return changed ? next : prev;
-      });
-
+      // === NATIVE SIDE EFFECTS ===
       if (newlyBlocked.length > 0) {
-        startAppBlockerService(newlyBlocked).catch(() => {});
+        startAppBlockerService(newlyBlocked).catch(err =>
+          console.error('[useLockStateSync] startAppBlockerService failed:', err),
+        );
         updateBlockedApps(newlyBlocked);
+      }
+
+      for (const key of newlyUnlocked) {
+        const raw = key.replace(/^website:/, '');
+        const isWebsite = key.startsWith('website:') || raw.includes('.');
+        if (isWebsite) {
+          grantTemporaryWebsiteOverride(raw).catch(err =>
+            console.error('[useLockStateSync] grantTemporaryWebsiteOverride failed:', err),
+          );
+        } else {
+          grantTemporaryOverrideAccess(raw, '', 0).catch(err =>
+            console.error('[useLockStateSync] grantTemporaryOverrideAccess failed:', err),
+          );
+        }
       }
     });
 
-    return unsubscribe;
+    return () => {
+      unsubscribe();
+    };
   }, [accountId]);
 }

@@ -17,7 +17,7 @@ import { useNavigation } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
-import { updatePolicyAPI, archivePolicyAPI } from '../services/policyService';
+import { updatePolicyAPI, archivePolicyAPI, lockNowAPI } from '../services/policyService';
 import BottomNav from '../components/BottomNav';
 import {
   Home,
@@ -29,7 +29,14 @@ import {
   Shield,
   Clock,
   AlertTriangle,
+  Lock,
 } from 'lucide-react-native';
+import {
+  hhmmToTimestampMs,
+  isValidHHMM,
+  validateUntilTimestamp,
+  formatRelativeTime,
+} from '../utils/timeWindow';
 import {
   formatUsageTime,
   formatLimitTime,
@@ -49,8 +56,23 @@ export default function PoliciesScreen() {
   const [editingPolicy, setEditingPolicy] = useState<UIPolicy | null>(null);
   const [editLimitValue, setEditLimitValue] = useState('');
   const [editLabel, setEditLabel] = useState('');
+  const [editResetTime, setEditResetTime] = useState('00:00');
+  const [editEndTimeHHMM, setEditEndTimeHHMM] = useState('');
+  const [editEndTimeDay, setEditEndTimeDay] = useState<'today' | 'tomorrow'>('today');
   const [editError, setEditError] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState(false);
+
+  const [lockModalVisible, setLockModalVisible] = useState(false);
+  const [lockingPolicy, setLockingPolicy] = useState<UIPolicy | null>(null);
+  const [lockTimerType, setLockTimerType] = useState<'duration' | 'clock'>('duration');
+  const [lockHours, setLockHours] = useState('');
+  const [lockMinutes, setLockMinutes] = useState('');
+  const [lockSeconds, setLockSeconds] = useState('');
+  const [lockClockHour, setLockClockHour] = useState('');
+  const [lockClockMinute, setLockClockMinute] = useState('');
+  const [lockEndTimeDay, setLockEndTimeDay] = useState<'today' | 'tomorrow'>('today');
+  const [lockError, setLockError] = useState<string | null>(null);
+  const [lockLoading, setLockLoading] = useState(false);
 
   const fetchRef = useRef(fetchPolicies);
   fetchRef.current = fetchPolicies;
@@ -89,8 +111,82 @@ export default function PoliciesScreen() {
     setEditingPolicy(policy);
     setEditLimitValue(String(policy.max_time_minutes));
     setEditLabel(policy.target_label);
+    setEditResetTime(policy.daily_reset_time_local || '00:00');
+    setEditEndTimeHHMM('');
+    setEditEndTimeDay('today');
     setEditError(null);
     setEditModalVisible(true);
+  };
+
+  const openLockModal = (policy: UIPolicy) => {
+    setLockingPolicy(policy);
+    setLockTimerType('duration');
+    setLockHours('');
+    setLockMinutes('');
+    setLockSeconds('');
+    setLockClockHour('');
+    setLockClockMinute('');
+    setLockEndTimeDay('today');
+    setLockError(null);
+    setLockModalVisible(true);
+  };
+
+  const handleLockConfirm = async () => {
+    if (!lockingPolicy) return;
+    setLockError(null);
+
+    let untilTimestampMs: number | null = null;
+
+    if (lockTimerType === 'clock') {
+      if (lockClockHour.trim() !== '' || lockClockMinute.trim() !== '') {
+        const hh = lockClockHour.padStart(2, '0');
+        const mm = lockClockMinute.padStart(2, '0');
+        const timeStr = `${hh}:${mm}`;
+        if (!isValidHHMM(timeStr)) {
+          setLockError('Time must be valid HH and MM (e.g. 21 and 00)');
+          return;
+        }
+        const ts = hhmmToTimestampMs(timeStr, lockEndTimeDay);
+        const check = validateUntilTimestamp(ts);
+        if (!check.ok) {
+          setLockError(check.reason);
+          return;
+        }
+        untilTimestampMs = check.value;
+      }
+    } else {
+      const h = parseInt(lockHours || '0', 10);
+      const m = parseInt(lockMinutes || '0', 10);
+      const s = parseInt(lockSeconds || '0', 10);
+      if (!isNaN(h) && !isNaN(m) && !isNaN(s) && (h > 0 || m > 0 || s > 0)) {
+        const totalMinutes = h * 60 + m + s / 60;
+        const ts = Date.now() + Math.round(totalMinutes * 60 * 1000);
+        const check = validateUntilTimestamp(ts);
+        if (!check.ok) {
+          setLockError(check.reason);
+          return;
+        }
+        untilTimestampMs = check.value;
+      }
+    }
+
+    setLockLoading(true);
+    try {
+      const result = await lockNowAPI(lockingPolicy.id, untilTimestampMs);
+      const blockedUntil = result?.blockedUntil || 0;
+      setPolicies((prev) =>
+        prev.map((p) =>
+          p.id === lockingPolicy.id
+            ? { ...p, is_blocked: true, status: 'blocked' as const, blocked_until_timestamp: blockedUntil }
+            : p,
+        ),
+      );
+      setLockModalVisible(false);
+    } catch (err: any) {
+      setLockError(err?.message || 'Failed to lock');
+    } finally {
+      setLockLoading(false);
+    }
   };
 
   const handleEditSave = async () => {
@@ -115,11 +211,38 @@ export default function PoliciesScreen() {
       return;
     }
 
+    const trimmedReset = (editResetTime || '00:00').trim();
+    if (!isValidHHMM(trimmedReset)) {
+      setEditError('Reset time must be HH:MM (e.g. 06:00)');
+      return;
+    }
+
+    let nextLockUntilTimestampMs: number | null | undefined = undefined;
+    if (editEndTimeHHMM.trim() !== '') {
+      if (!isValidHHMM(editEndTimeHHMM)) {
+        setEditError('End time must be HH:MM');
+        return;
+      }
+      const ts = hhmmToTimestampMs(editEndTimeHHMM, editEndTimeDay);
+      const check = validateUntilTimestamp(ts);
+      if (!check.ok) {
+        setEditError(check.reason);
+        return;
+      }
+      nextLockUntilTimestampMs = check.value;
+    }
+
     setEditLoading(true);
     try {
       const updates: any = {};
       if (newMinutes !== editingPolicy.max_time_minutes) updates.dailyLimitMinutes = newMinutes;
       if (editLabel.trim() !== editingPolicy.target_label) updates.targetLabel = editLabel.trim();
+      if (trimmedReset !== (editingPolicy.daily_reset_time_local || '00:00')) {
+        updates.dailyResetTimeLocal = trimmedReset;
+      }
+      if (nextLockUntilTimestampMs !== undefined) {
+        updates.lockUntilTimestampMs = nextLockUntilTimestampMs;
+      }
 
       if (Object.keys(updates).length === 0) {
         setEditModalVisible(false);
@@ -130,7 +253,16 @@ export default function PoliciesScreen() {
       setPolicies((prev) =>
         prev.map((p) =>
           p.id === editingPolicy.id
-            ? { ...p, max_time_minutes: newMinutes, target_label: editLabel.trim() }
+            ? {
+                ...p,
+                max_time_minutes: newMinutes,
+                target_label: editLabel.trim(),
+                daily_reset_time_local: trimmedReset,
+                lock_until_timestamp_ms:
+                  nextLockUntilTimestampMs !== undefined
+                    ? nextLockUntilTimestampMs
+                    : p.lock_until_timestamp_ms,
+              }
             : p,
         ),
       );
@@ -216,6 +348,16 @@ export default function PoliciesScreen() {
             <Text style={s.actionEdit}>Edit</Text>
           </TouchableOpacity>
           <View style={s.actionDivider} />
+          <TouchableOpacity
+            style={s.actionBtn}
+            onPress={() => openLockModal(item)}
+            activeOpacity={0.6}
+            disabled={item.is_blocked}
+          >
+            <Lock size={14} color={item.is_blocked ? '#CBD5E1' : '#0F172A'} />
+            <Text style={[s.actionLock, item.is_blocked && s.actionLockDisabled]}>Lock Now</Text>
+          </TouchableOpacity>
+          <View style={s.actionDivider} />
           <TouchableOpacity style={s.actionBtn} onPress={() => handleDelete(item)} activeOpacity={0.6}>
             <Trash2 size={14} color="#EF4444" />
             <Text style={s.actionDelete}>Delete</Text>
@@ -294,6 +436,45 @@ export default function PoliciesScreen() {
             <Text style={s.fieldLabel}>Daily Limit (minutes)</Text>
             <RNTextInput style={s.fieldInput} value={editLimitValue} onChangeText={setEditLimitValue} keyboardType="numeric" placeholder="e.g. 30" placeholderTextColor="#94A3B8" />
 
+            <Text style={s.fieldLabel}>Limit Reset Time (24h HH:MM)</Text>
+            <Text style={s.fieldHelp}>Applies from the next reset cycle — today's usage stays in today's bucket.</Text>
+            <RNTextInput
+              style={s.fieldInput}
+              value={editResetTime}
+              onChangeText={setEditResetTime}
+              placeholder="00:00"
+              placeholderTextColor="#94A3B8"
+              maxLength={5}
+              autoCapitalize="none"
+            />
+
+            <Text style={s.fieldLabel}>Default Block End Time (optional)</Text>
+            <Text style={s.fieldHelp}>When this limit gets blocked, unblock at this time instead of next reset. Leave blank to use the reset time.</Text>
+            <RNTextInput
+              style={s.fieldInput}
+              value={editEndTimeHHMM}
+              onChangeText={setEditEndTimeHHMM}
+              placeholder="e.g. 21:00"
+              placeholderTextColor="#94A3B8"
+              maxLength={5}
+              autoCapitalize="none"
+            />
+            {editEndTimeHHMM ? (
+              <View style={s.dayToggleRow}>
+                {(['today', 'tomorrow'] as const).map(d => (
+                  <TouchableOpacity
+                    key={d}
+                    style={[s.dayToggle, editEndTimeDay === d && s.dayToggleActive]}
+                    onPress={() => setEditEndTimeDay(d)}
+                  >
+                    <Text style={[s.dayToggleText, editEndTimeDay === d && s.dayToggleTextActive]}>
+                      {d === 'today' ? 'Today' : 'Tomorrow'}
+                    </Text>
+                  </TouchableOpacity>
+                ))}
+              </View>
+            ) : null}
+
             {editingPolicy && editingPolicy.time_used_minutes > 0 && (
               <View style={s.warningBox}>
                 <AlertTriangle size={14} color="#D97706" />
@@ -315,6 +496,126 @@ export default function PoliciesScreen() {
                 {editLoading
                   ? <ActivityIndicator color="#FFF" size="small" />
                   : <Text style={s.modalSaveText}>Save Changes</Text>
+                }
+              </TouchableOpacity>
+            </View>
+          </View>
+        </KeyboardAvoidingView>
+      </Modal>
+
+      <Modal visible={lockModalVisible} transparent animationType="slide">
+        <KeyboardAvoidingView behavior={Platform.OS === 'ios' ? 'padding' : undefined} style={s.modalOverlay}>
+          <View style={s.modalSheet}>
+            <View style={s.modalHandle} />
+            <View style={s.modalHeader}>
+              <Text style={s.modalTitle}>Lock Now</Text>
+              <TouchableOpacity style={s.modalClose} onPress={() => setLockModalVisible(false)}>
+                <X size={18} color="#64748B" />
+              </TouchableOpacity>
+            </View>
+
+            {lockingPolicy && (
+              <View style={s.modalInfo}>
+                <View style={[s.iconBadgeSm, { backgroundColor: getTypeColor(lockingPolicy.target_type) }]}>
+                  {getTypeIcon(lockingPolicy.target_type)}
+                </View>
+                <View style={{ flex: 1 }}>
+                  <Text style={s.modalInfoName}>{lockingPolicy.target_label}</Text>
+                  <Text style={s.modalInfoMeta}>
+                    Will be blocked until your next reset
+                    {lockingPolicy.daily_reset_time_local ? ` (${lockingPolicy.daily_reset_time_local})` : ''}
+                  </Text>
+                </View>
+              </View>
+            )}
+
+            <View style={s.selectorRow}>
+              {(['duration', 'clock'] as const).map(t => (
+                <TouchableOpacity
+                  key={t}
+                  style={[s.selectorBtn, lockTimerType === t && s.selectorBtnActive]}
+                  onPress={() => setLockTimerType(t)}
+                >
+                  <Text style={[s.selectorBtnText, lockTimerType === t && s.selectorBtnTextActive]}>
+                    {t === 'duration' ? 'Duration' : 'Exact Time'}
+                  </Text>
+                </TouchableOpacity>
+              ))}
+            </View>
+
+            {lockTimerType === 'duration' ? (
+              <>
+                <Text style={s.fieldLabel}>Lock Duration (optional)</Text>
+                <Text style={s.fieldHelp}>How long to lock for. Leave blank to lock until next reset.</Text>
+                <View style={s.timeRow}>
+                  <View style={s.timeBox}>
+                    <Text style={s.timeLabel}>Hours</Text>
+                    <RNTextInput value={lockHours} onChangeText={setLockHours} keyboardType="number-pad" style={s.timeInput} placeholder="0" placeholderTextColor="#CBD5E1" maxLength={2} />
+                  </View>
+                  <View style={s.timeBox}>
+                    <Text style={s.timeLabel}>Minutes</Text>
+                    <RNTextInput value={lockMinutes} onChangeText={setLockMinutes} keyboardType="number-pad" style={s.timeInput} placeholder="0" placeholderTextColor="#CBD5E1" maxLength={2} />
+                  </View>
+                  <View style={s.timeBox}>
+                    <Text style={s.timeLabel}>Seconds</Text>
+                    <RNTextInput value={lockSeconds} onChangeText={setLockSeconds} keyboardType="number-pad" style={s.timeInput} placeholder="0" placeholderTextColor="#CBD5E1" maxLength={2} />
+                  </View>
+                </View>
+              </>
+            ) : (
+              <>
+                <Text style={s.fieldLabel}>Custom End Time (optional)</Text>
+                <Text style={s.fieldHelp}>Override this lock's end time. Leave blank to lock until next reset.</Text>
+                <View style={s.timeRow}>
+                  <View style={s.timeBox}>
+                    <Text style={s.timeLabel}>Hour (00-23)</Text>
+                    <RNTextInput value={lockClockHour} onChangeText={setLockClockHour} keyboardType="number-pad" style={s.timeInput} placeholder="21" placeholderTextColor="#CBD5E1" maxLength={2} />
+                  </View>
+                  <View style={s.timeBox}>
+                    <Text style={s.timeLabel}>Minute (00-59)</Text>
+                    <RNTextInput value={lockClockMinute} onChangeText={setLockClockMinute} keyboardType="number-pad" style={s.timeInput} placeholder="00" placeholderTextColor="#CBD5E1" maxLength={2} />
+                  </View>
+                </View>
+                {(lockClockHour || lockClockMinute) ? (
+                  <>
+                    <View style={s.dayToggleRow}>
+                      {(['today', 'tomorrow'] as const).map(d => (
+                        <TouchableOpacity
+                          key={d}
+                          style={[s.dayToggle, lockEndTimeDay === d && s.dayToggleActive]}
+                          onPress={() => setLockEndTimeDay(d)}
+                        >
+                          <Text style={[s.dayToggleText, lockEndTimeDay === d && s.dayToggleTextActive]}>
+                            {d === 'today' ? 'Today' : 'Tomorrow'}
+                          </Text>
+                        </TouchableOpacity>
+                      ))}
+                    </View>
+                    {isValidHHMM(`${lockClockHour.padStart(2, '0')}:${lockClockMinute.padStart(2, '0')}`) && (
+                      <Text style={s.fieldHelp}>
+                        Locks until {lockEndTimeDay === 'tomorrow' ? 'tomorrow ' : ''}{`${lockClockHour.padStart(2, '0')}:${lockClockMinute.padStart(2, '0')}`}{' '}
+                        ({formatRelativeTime(hhmmToTimestampMs(`${lockClockHour.padStart(2, '0')}:${lockClockMinute.padStart(2, '0')}`, lockEndTimeDay))}).
+                      </Text>
+                    )}
+                  </>
+                ) : null}
+              </>
+            )}
+
+            {lockError && (
+              <View style={s.errorBox}>
+                <Text style={s.errorText}>{lockError}</Text>
+              </View>
+            )}
+
+            <View style={s.modalActions}>
+              <TouchableOpacity style={s.modalCancel} onPress={() => setLockModalVisible(false)}>
+                <Text style={s.modalCancelText}>Cancel</Text>
+              </TouchableOpacity>
+              <TouchableOpacity style={s.modalLockBtn} onPress={handleLockConfirm} disabled={lockLoading}>
+                {lockLoading
+                  ? <ActivityIndicator color="#FFF" size="small" />
+                  : <Text style={s.modalSaveText}>Lock Now</Text>
                 }
               </TouchableOpacity>
             </View>
@@ -390,4 +691,22 @@ const s = StyleSheet.create({
   modalCancelText: { fontSize: 14, fontWeight: '700', color: '#64748B' },
   modalSave: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#4F46E5', alignItems: 'center' },
   modalSaveText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
+  modalLockBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#0F172A', alignItems: 'center' },
+  fieldHelp: { fontSize: 11, color: '#94A3B8', marginTop: -2, marginBottom: 6 },
+  dayToggleRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
+  dayToggle: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center', backgroundColor: '#F8FAFC' },
+  dayToggleActive: { borderColor: '#4F46E5', backgroundColor: '#EEF2FF' },
+  dayToggleText: { fontSize: 12, fontWeight: '600', color: '#64748B' },
+  dayToggleTextActive: { color: '#4F46E5' },
+  actionLock: { fontSize: 13, fontWeight: '600', color: '#0F172A', marginLeft: 6 },
+  actionLockDisabled: { color: '#CBD5E1' },
+  selectorRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
+  selectorBtn: { flex: 1, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, paddingVertical: 10, alignItems: 'center', backgroundColor: '#F8FAFC' },
+  selectorBtnActive: { borderColor: '#4F46E5', backgroundColor: '#EEF2FF' },
+  selectorBtnText: { color: '#475569', fontWeight: '600', fontSize: 13 },
+  selectorBtnTextActive: { color: '#4F46E5' },
+  timeRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
+  timeBox: { flex: 1 },
+  timeLabel: { color: '#64748B', fontSize: 12, marginBottom: 4, fontWeight: '700' },
+  timeInput: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', color: '#0F172A', fontSize: 16, textAlign: 'center' },
 });

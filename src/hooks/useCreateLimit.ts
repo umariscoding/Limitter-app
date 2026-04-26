@@ -13,6 +13,11 @@ import {
   toHour24,
 } from '../helpers/helper';
 import type { InstalledApp } from '../services/appListService';
+import {
+  hhmmToTimestampMs,
+  isValidHHMM,
+  validateUntilTimestamp,
+} from '../utils/timeWindow';
 
 export interface CreateLimitState {
   targetType: 'app' | 'category' | 'website';
@@ -30,6 +35,11 @@ export interface CreateLimitState {
   clockHour: string;
   clockMinute: string;
   clockPeriod: 'AM' | 'PM';
+  // New: per-limit reset boundary, "HH:MM" 24h. Defaults to "00:00".
+  dailyResetTimeLocal: string;
+  // New: optional default end time for blocked windows. "" means use next reset.
+  endTimeHHMM: string;
+  endTimeDay: 'today' | 'tomorrow';
 }
 
 export function useCreateLimit(
@@ -55,7 +65,31 @@ export function useCreateLimit(
       createCategory, createWebsiteUrl,
       hours, minutes, seconds, singleTimerValue, singleTimerUnit,
       clockHour, clockMinute, clockPeriod,
+      dailyResetTimeLocal, endTimeHHMM, endTimeDay,
     } = state;
+
+    const resetTime = dailyResetTimeLocal && dailyResetTimeLocal.trim() !== ''
+      ? dailyResetTimeLocal.trim()
+      : '00:00';
+    if (!isValidHHMM(resetTime)) {
+      showAlert('Validation', 'Limit reset time must be HH:MM (e.g. 06:00)');
+      return false;
+    }
+
+    let lockUntilTimestampMs: number | null = null;
+    if (endTimeHHMM && endTimeHHMM.trim() !== '') {
+      if (!isValidHHMM(endTimeHHMM)) {
+        showAlert('Validation', 'Block-until time must be HH:MM');
+        return false;
+      }
+      const ts = hhmmToTimestampMs(endTimeHHMM, endTimeDay || 'today');
+      const check = validateUntilTimestamp(ts);
+      if (!check.ok) {
+        showAlert('Validation', check.reason);
+        return false;
+      }
+      lockUntilTimestampMs = check.value;
+    }
 
     const appName = createAppName.trim();
     const category = createCategory.trim();
@@ -116,6 +150,8 @@ export function useCreateLimit(
         targetLabel,
         dailyLimitMinutes: parsedMinutes,
         scope: 'account',
+        dailyResetTimeLocal: resetTime,
+        lockUntilTimestampMs,
       });
 
       if (response) {

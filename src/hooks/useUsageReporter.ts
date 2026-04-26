@@ -3,7 +3,7 @@ import { AppState, type AppStateStatus } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { subscribeTimerTicks, subscribeTimerSessionEnd } from '../services/timerRealtimeService';
 import { tickUsageAPI, recordUsageAPI } from '../services/usageService';
-import { startAppBlockerService, updateBlockedApps } from '../services/appBlockerService';
+import { startAppBlockerService, updateBlockedApps, startAppUsageTimer, startWebsiteTimer } from '../services/appBlockerService';
 import { usePolicyContext } from '../context/PolicyContext';
 import { getPolicyPackageKey } from '../utils/policyMapper';
 import { onReconnect } from '../services/networkService';
@@ -53,14 +53,29 @@ async function recoverAndFlushStaleSessions(deviceId: string) {
   await AsyncStorage.removeItem(STORAGE_KEY);
 
   try {
-    const entries: { pkg: string; policyId: string; accumulatedSeconds: number }[] = JSON.parse(raw);
+    const entries: { pkg: string; policyId: string; accumulatedSeconds: number; targetKey?: string }[] = JSON.parse(raw);
     for (const entry of entries) {
       if (entry.accumulatedSeconds <= 0) continue;
       try {
-        await recordUsageAPI(entry.policyId, deviceId, entry.accumulatedSeconds);
-      } catch { /* best effort */ }
+        // Use tickUsageAPI (RTDB path) instead of recordUsageAPI (Firestore-only path).
+        // This ensures the exhausted → setLockState path runs for sessions that
+        // crashed right at the limit boundary.
+        await tickUsageAPI({
+          policyId: entry.policyId,
+          deviceId,
+          accumulatedSeconds: entry.accumulatedSeconds,
+          deltaSeconds: entry.accumulatedSeconds, // treat full count as delta; server handles stale detection
+          limitSeconds: 0, // server will use policy's own limit
+          targetKey: entry.targetKey || entry.pkg || entry.policyId,
+        });
+        console.log(`[UsageReporter] Recover stale session success for ${entry.policyId}`);
+      } catch (error: any) {
+        console.error(`[UsageReporter] Recover stale session failure for ${entry.policyId}:`, error?.message || error);
+      }
     }
-  } catch { /* corrupted data, ignore */ }
+  } catch (error: any) {
+    console.error(`[UsageReporter] Failed to parse stale sessions:`, error?.message || error);
+  }
 }
 
 // ─── Persistent usage queue (survives app close + offline) ───
@@ -96,7 +111,9 @@ async function replayUsageQueue() {
         if (!existingTs.has(entry.timestamp)) usageQueue.push(entry);
       }
     }
-  } catch { /* corrupted data */ }
+  } catch (error) { 
+    console.error('[replayUsageQueue] Corrupted queue data:', error);
+  }
 
   if (usageQueue.length === 0) return;
 
@@ -105,7 +122,9 @@ async function replayUsageQueue() {
     if (entry.deltaSeconds <= 0) continue;
     try {
       await recordUsageAPI(entry.policyId, entry.deviceId, entry.deltaSeconds);
-    } catch {
+      console.log(`[UsageReporter] Replay queue success for ${entry.policyId}`);
+    } catch (error: any) {
+      console.error(`[UsageReporter] Replay queue failure for ${entry.policyId}:`, error?.message || error);
       remaining.push(entry); // Keep for next retry
     }
   }
@@ -163,12 +182,12 @@ export function useUsageReporter(
   setPoliciesRef.current = setPolicies;
 
   const saveDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const policyByPackage = useRef<Map<string, { policyId: string; maxMinutes: number }>>(new Map());
+  const policyByPackage = useRef<Map<string, { policyId: string; maxMinutes: number; targetKey: string }>>(new Map());
   useEffect(() => {
-    const map = new Map<string, { policyId: string; maxMinutes: number }>();
+    const map = new Map<string, { policyId: string; maxMinutes: number; targetKey: string }>();
     for (const p of policies) {
       const pkg = getPolicyPackageKey(p);
-      if (pkg && p.id) map.set(pkg, { policyId: p.id, maxMinutes: p.max_time_minutes });
+      if (pkg && p.id) map.set(pkg, { policyId: p.id, maxMinutes: p.max_time_minutes, targetKey: pkg });
     }
     policyByPackage.current = map;
   }, [policies]);
@@ -195,25 +214,6 @@ export function useUsageReporter(
 
     for (const [pkg, session] of toTick) {
       const delta = session.unsentDelta;
-      const locallyExhausted = () =>
-        session.limitSeconds > 0 && session.accumulatedSeconds >= session.limitSeconds;
-
-      const enforceBlock = () => {
-        setPoliciesRef.current(prev =>
-          prev.map(item => {
-            if (getPolicyPackageKey(item) !== pkg) return item;
-            return { ...item, is_blocked: true, status: 'blocked' as const };
-          }),
-        );
-        const blockedUntil = Date.now() + 24 * 60 * 60 * 1000;
-        const payload = [{
-          package_name: pkg,
-          app_name: session.targetKey,
-          blocked_until_timestamp: blockedUntil,
-        }];
-        startAppBlockerService(payload);
-        updateBlockedApps(payload);
-      };
 
       try {
         const response = await tickUsageAPI({
@@ -224,17 +224,25 @@ export function useUsageReporter(
           limitSeconds: session.limitSeconds,
           targetKey: session.targetKey,
         });
+        
+        console.log(`[UsageReporter] Tick success for ${session.policyId} (target: ${session.targetKey}). Total: ${response.totalUsageSeconds}/${session.limitSeconds}`);
+
         if (response.wasReset) {
           session.accumulatedSeconds = 0;
           session.lastSentSeconds = 0;
           session.lastFlushedSeconds = 0;
           session.unsentDelta = 0;
-          setPoliciesRef.current(prev =>
-            prev.map(item => {
-              if (getPolicyPackageKey(item) !== pkg && getPolicyPackageKey(item) !== `website:${pkg}`) return item;
-              return { ...item, is_blocked: false, status: 'active' as const };
-            }),
-          );
+
+          // Native timers do not automatically reset. We must restart them with 0 usedSeconds
+          // so they don't incorrectly trigger a block based on yesterday's usage.
+          const isWebsite = pkg.startsWith('website:');
+          if (isWebsite) {
+            const domain = pkg.replace('website:', '');
+            startWebsiteTimer({ websiteUrl: domain, durationSeconds: session.limitSeconds }).catch(() => {});
+          } else {
+            startAppUsageTimer(pkg, session.targetKey, session.limitSeconds, 0).catch(() => {});
+          }
+
           continue;
         }
 
@@ -246,11 +254,8 @@ export function useUsageReporter(
         if (serverUsed > localUsed) {
           session.accumulatedSeconds = serverUsed;
         }
-
-        if (response.isExhausted || locallyExhausted()) {
-          enforceBlock();
-        }
-      } catch {
+      } catch (error: any) {
+        console.error(`[UsageReporter] Tick failure for ${session.policyId} (target: ${session.targetKey}):`, error?.message || error);
         // Queue failed delta for replay on reconnect
         enqueueUsage({
           policyId: session.policyId,
@@ -258,9 +263,6 @@ export function useUsageReporter(
           deltaSeconds: delta,
           timestamp: Date.now(),
         });
-        if (locallyExhausted()) {
-          enforceBlock();
-        }
       }
     }
 
@@ -288,7 +290,9 @@ export function useUsageReporter(
       try {
         await recordUsageAPI(session.policyId, currentDeviceId, flushDelta);
         session.lastFlushedSeconds = session.accumulatedSeconds;
-      } catch {
+        console.log(`[UsageReporter] Flush success for ${session.policyId}`);
+      } catch (error: any) {
+        console.error(`[UsageReporter] Flush failure for ${session.policyId}:`, error?.message || error);
         enqueueUsage({
           policyId: session.policyId,
           deviceId: currentDeviceId,
@@ -317,7 +321,15 @@ export function useUsageReporter(
       const rawPkg = String(event.package).trim().toLowerCase();
       const policyInfo = policyByPackage.current.get(rawPkg)
         || policyByPackage.current.get(`website:${rawPkg}`);
-      if (!policyInfo) return;
+      
+      if (!policyInfo) {
+        // Log missing policy to identify 404 silent failures
+        // We only want to log it occasionally to avoid spamming the console
+        if (Math.random() < 0.05) {
+          console.warn(`[UsageReporter] No policy found for package: ${rawPkg}`);
+        }
+        return;
+      }
 
       const existing = sessionsRef.current.get(rawPkg);
       if (existing) {
@@ -327,7 +339,7 @@ export function useUsageReporter(
         sessionsRef.current.set(rawPkg, {
           policyId: policyInfo.policyId,
           packageName: rawPkg,
-          targetKey: rawPkg,
+          targetKey: policyInfo.targetKey,
           accumulatedSeconds: 1,
           lastSentSeconds: 0,
           lastFlushedSeconds: 0,

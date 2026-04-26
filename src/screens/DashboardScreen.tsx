@@ -106,9 +106,7 @@ export default function DashboardScreen() {
       const overriddenPkg = justOverriddenPackageRef.current;
       if (overriddenPkg) justOverriddenPackageRef.current = null;
 
-      await fetchPolicies(
-        overriddenPkg ? { overriddenPackage: overriddenPkg, matchesLimitPackage } : undefined,
-      );
+      await fetchPolicies();
 
       getPlanLimits(true).then(data => setPlanLimits(data)).catch(() => { });
     } finally {

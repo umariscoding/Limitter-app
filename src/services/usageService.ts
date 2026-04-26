@@ -104,7 +104,8 @@ async function getLiveTodayMinutes(accountId: string, todayKey: string): Promise
     }
 
     return Math.round(liveSeconds / 60);
-  } catch {
+  } catch (err: any) {
+    console.error(`[UsageService] Error fetching live today minutes for account ${accountId}:`, err?.message || err);
     return 0;
   }
 }

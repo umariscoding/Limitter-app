@@ -1,11 +1,14 @@
 import React, { createContext, useState, useContext, useRef, useMemo, ReactNode } from 'react';
 import type { UIPolicy } from '../utils/policyMapper';
+import { selectPolicyState } from '../utils/policyMapper';
+import type { LiveLockEvent } from '../services/timerRealtimeService';
 
 interface PolicyContextType {
   policies: UIPolicy[];
   isLoading: boolean;
   lastFetchedAt: number;
   setPolicies: React.Dispatch<React.SetStateAction<UIPolicy[]>>;
+  setRtdbLocks: React.Dispatch<React.SetStateAction<Record<string, LiveLockEvent>>>;
   setIsLoading: (loading: boolean) => void;
   setLastFetchedAt: (ts: number) => void;
 }
@@ -13,9 +16,14 @@ interface PolicyContextType {
 const PolicyContext = createContext<PolicyContextType | undefined>(undefined);
 
 export const PolicyContextProvider: React.FC<{ children: ReactNode }> = ({ children }) => {
-  const [policies, setPolicies] = useState<UIPolicy[]>([]);
+  const [httpPolicies, setHttpPolicies] = useState<UIPolicy[]>([]);
+  const [rtdbLocks, setRtdbLocks] = useState<Record<string, LiveLockEvent>>({});
   const [isLoading, setIsLoading] = useState(true);
   const [lastFetchedAt, setLastFetchedAt] = useState(0);
+
+  const policies = useMemo(() => {
+    return httpPolicies.map(policy => selectPolicyState(rtdbLocks, policy));
+  }, [httpPolicies, rtdbLocks]);
 
   const setIsLoadingRef = useRef(setIsLoading);
   setIsLoadingRef.current = setIsLoading;
@@ -29,10 +37,11 @@ export const PolicyContextProvider: React.FC<{ children: ReactNode }> = ({ child
     policies,
     isLoading,
     lastFetchedAt,
-    setPolicies,
+    setPolicies: setHttpPolicies,
+    setRtdbLocks,
     setIsLoading: stableSetIsLoading,
     setLastFetchedAt: stableSetLastFetchedAt,
-  }), [policies, isLoading, lastFetchedAt, setPolicies, stableSetIsLoading, stableSetLastFetchedAt]);
+  }), [policies, isLoading, lastFetchedAt, stableSetIsLoading, stableSetLastFetchedAt]);
 
   return (
     <PolicyContext.Provider value={value}>

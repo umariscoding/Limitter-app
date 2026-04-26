@@ -1,7 +1,6 @@
 import { useEffect } from 'react';
 import { subscribeTimerTicks, subscribeTimerBlocked } from '../services/timerRealtimeService';
 import { getPolicyPackageKey } from '../utils/policyMapper';
-import { setLastNativeUpdateAt } from './useLockStateSync';
 
 function nativeKeyMatches(policyKey: string, eventPkg: string): boolean {
   if (policyKey === eventPkg) return true;
@@ -16,7 +15,6 @@ export function useNativeTimerSync(
     const unsubTick = subscribeTimerTicks(event => {
       if (!event?.package) return;
       const eventPkg = String(event.package).trim().toLowerCase();
-      setLastNativeUpdateAt(Date.now());
 
       setState(prev => {
         let changed = false;
@@ -30,22 +28,7 @@ export function useNativeTimerSync(
             maxSeconds,
           );
           const newUsedMinutes = consumedSeconds / 60;
-          const eventBlocked =
-            typeof event.isBlocked === 'boolean'
-              ? event.isBlocked
-              : String(event.status || '').toLowerCase() === 'blocked';
-          const isBlocked = eventBlocked ? true : item.is_blocked;
-          const newStatus = isBlocked
-            ? 'blocked'
-            : consumedSeconds > 0
-              ? 'active'
-              : item.status;
-
-          if (
-            Math.abs(item.time_used_minutes - newUsedMinutes) < 0.01 &&
-            item.is_blocked === isBlocked &&
-            item.status === newStatus
-          ) {
+          if (Math.abs(item.time_used_minutes - newUsedMinutes) < 0.01) {
             return item;
           }
 
@@ -53,8 +36,6 @@ export function useNativeTimerSync(
           return {
             ...item,
             time_used_minutes: newUsedMinutes,
-            is_blocked: isBlocked,
-            status: newStatus,
           };
         });
         return changed ? next : prev;
@@ -64,20 +45,17 @@ export function useNativeTimerSync(
     const unsubBlocked = subscribeTimerBlocked(event => {
       if (!event?.package) return;
       const eventPkg = String(event.package).trim().toLowerCase();
-      setLastNativeUpdateAt(Date.now());
 
       setState(prev => {
         let changed = false;
         const next = prev.map(item => {
           if (!nativeKeyMatches(getPolicyPackageKey(item), eventPkg)) return item;
-          if (item.is_blocked && item.status === 'blocked' && item.time_used_minutes === item.max_time_minutes) {
+          if (item.time_used_minutes === item.max_time_minutes) {
             return item;
           }
           changed = true;
           return {
             ...item,
-            is_blocked: true,
-            status: 'blocked',
             time_used_minutes: item.max_time_minutes,
           };
         });

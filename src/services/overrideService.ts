@@ -55,9 +55,8 @@ export const getOverrideHistoryAPI = async (
   limit = 50,
   cursor?: string,
 ): Promise<OverrideHistoryResponse> => {
-  const params = new URLSearchParams({ limit: String(limit) });
-  if (cursor) params.set("cursor", cursor);
+  const query = `limit=${limit}${cursor ? `&cursor=${cursor}` : ''}`;
   return await axiosService.get<OverrideHistoryResponse>(
-    `${API.OverrideHistory}?${params.toString()}`,
+    `${API.OverrideHistory}?${query}`,
   );
 };
