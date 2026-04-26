@@ -204,6 +204,8 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
                 obj.put("package", app.getString("package") ?: "")
                 obj.put("appName", app.getString("appName") ?: "")
                 obj.put("duration", durationSeconds.toString())
+                obj.put("clockHour", hour)
+                obj.put("clockMinute", minute)
                 jsonArray.put(obj)
             }
 
@@ -243,10 +245,15 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
             }
 
             val durationSeconds: Int
+            var clockH = -1
+            var clockM = -1
             if (params.hasKey("blockAtTimestampMs")) {
                 val targetMs = params.getDouble("blockAtTimestampMs").toLong()
                 val nowMs = System.currentTimeMillis()
                 durationSeconds = if (targetMs > nowMs) ((targetMs - nowMs) / 1000).toInt() else 0
+                val targetCal = java.util.Calendar.getInstance().apply { timeInMillis = targetMs }
+                clockH = targetCal.get(java.util.Calendar.HOUR_OF_DAY)
+                clockM = targetCal.get(java.util.Calendar.MINUTE)
             } else {
                 durationSeconds = params.getInt("durationSeconds")
             }
@@ -260,6 +267,10 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
             val obj = JSONObject()
             obj.put("domain", domain)
             obj.put("duration", durationSeconds.toString())
+            if (clockH >= 0) {
+                obj.put("clockHour", clockH)
+                obj.put("clockMinute", clockM)
+            }
             jsonArray.put(obj)
 
             val intent = Intent(reactContext, LimitterForegroundService::class.java).apply {

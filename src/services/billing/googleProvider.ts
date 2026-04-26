@@ -129,14 +129,32 @@ export class GoogleProvider implements BillingProvider {
     const sub = (result as any)?.subscriptions?.[0] as any;
     const offerToken = sub?.subscriptionOfferDetailsAndroid?.[0]?.offerToken;
 
+    let existingToken: string | undefined;
+    try {
+      const active = await RNIap.getAvailablePurchases();
+      const existingSub = active.find(
+        (p) =>
+          p.productId !== productId &&
+          ["pro_monthly", "elite_monthly"].includes(p.productId || ""),
+      );
+      if (existingSub) {
+        const anyP = existingSub as any;
+        existingToken = anyP.purchaseToken || anyP.purchaseTokenAndroid || undefined;
+      }
+    } catch {}
+
+    const googleRequest: any = {
+      skus: [productId],
+      ...(offerToken ? { offerToken } : {}),
+    };
+    if (existingToken) {
+      googleRequest.purchaseTokenAndroid = existingToken;
+      googleRequest.prorationModeAndroid = 1;
+    }
+
     const purchasePromise = waitForPurchase(productId);
     await RNIap.requestPurchase({
-      request: {
-        google: {
-          skus: [productId],
-          ...(offerToken ? { offerToken } : {}),
-        },
-      },
+      request: { google: googleRequest },
       type: "subs",
     });
     return mapPurchase(await purchasePromise);

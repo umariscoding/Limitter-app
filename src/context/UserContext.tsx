@@ -200,6 +200,9 @@ export const UserContextProvider: React.FC<{ children: ReactNode }> = ({ childre
     setUser((prev) => {
       const next = parseAccountData(data, prev);
       persistSubscriptionSnapshot(next);
+      if (next?.device?.deviceId) {
+        AsyncStorage.setItem("@limitter_current_device_id", next.device.deviceId).catch(() => {});
+      }
       return next;
     });
   }).current;

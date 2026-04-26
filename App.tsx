@@ -179,7 +179,20 @@ function AppInner(): React.JSX.Element {
     }
   });
 
-  useFcm(user?.device?.deviceId || null, () => fcmRefreshRef.current());
+  const fcmHandlerRef = React.useRef(async (type: string) => {
+    if (type === "force_logout") {
+      const { clearUser } = depsRef.current;
+      try {
+        const { signOut: doSignOut } = await import("./src/auth/firebaseAuthService");
+        await doSignOut();
+      } catch {}
+      clearUser();
+      return;
+    }
+    await fcmRefreshRef.current();
+  });
+
+  useFcm(user?.device?.deviceId || null, (type) => fcmHandlerRef.current(type));
 
   React.useEffect(() => {
     const unsubscribe = onAuthStateChanged(async (fbUser) => {

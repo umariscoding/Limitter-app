@@ -40,7 +40,10 @@ const LoginScreen: React.FC = () => {
     } catch (err: any) {
       const code = err?.code || "";
       const message = err?.message || "";
-      if (message.toLowerCase().includes("email not verified") || message.toLowerCase().includes("verification")) {
+      if (code === "device/limit-reached") {
+        navigation.navigate("DeviceConflict", { devices: err.devices || [], email: email.trim(), password });
+        return;
+      } else if (message.toLowerCase().includes("email not verified") || message.toLowerCase().includes("verification")) {
         navigation.navigate("VerifyEmail", { email: email.trim() });
         return;
       } else if (code === "auth/invalid-credential" || code === "auth/wrong-password") {

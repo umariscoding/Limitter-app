@@ -33,10 +33,10 @@ import { showAlert } from '../components/AppAlert';
 export default function ConfirmOverrideScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { user, updateUser } = useUser();
+  const { user, updateUser, clearUser } = useUser();
   const { policies } = usePolicyContext();
   const { fetchPolicies } = usePolicyFetcher();
-  const { deviceId } = useDeviceResolver(user?.uid);
+  const { deviceId } = useDeviceResolver(user?.uid, clearUser);
   const limitId = route?.params?.limitId;
   const packageName = route?.params?.packageName;
   const appNameFromRoute = route?.params?.appName;

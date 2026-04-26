@@ -49,10 +49,10 @@ import { showAlert } from '../components/AppAlert';
 export default function DashboardScreen() {
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
-  const { user, setAccountData } = useUser();
+  const { user, setAccountData, clearUser } = useUser();
   const { policies: limits, isLoading: loading, setPolicies: setLimits, setIsLoading: setLoading } = usePolicyContext();
   const { fetchPolicies } = usePolicyFetcher();
-  const { deviceId } = useDeviceResolver(user?.uid);
+  const { deviceId } = useDeviceResolver(user?.uid, clearUser);
 
   const [refreshing, setRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState('');

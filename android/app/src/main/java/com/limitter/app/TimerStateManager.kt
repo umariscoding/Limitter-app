@@ -23,10 +23,12 @@ object TimerStateManager {
         var status: String = "waiting",
         var lastActiveTimestamp: Long = 0,
         val startDate: String = todayDate(),
-        // Moment this timer instance began tracking. Used to clamp session start anchors
-        // so usage before the limit existed is never charged against it.
-        val createdAt: Long = System.currentTimeMillis()
-    )
+        val createdAt: Long = System.currentTimeMillis(),
+        val clockHour: Int = -1,
+        val clockMinute: Int = -1
+    ) {
+        val isClockTimer: Boolean get() = clockHour in 0..23 && clockMinute in 0..59
+    }
 
     fun addTimers(appsJson: String) {
         try {
@@ -39,6 +41,8 @@ object TimerStateManager {
                 val appName = obj.optString("appName", pkg)
                 val duration = obj.optString("duration", "0").toIntOrNull() ?: 0
                 val initialUsed = obj.optString("usedSeconds", "0").toIntOrNull() ?: 0
+                val clockH = obj.optInt("clockHour", -1)
+                val clockM = obj.optInt("clockMinute", -1)
 
                 if (duration <= 0 || pkg.isEmpty()) continue
 
@@ -54,7 +58,9 @@ object TimerStateManager {
                         appName = appName,
                         durationSeconds = duration,
                         usedSeconds = cappedUsed,
-                        status = newStatus
+                        status = newStatus,
+                        clockHour = if (clockH >= 0) clockH else existing.clockHour,
+                        clockMinute = if (clockM >= 0) clockM else existing.clockMinute
                     )
                     if (newStatus == "blocked") blockedPackages.add(pkg)
                     Log.w(TAG, "KEEP timer: $appName ($pkg) ${duration}s, used=${cappedUsed}s [${newStatus}]")
@@ -66,7 +72,9 @@ object TimerStateManager {
                         appName = appName,
                         durationSeconds = duration,
                         usedSeconds = cappedInitialUsed,
-                        status = newStatus
+                        status = newStatus,
+                        clockHour = clockH,
+                        clockMinute = clockM
                     )
                     if (newStatus == "blocked") blockedPackages.add(pkg) else blockedPackages.remove(pkg)
                     Log.w(TAG, "NEW timer: $appName ($pkg) ${duration}s, used=${cappedInitialUsed}s [${newStatus}]")
@@ -89,6 +97,8 @@ object TimerStateManager {
                 val domain = obj.getString("domain").trim().lowercase()
                 val duration = obj.optString("duration", "0").toIntOrNull() ?: 0
                 val initialUsed = obj.optString("usedSeconds", "0").toIntOrNull() ?: 0
+                val clockH = obj.optInt("clockHour", -1)
+                val clockM = obj.optInt("clockMinute", -1)
 
                 if (duration <= 0 || domain.isEmpty()) continue
 
@@ -105,7 +115,9 @@ object TimerStateManager {
                         appName = domain,
                         durationSeconds = duration,
                         usedSeconds = cappedUsed,
-                        status = newStatus
+                        status = newStatus,
+                        clockHour = if (clockH >= 0) clockH else existing.clockHour,
+                        clockMinute = if (clockM >= 0) clockM else existing.clockMinute
                     )
                     if (newStatus == "blocked") blockedPackages.add(key)
                     Log.w(TAG, "KEEP website timer: $domain ${duration}s, used=${cappedUsed}s [${newStatus}]")
@@ -117,7 +129,9 @@ object TimerStateManager {
                         appName = domain,
                         durationSeconds = duration,
                         usedSeconds = cappedInitialUsed,
-                        status = newStatus
+                        status = newStatus,
+                        clockHour = clockH,
+                        clockMinute = clockM
                     )
                     if (newStatus == "blocked") blockedPackages.add(key) else blockedPackages.remove(key)
                     Log.w(TAG, "NEW website timer: $domain ${duration}s, used=${cappedInitialUsed}s [${newStatus}]")
@@ -144,7 +158,13 @@ object TimerStateManager {
     }
 
     fun resetForNewDay(pkg: String, timer: TimerEntry, today: String): TimerEntry {
+        val newDuration = if (timer.isClockTimer) {
+            recalculateClockDuration(timer.clockHour, timer.clockMinute)
+        } else {
+            timer.durationSeconds
+        }
         val reset = timer.copy(
+            durationSeconds = newDuration,
             usedSeconds = 0,
             status = "waiting",
             lastActiveTimestamp = 0,
@@ -154,6 +174,20 @@ object TimerStateManager {
         activeTimers[pkg] = reset
         blockedPackages.remove(pkg)
         return reset
+    }
+
+    private fun recalculateClockDuration(hour: Int, minute: Int): Int {
+        val now = Calendar.getInstance()
+        val target = Calendar.getInstance().apply {
+            set(Calendar.HOUR_OF_DAY, hour)
+            set(Calendar.MINUTE, minute)
+            set(Calendar.SECOND, 0)
+            set(Calendar.MILLISECOND, 0)
+        }
+        if (target.timeInMillis <= now.timeInMillis) {
+            target.add(Calendar.DAY_OF_MONTH, 1)
+        }
+        return maxOf(0, ((target.timeInMillis - now.timeInMillis) / 1000).toInt())
     }
 
     fun updateTimer(pkg: String, timer: TimerEntry) {
@@ -178,6 +212,8 @@ object TimerStateManager {
                 obj.put("status", timer.status)
                 obj.put("startDate", timer.startDate)
                 obj.put("createdAt", timer.createdAt)
+                obj.put("clockHour", timer.clockHour)
+                obj.put("clockMinute", timer.clockMinute)
                 arr.put(obj)
             }
             prefs.edit().putString("timers", arr.toString()).apply()
@@ -205,15 +241,25 @@ object TimerStateManager {
                 val persistedStatus = obj.getString("status")
                 val status = if (persistedStatus == "active") "waiting" else persistedStatus
 
+                val clockH = obj.optInt("clockHour", -1)
+                val clockM = obj.optInt("clockMinute", -1)
+                val savedDuration = obj.getInt("duration")
+                val effectiveDuration = if (clockH in 0..23 && clockM in 0..59) {
+                    recalculateClockDuration(clockH, clockM)
+                } else {
+                    savedDuration
+                }
                 val entry = TimerEntry(
                     packageName = pkg,
                     appName = obj.getString("appName"),
-                    durationSeconds = obj.getInt("duration"),
+                    durationSeconds = effectiveDuration,
                     usedSeconds = obj.getInt("used"),
                     status = status,
                     lastActiveTimestamp = 0,
                     startDate = startDate,
-                    createdAt = obj.optLong("createdAt", System.currentTimeMillis())
+                    createdAt = obj.optLong("createdAt", System.currentTimeMillis()),
+                    clockHour = clockH,
+                    clockMinute = clockM
                 )
                 activeTimers[pkg] = entry
                 if (entry.status == "blocked") {

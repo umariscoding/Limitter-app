@@ -98,11 +98,25 @@ export async function signIn(email: string, password: string) {
   const installationId = await getOrCreateInstallationId();
   const deviceInfo = getDeviceInfo();
 
-  const accountData = await axiosService.post(API.SetupAccount, {
-    email,
-    displayName: credential.user.displayName || email.split("@")[0],
-    device: { installationId, ...deviceInfo },
-  });
+  let accountData: any;
+  try {
+    accountData = await axiosService.post(API.SetupAccount, {
+      email,
+      displayName: credential.user.displayName || email.split("@")[0],
+      device: { installationId, ...deviceInfo },
+    });
+  } catch (setupErr: any) {
+    const errorCode = setupErr?.response?.data?.errorCode;
+    if (errorCode === "DEVICE_LIMIT_REACHED") {
+      const devices = setupErr?.response?.data?.devices || [];
+      await fbSignOut(auth);
+      const err: any = new Error(setupErr?.response?.data?.message || "Device limit reached");
+      err.code = "device/limit-reached";
+      err.devices = devices;
+      throw err;
+    }
+    throw setupErr;
+  }
 
   return { firebaseUser: credential.user, accountData };
 }

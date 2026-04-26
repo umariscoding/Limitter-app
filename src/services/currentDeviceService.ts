@@ -21,6 +21,13 @@ export const resolveCurrentDeviceId = async (_userId?: string): Promise<string |
       return cachedId;
     }
 
+    if (cachedId && devices.length > 0) {
+      await AsyncStorage.removeItem(CURRENT_DEVICE_KEY);
+      const err: any = new Error("This device has been replaced. Please sign in again.");
+      err.code = "device/revoked";
+      throw err;
+    }
+
     if (devices.length > 0) {
       const deviceId = devices[0].deviceId || devices[0].id;
       await AsyncStorage.setItem(CURRENT_DEVICE_KEY, deviceId);
@@ -57,8 +64,9 @@ export const resolveCurrentDeviceId = async (_userId?: string): Promise<string |
     await AsyncStorage.setItem(CURRENT_DEVICE_KEY, deviceId);
     return deviceId;
   } catch (error: any) {
+    const code = error?.code || '';
     const msg = error?.message || '';
-    if (msg.includes('plan') || msg.includes('Device limit') || msg.includes('device limit')) {
+    if (code === 'device/revoked' || msg.includes('plan') || msg.includes('Device limit') || msg.includes('device limit')) {
       throw error;
     }
     return null;

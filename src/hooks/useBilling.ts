@@ -152,17 +152,11 @@ export function useBilling(): UseBillingState {
 
     await finishPurchase(purchase, false);
 
-    let result: VerifyPurchaseResponse;
-    try {
-      result = await verifyPurchaseAPI({
-        purchaseToken: purchase.token,
-        productId: sku,
-        type: "subscription",
-      });
-    } catch (err: any) {
-      console.warn(`[useBilling] verify subscription failed, purchase succeeded on store: ${err?.message || err}`);
-      result = { replay: false } as VerifyPurchaseResponse;
-    }
+    const result = await verifyPurchaseAPI({
+      purchaseToken: purchase.token,
+      productId: sku,
+      type: "subscription",
+    });
 
     await applyRefreshedDataRef.current();
     return result;

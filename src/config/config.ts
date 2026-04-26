@@ -10,6 +10,7 @@ export const API = {
   RegisterDevice: "/api/devices/register",
   GetDevices: "/api/devices",
   DeviceFcmToken: "/api/devices/fcm-token",
+  ReplaceDevice: "/api/devices/replace",
 
   Policies: "/api/policies",
 

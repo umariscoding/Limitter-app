@@ -19,6 +19,7 @@ import {
   DailyLimitsGraphScreen,
   VerifyEmailScreen,
   PoliciesScreen,
+  DeviceConflictScreen,
 } from "../screens";
 import BuyOverridesScreen from '../screens/BuyOverridesScreen';
 
@@ -45,6 +46,7 @@ const MainNavigator = () => {
           <Stack.Screen name="Signup" component={SignupScreen} />
           <Stack.Screen name="ForgotPassword" component={ForgotPasswordScreen} />
           <Stack.Screen name="VerifyEmail" component={VerifyEmailScreen} />
+          <Stack.Screen name="DeviceConflict" component={DeviceConflictScreen} />
 
         </>
       ) : (

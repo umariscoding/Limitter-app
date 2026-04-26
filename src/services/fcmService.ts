@@ -7,14 +7,16 @@ import { registerFcmTokenAPI } from "./billingApi";
 export type FcmMessageType =
   | "subscription_updated"
   | "credits_updated"
-  | "subscription_revoked";
+  | "subscription_revoked"
+  | "force_logout";
 
 export type FcmOnRefresh = (type: FcmMessageType) => Promise<void> | void;
 
-const BILLING_TYPES = new Set<FcmMessageType>([
+const HANDLED_TYPES = new Set<FcmMessageType>([
   "subscription_updated",
   "credits_updated",
   "subscription_revoked",
+  "force_logout",
 ]);
 
 let tokenRefreshSub: (() => void) | null = null;
@@ -45,7 +47,7 @@ async function handleDataMessage(
   onRefresh: FcmOnRefresh,
 ): Promise<void> {
   const type = message?.data?.type as FcmMessageType | undefined;
-  if (!type || !BILLING_TYPES.has(type)) return;
+  if (!type || !HANDLED_TYPES.has(type)) return;
   try {
     await onRefresh(type);
   } catch (err: any) {

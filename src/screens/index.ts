@@ -14,3 +14,4 @@ export { default as AnalyticsScreen } from './AnalyticsScreen';
 export { default as ConfirmOverrideScreen } from './ConfirmOverrideScreen';
 export { default as DailyLimitsGraphScreen } from './DailyLimitsGraphScreen';
 export { default as PoliciesScreen } from './PoliciesScreen';
+export { default as DeviceConflictScreen } from './DeviceConflictScreen';
