@@ -155,7 +155,12 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
                         TimerStateManager.blockedPackages.remove(pkg)
                         val timer = TimerStateManager.activeTimers[pkg]
                         if (timer != null && timer.status == "blocked") {
-                            TimerStateManager.activeTimers[pkg] = timer.copy(usedSeconds = 0, status = "waiting")
+                            TimerStateManager.activeTimers[pkg] = timer.copy(
+                                usedSeconds = 0,
+                                status = "waiting",
+                                lastActiveTimestamp = 0
+                            )
+                            TimerStateManager.persistToPrefs(reactContext)
                         }
                     }
                     promise.resolve("OK")

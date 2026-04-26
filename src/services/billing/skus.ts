@@ -1,14 +1,27 @@
 import { Platform } from "react-native";
-import type { PlanCode } from "./types";
+import type { BillingCycle, PlanCode } from "./types";
 
-const GOOGLE_SUBS: Record<string, PlanCode> = {
-  pro_monthly: "pro",
-  elite_monthly: "elite",
+interface SubMeta {
+  plan: PlanCode;
+  cycle: BillingCycle;
+}
+
+const GOOGLE_SUBS: Record<string, SubMeta> = {
+  pro_monthly: { plan: "pro", cycle: "monthly" },
+  pro_yearly: { plan: "pro", cycle: "yearly" },
+  elite_monthly: { plan: "elite", cycle: "monthly" },
+  elite_yearly: { plan: "elite", cycle: "yearly" },
+  ultra_elite_monthly: { plan: "ultra_elite", cycle: "monthly" },
+  ultra_elite_yearly: { plan: "ultra_elite", cycle: "yearly" },
 };
 
-const APPLE_SUBS: Record<string, PlanCode> = {
-  pro_monthly: "pro",
-  elite_monthly: "elite",
+const APPLE_SUBS: Record<string, SubMeta> = {
+  pro_monthly: { plan: "pro", cycle: "monthly" },
+  pro_yearly: { plan: "pro", cycle: "yearly" },
+  elite_monthly: { plan: "elite", cycle: "monthly" },
+  elite_yearly: { plan: "elite", cycle: "yearly" },
+  ultra_elite_monthly: { plan: "ultra_elite", cycle: "monthly" },
+  ultra_elite_yearly: { plan: "ultra_elite", cycle: "yearly" },
 };
 
 const GOOGLE_CONSUMABLES = ["override_1"] as const;
@@ -23,11 +36,17 @@ export const CONSUMABLE_SKUS = SKU_MAP.consumables;
 export const OVERRIDE_SKU = SKU_MAP.consumables[0];
 
 export function skuToPlan(productId: string): PlanCode {
-  return SKU_MAP.subs[productId] ?? "free";
+  return SKU_MAP.subs[productId]?.plan ?? "free";
 }
 
-export function planToSku(plan: PlanCode): string | null {
-  const entry = Object.entries(SKU_MAP.subs).find(([, p]) => p === plan);
+export function skuToPlanCycle(productId: string): SubMeta | null {
+  return SKU_MAP.subs[productId] ?? null;
+}
+
+export function planToSku(plan: PlanCode, cycle: BillingCycle = "monthly"): string | null {
+  const entry = Object.entries(SKU_MAP.subs).find(
+    ([, meta]) => meta.plan === plan && meta.cycle === cycle
+  );
   return entry ? entry[0] : null;
 }
 

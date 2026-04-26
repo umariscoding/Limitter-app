@@ -1,4 +1,6 @@
-export type PlanCode = "free" | "pro" | "elite";
+export type PlanCode = "free" | "pro" | "elite" | "ultra_elite";
+
+export type BillingCycle = "monthly" | "yearly";
 
 export interface BillingProduct {
   id: string;
