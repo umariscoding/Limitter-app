@@ -94,20 +94,13 @@ export function selectPolicyState(rtdbLocks: Record<string, LiveLockEvent>, http
   }
 
   // === PATH 2: RTDB has NO active lock ===
-  // The HTTP `isExhaustedToday` flag is a valid usage signal (not a lock).
-  // We preserve it: if HTTP says the usage quota is exhausted but RTDB has no
-  // live lock, the policy is exhausted but NOT blocked (override may still apply).
-  // We only clear the lock-specific fields.
-  if (httpState.is_blocked) {
-    console.warn('[selectPolicyState] RTDB UNLOCK OVERRIDE HTTP LOCK STATE', key);
-  }
-
+  // Firestore (HTTP) `isExhaustedToday` is durable truth for the daily quota
+  // (CLAUDE.md §3). RTDB live-lock is only a fast path for active sessions;
+  // its absence MUST NOT unblock an already-exhausted policy. Preserve the
+  // HTTP-derived is_blocked/status as-is and only clear the RTDB-specific
+  // blocked_until_timestamp.
   return {
     ...httpState,
-    is_blocked: false,
-    // Keep the usage-derived status from HTTP (e.g. 'active'/'inactive') but
-    // clear 'blocked' since RTDB is the only authority for that.
-    status: httpState.status === 'blocked' ? 'active' : httpState.status,
     blocked_until_timestamp: 0,
   };
 }

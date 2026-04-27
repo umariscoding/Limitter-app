@@ -6,8 +6,11 @@ import {
   grantTemporaryOverrideAccess,
   grantTemporaryWebsiteOverride,
   startAppBlockerService,
+  startAppUsageTimer,
+  startBulkWebsiteTimers,
   updateBlockedApps,
 } from '../services/appBlockerService';
+import { popManualLockMarker } from '../services/lockPolicyNow';
 
 export function useLockStateSync(accountId: string | undefined) {
   // Only write to rtdbLocks — never touch setPolicies.
@@ -34,7 +37,7 @@ export function useLockStateSync(accountId: string | undefined) {
       // command the OS-level blocker. This is purely a side effect; it does NOT
       // influence the React state derivation.
       const newlyBlocked: Array<{ package_name: string; app_name: string; blocked_until_timestamp: number }> = [];
-      const newlyUnlocked: string[] = [];
+      const newlyUnlocked: Array<{ key: string; policyId: string }> = [];
 
       const prevPolicies = currentPoliciesRef.current;
       for (const [, lock] of Object.entries(locks)) {
@@ -72,7 +75,7 @@ export function useLockStateSync(accountId: string | undefined) {
           lock.blockedUntil > now;
 
         if (!isStillLocked) {
-          newlyUnlocked.push(key);
+          newlyUnlocked.push({ key, policyId: policy.id });
         }
       }
 
@@ -89,18 +92,64 @@ export function useLockStateSync(accountId: string | undefined) {
         updateBlockedApps(newlyBlocked);
       }
 
-      for (const key of newlyUnlocked) {
-        const raw = key.replace(/^website:/, '');
-        const isWebsite = key.startsWith('website:') || raw.includes('.');
-        if (isWebsite) {
-          grantTemporaryWebsiteOverride(raw).catch(err =>
-            console.error('[useLockStateSync] grantTemporaryWebsiteOverride failed:', err),
-          );
-        } else {
-          grantTemporaryOverrideAccess(raw, '', 0).catch(err =>
-            console.error('[useLockStateSync] grantTemporaryOverrideAccess failed:', err),
-          );
-        }
+      // Unlock-side handling needs an async marker check per policy (manual
+      // locks must restore the snapshotted usedSeconds; override-end uses the
+      // existing reset path). Fire-and-forget the loop so we don't block the
+      // RTDB callback.
+      if (newlyUnlocked.length > 0) {
+        void (async () => {
+          for (const item of newlyUnlocked) {
+            try {
+              const marker = await popManualLockMarker(item.policyId);
+              if (marker) {
+                // Manual-lock end: TWO-STEP restore. The native side has the
+                // timer pinned at status="blocked" (via BLOCK_APP). START_TIMERS
+                // alone won't help — addTimers in TimerStateManager.kt keeps
+                // status sticky-blocked. We must:
+                //   1. UNBLOCK_APP — clears blocked status, resets usedSeconds=0
+                //   2. START_TIMERS with snapshot — addTimers' maxOf(existing=0,
+                //      snapshot) writes back the snapshotted usedSeconds
+                // Net result: usedSeconds restored to pre-lock value, status=
+                // "waiting". Closes the bypass exploit.
+                const isWebsite =
+                  marker.packageName.startsWith('website:') || item.key.startsWith('website:');
+                if (isWebsite) {
+                  const domain = marker.packageName.replace(/^website:/, '');
+                  await grantTemporaryWebsiteOverride(domain);
+                  await startBulkWebsiteTimers([
+                    {
+                      domain,
+                      durationSeconds: marker.durationSeconds,
+                      usedSeconds: marker.snapshotUsedSeconds,
+                    },
+                  ]);
+                } else {
+                  await grantTemporaryOverrideAccess(marker.packageName, marker.appName, 0);
+                  await startAppUsageTimer(
+                    marker.packageName,
+                    marker.appName,
+                    marker.durationSeconds,
+                    marker.snapshotUsedSeconds,
+                  );
+                }
+                continue;
+              }
+
+              // No marker → unlock came from override-end (or unknown source).
+              // Existing behavior: reset usedSeconds=0 (override grants fresh
+              // window — that's the monetization model).
+              const raw = item.key.replace(/^website:/, '');
+              const isWebsite = item.key.startsWith('website:') || raw.includes('.');
+              if (isWebsite) {
+                await grantTemporaryWebsiteOverride(raw);
+              } else {
+                await grantTemporaryOverrideAccess(raw, '', 0);
+              }
+            } catch (err) {
+              console.error('[useLockStateSync] unlock handling failed for', item.key, err);
+            }
+          }
+        })();
       }
     });
 

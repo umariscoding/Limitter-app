@@ -43,7 +43,10 @@ import { formatPlanName } from '../utils/planRules';
 import { Toast } from '../../components';
 import CreateLimitModal from '../components/CreateLimitModal';
 import PolicyCard from '../components/PolicyCard';
+import LockNowSheet from '../components/LockNowSheet';
 import BottomNav from '../components/BottomNav';
+import type { UIPolicy } from '../utils/policyMapper';
+import { cleanupStaleMarkers } from '../services/lockPolicyNow';
 import type { CreateLimitState } from '../hooks/useCreateLimit';
 import { showAlert } from '../components/AppAlert';
 
@@ -68,6 +71,10 @@ export default function DashboardScreen() {
     visible: boolean;
     appName: string;
   }>({ visible: false, appName: '' });
+  const [lockNowSheet, setLockNowSheet] = useState<{
+    visible: boolean;
+    policy: UIPolicy | null;
+  }>({ visible: false, policy: null });
   //new 
   const matchesLimitPackage = React.useRef(
     (item: any, packageName?: string) => {
@@ -87,7 +94,12 @@ export default function DashboardScreen() {
     setLoading,
   );
 
-  useEffect(() => { requestRequiredPermissions(); }, []);
+  useEffect(() => {
+    requestRequiredPermissions();
+    cleanupStaleMarkers().catch(err =>
+      console.error('[DashboardScreen] cleanupStaleMarkers failed:', err),
+    );
+  }, []);
 
   useNativeTimerSync(setLimits);
   useUsageReporter(limits, deviceId, user?.accountId);
@@ -184,6 +196,19 @@ export default function DashboardScreen() {
     }
   };
 
+  const handleLockNow = (limit: UIPolicy) => {
+    setLockNowSheet({ visible: true, policy: limit });
+  };
+
+  const handleLockNowConfirmed = (policy: UIPolicy, _untilTs: number) => {
+    // Don't refetch — onLocked only fires after RTDB has flipped is_blocked
+    // for this policy in PolicyContext, so the UI is already up to date. RTDB
+    // remains the single source of truth.
+    setLockNowSheet({ visible: false, policy: null });
+    setToastMessage(`Locked ${policy.target_label || policy.app_name || 'limit'}`);
+    setShowToast(true);
+  };
+
   const handleOverride = (limit: any) => {
     const pkg = limit.app_name || limit.package_name || limit.packageName;
     const appName = limit.target_label || pkg;
@@ -226,6 +251,12 @@ export default function DashboardScreen() {
         onSubmit={handleCreateSubmit}
         existingTargetKeys={existingTargetKeys}
         planLimits={planLimits}
+      />
+      <LockNowSheet
+        visible={lockNowSheet.visible}
+        policy={lockNowSheet.policy}
+        onCancel={() => setLockNowSheet({ visible: false, policy: null })}
+        onLocked={handleLockNowConfirmed}
       />
 
       <ScrollView
@@ -322,7 +353,12 @@ export default function DashboardScreen() {
               showsVerticalScrollIndicator={limits.length > 2}
             >
               {limits.slice(0, visibleCount).map((limit: any) => (
-                <PolicyCard key={limit.id} limit={limit} onOverride={handleOverride} />
+                <PolicyCard
+                  key={limit.id}
+                  limit={limit}
+                  onOverride={handleOverride}
+                  onLockNow={handleLockNow}
+                />
               ))}
               {limits.length > visibleCount && (
                 <TouchableOpacity

@@ -1,21 +1,26 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import { Shield, ShieldOff, Clock, Zap } from 'lucide-react-native';
+import { Shield, ShieldOff, Clock, Zap, Lock } from 'lucide-react-native';
 import { formatUsageTime, formatLimitTime, type UIPolicy } from '../utils/policyMapper';
 
 interface PolicyCardProps {
   limit: UIPolicy;
   onOverride: (limit: UIPolicy) => void;
+  onLockNow?: (limit: UIPolicy) => void;
 }
 
-export default function PolicyCard({ limit, onOverride }: PolicyCardProps) {
+export default function PolicyCard({ limit, onOverride, onLockNow }: PolicyCardProps) {
   const pct = limit.max_time_minutes > 0
     ? Math.min((limit.time_used_minutes / limit.max_time_minutes) * 100, 100)
     : 0;
-  const isBlocked = limit.is_blocked;
+  // Defensive: any policy at-or-over its daily quota is blocked, even if the
+  // upstream is_blocked flag desyncs (e.g., RTDB lock cleared but quota still
+  // exhausted). Status badge must always agree with the progress bar.
+  const isExhausted = limit.max_time_minutes > 0 && limit.time_used_minutes >= limit.max_time_minutes;
+  const isBlocked = limit.is_blocked || isExhausted;
   const isWarning = pct >= 75 && !isBlocked;
-  const isActive = (limit.time_used_minutes || 0) > 0 && !isBlocked;
+  const isActive = !isBlocked && (limit.time_used_minutes || 0) > 0;
 
   const progressColors: [string, string] = isBlocked
     ? ['#EF4444', '#DC2626']
@@ -71,14 +76,27 @@ export default function PolicyCard({ limit, onOverride }: PolicyCardProps) {
         />
       </View>
 
-      <TouchableOpacity onPress={() => onOverride(limit)} activeOpacity={0.8} disabled={!isBlocked}>
-        <View style={[s.overrideBtn, isBlocked ? s.overrideBtnActive : s.overrideBtnDisabled]}>
-          <Zap size={16} color={isBlocked ? '#FFFFFF' : '#94A3B8'} />
-          <Text style={[s.overrideBtnText, !isBlocked && s.overrideBtnTextDisabled]}>
-            {isBlocked ? 'Use Override' : 'Override available when blocked'}
-          </Text>
-        </View>
-      </TouchableOpacity>
+      {isBlocked ? (
+        <TouchableOpacity onPress={() => onOverride(limit)} activeOpacity={0.8}>
+          <View style={[s.overrideBtn, s.overrideBtnActive]}>
+            <Zap size={16} color="#FFFFFF" />
+            <Text style={s.overrideBtnText}>Use Override</Text>
+          </View>
+        </TouchableOpacity>
+      ) : (
+        <TouchableOpacity
+          onPress={() => onLockNow?.(limit)}
+          activeOpacity={0.8}
+          disabled={!onLockNow}
+        >
+          <View style={[s.overrideBtn, onLockNow ? s.lockNowBtn : s.overrideBtnDisabled]}>
+            <Lock size={16} color={onLockNow ? '#0F172A' : '#94A3B8'} />
+            <Text style={[s.lockNowBtnText, !onLockNow && s.overrideBtnTextDisabled]}>
+              Lock Now
+            </Text>
+          </View>
+        </TouchableOpacity>
+      )}
     </View>
   );
 }
@@ -169,4 +187,6 @@ const s = StyleSheet.create({
   overrideBtnDisabled: { backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#E2E8F0' },
   overrideBtnText: { color: '#FFFFFF', fontWeight: '700', fontSize: 14 },
   overrideBtnTextDisabled: { color: '#64748B', fontWeight: '600', fontSize: 13 },
+  lockNowBtn: { backgroundColor: '#F1F5F9', borderWidth: 1, borderColor: '#CBD5E1' },
+  lockNowBtnText: { color: '#0F172A', fontWeight: '700', fontSize: 14 },
 });
