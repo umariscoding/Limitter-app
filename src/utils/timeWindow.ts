@@ -49,6 +49,19 @@ export function hhmmToTimestampMs(
   return d.getTime();
 }
 
+// Returns the next absolute timestamp at which a recurring "HH:MM" reset
+// will fire. If today's HH:MM has not yet passed, returns today's; otherwise
+// returns tomorrow's. Drift-free: every call computes from the current `now`,
+// no accumulation. Device-local timezone (matches the user's picker).
+export function nextResetTimestamp(
+  hhmm: string,
+  now: Date = new Date(),
+): number {
+  const today = hhmmToTimestampMs(hhmm, 'today', now);
+  if (today > now.getTime()) return today;
+  return hhmmToTimestampMs(hhmm, 'tomorrow', now);
+}
+
 // Validates a user-supplied absolute "block until" timestamp.
 const MAX_END_TIME_MS = 7 * 24 * 60 * 60 * 1000;
 export function validateUntilTimestamp(

@@ -37,6 +37,7 @@ import { updateBlockedApps } from '../services/appBlockerService';
 import { formatTotalUsageFromLimits } from '../helpers/helper';
 import { getPlanLimits, canCreatePolicy, invalidatePlanCache, type PlanLimits } from '../services/planGuardService';
 import { useLockStateSync } from '../hooks/useLockStateSync';
+import { useResetSchedule } from '../hooks/useResetSchedule';
 import { requestRequiredPermissions } from '../services/permissionsService';
 import { getPolicyPackageKey } from '../utils/policyMapper';
 import { formatPlanName } from '../utils/planRules';
@@ -126,6 +127,13 @@ export default function DashboardScreen() {
       setRefreshing(false);
     }
   };
+
+  // Schedule a refetch at the next per-policy reset moment. Drift-free:
+  // every fire computes a fresh absolute timestamp from each policy's
+  // daily_reset_time_local. Backend cron does the actual reset; this hook
+  // ensures the client picks up the fresh state without waiting for a manual
+  // refresh.
+  useResetSchedule(limits, fetchLimits);
 
   const totalUsageText = React.useMemo(() => formatTotalUsageFromLimits(limits), [limits]);
 

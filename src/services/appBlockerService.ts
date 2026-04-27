@@ -198,6 +198,38 @@ export const grantTemporaryOverrideAccess = async (
   return { success: true };
 };
 
+// Forcibly resets a native timer entry to {usedSeconds=0, status="waiting"}
+// for a target that's currently in "waiting" status. Needed because:
+//   - UNBLOCK_APP only acts when status=="blocked" (LimitterModule.kt:157), so
+//     calling it on a "waiting" entry is a no-op.
+//   - START_TIMERS' addTimers does `cappedUsed = maxOf(existing, new)` for
+//     same-day entries (TimerStateManager.kt:51), so passing initialUsed=0
+//     does NOT decrease usedSeconds on its own.
+// To force a reset we briefly flip status to "blocked" via BLOCK_APP, then
+// immediately back via UNBLOCK_APP. Net effect: {usedSeconds=0, status=
+// "waiting"}. The subsequent startAppUsageTimer call can then seed cleanly
+// with the new server value via maxOf(0, serverUsed) = serverUsed.
+//
+// RACE: the native foreground service polls every 1s. There is a <50ms window
+// between BLOCK_APP and UNBLOCK_APP returning where status="blocked"; if the
+// poll fires exactly then AND the user is actively in this app's foreground,
+// the BlockOverlay flashes briefly. Self-clears on the next poll. Acceptable
+// trade-off without a native rebuild — proper fix is a new RESET_TIMER native
+// command (tracked as v2).
+export const resetNativeTimerForReset = async (
+  packageName: string,
+  appName: string,
+): Promise<void> => {
+  if (!LimitterModule?.sendCommand || !packageName) return;
+  try {
+    await LimitterModule.sendCommand('BLOCK_APP', { package: packageName, appName });
+    await LimitterModule.sendCommand('UNBLOCK_APP', { package: packageName });
+  } catch (err) {
+    console.error('[resetNativeTimerForReset] failed for', packageName, err);
+  }
+  blockedApps.delete(packageName);
+};
+
 export const grantTemporaryWebsiteOverride = async (
   domain: string,
   _minutes = 5

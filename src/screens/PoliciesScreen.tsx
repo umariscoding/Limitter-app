@@ -36,6 +36,7 @@ import {
   isValidHHMM,
   validateUntilTimestamp,
   formatRelativeTime,
+  nextResetTimestamp,
 } from '../utils/timeWindow';
 import {
   formatUsageTime,
@@ -44,6 +45,7 @@ import {
   type UIPolicy,
 } from '../utils/policyMapper';
 import { showAlert } from '../components/AppAlert';
+import TimeOfDayPicker from '../components/TimeOfDayPicker';
 
 export default function PoliciesScreen() {
   const navigation = useNavigation<any>();
@@ -215,6 +217,26 @@ export default function PoliciesScreen() {
     if (!isValidHHMM(trimmedReset)) {
       setEditError('Reset time must be HH:MM (e.g. 06:00)');
       return;
+    }
+
+    // CLAUDE.md §6.1 override-safety: cannot shorten the reset window after
+    // usage has started today (would let the user bypass overrides by editing
+    // the reset to "1 minute from now" once exhausted). Allow moving LATER.
+    const oldReset = editingPolicy.daily_reset_time_local || '00:00';
+    if (trimmedReset !== oldReset) {
+      const now = new Date();
+      const oldNext = nextResetTimestamp(oldReset, now);
+      const newNext = nextResetTimestamp(trimmedReset, now);
+      if (newNext < oldNext) {
+        if (editingPolicy.is_blocked) {
+          setEditError('Cannot shorten the reset time while this limit is blocked. Use an override.');
+          return;
+        }
+        if (editingPolicy.time_used_minutes > 0) {
+          setEditError("Reset time can only be moved later once today's usage has started.");
+          return;
+        }
+      }
     }
 
     let nextLockUntilTimestampMs: number | null | undefined = undefined;
@@ -436,16 +458,11 @@ export default function PoliciesScreen() {
             <Text style={s.fieldLabel}>Daily Limit (minutes)</Text>
             <RNTextInput style={s.fieldInput} value={editLimitValue} onChangeText={setEditLimitValue} keyboardType="numeric" placeholder="e.g. 30" placeholderTextColor="#94A3B8" />
 
-            <Text style={s.fieldLabel}>Limit Reset Time (24h HH:MM)</Text>
-            <Text style={s.fieldHelp}>Applies from the next reset cycle — today's usage stays in today's bucket.</Text>
-            <RNTextInput
-              style={s.fieldInput}
+            <Text style={s.fieldLabel}>Daily Reset Time</Text>
+            <TimeOfDayPicker
               value={editResetTime}
-              onChangeText={setEditResetTime}
-              placeholder="00:00"
-              placeholderTextColor="#94A3B8"
-              maxLength={5}
-              autoCapitalize="none"
+              onChange={setEditResetTime}
+              helperText="Applies from the next reset cycle — today's usage stays in today's bucket."
             />
 
             <Text style={s.fieldLabel}>Default Block End Time (optional)</Text>

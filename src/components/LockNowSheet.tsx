@@ -5,12 +5,15 @@ import {
   StyleSheet,
   TouchableOpacity,
   Modal,
+  TextInput,
   ActivityIndicator,
+  Platform,
 } from 'react-native';
-import { Lock, Clock, Minus, Plus } from 'lucide-react-native';
+import { Lock, Clock } from 'lucide-react-native';
 import type { UIPolicy } from '../utils/policyMapper';
 import { lockPolicyNow, LOCK_NOW_MIN_FUTURE_MS } from '../services/lockPolicyNow';
 import { usePolicyContext } from '../context/PolicyContext';
+import { clockTargetTimestampMs } from '../helpers/helper';
 
 interface Props {
   visible: boolean;
@@ -19,36 +22,27 @@ interface Props {
   onLocked: (policy: UIPolicy, untilTs: number) => void;
 }
 
-type PresetId = '30m' | '1h' | '4h' | 'midnight' | 'tomorrow8' | 'custom';
-
-interface Preset {
-  id: PresetId;
-  label: string;
-  compute: () => number;
-}
-
 const SYNC_TIMEOUT_MS = 5000;
+const MIN_LOCK_SECONDS = Math.ceil(LOCK_NOW_MIN_FUTURE_MS / 1000);
 
-function endOfDayLocal(): number {
-  const d = new Date();
-  d.setHours(23, 59, 59, 999);
-  return d.getTime();
+// Clamp 12-hour clock input. Hour is 1–12 (no zero); minute is 0–59. Empty
+// string is allowed during typing so the field can be cleared.
+function clampClockHour(text: string): string {
+  const digits = text.replace(/\D/g, '').slice(0, 2);
+  if (!digits) return '';
+  const n = parseInt(digits, 10);
+  if (n < 1) return '1';
+  if (n > 12) return '12';
+  return String(n);
 }
 
-function tomorrowAt(hour: number, minute = 0): number {
-  const d = new Date();
-  d.setDate(d.getDate() + 1);
-  d.setHours(hour, minute, 0, 0);
-  return d.getTime();
+function clampClockMinute(text: string): string {
+  const digits = text.replace(/\D/g, '').slice(0, 2);
+  if (!digits) return '';
+  const n = parseInt(digits, 10);
+  if (n > 59) return '59';
+  return String(n);
 }
-
-const PRESETS: Preset[] = [
-  { id: '30m', label: '30 min', compute: () => Date.now() + 30 * 60_000 },
-  { id: '1h', label: '1 hour', compute: () => Date.now() + 60 * 60_000 },
-  { id: '4h', label: '4 hours', compute: () => Date.now() + 4 * 60 * 60_000 },
-  { id: 'midnight', label: 'Until midnight', compute: endOfDayLocal },
-  { id: 'tomorrow8', label: 'Tomorrow 8 AM', compute: () => tomorrowAt(8) },
-];
 
 function formatAbsolute(ts: number): string {
   const d = new Date(ts);
@@ -75,19 +69,24 @@ function formatAbsolute(ts: number): string {
   });
 }
 
-function formatDuration(ms: number): string {
-  if (ms <= 0) return '0 min';
-  const totalMin = Math.round(ms / 60_000);
-  if (totalMin < 60) return `${totalMin} min`;
-  const h = Math.floor(totalMin / 60);
-  const m = totalMin % 60;
-  return m > 0 ? `${h}h ${m}m` : `${h}h`;
-}
-
 export default function LockNowSheet({ visible, policy, onCancel, onLocked }: Props) {
-  const { policies } = usePolicyContext();
-  const [selected, setSelected] = useState<PresetId>('1h');
-  const [customMinutes, setCustomMinutes] = useState(60);
+  const { policies, refreshManualLocks } = usePolicyContext();
+  // Default to ~1 hour from now in 12-hour format.
+  const initialDefaults = useMemo(() => {
+    const target = new Date(Date.now() + 60 * 60_000);
+    const h24 = target.getHours();
+    const period: 'AM' | 'PM' = h24 >= 12 ? 'PM' : 'AM';
+    const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+    const minute = target.getMinutes();
+    return {
+      hour: String(h12),
+      minute: String(minute).padStart(2, '0'),
+      period,
+    };
+  }, []);
+  const [clockHour, setClockHour] = useState(initialDefaults.hour);
+  const [clockMinute, setClockMinute] = useState(initialDefaults.minute);
+  const [clockPeriod, setClockPeriod] = useState<'AM' | 'PM'>(initialDefaults.period);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [awaitingSync, setAwaitingSync] = useState(false);
@@ -96,8 +95,16 @@ export default function LockNowSheet({ visible, policy, onCancel, onLocked }: Pr
 
   useEffect(() => {
     if (visible) {
-      setSelected('1h');
-      setCustomMinutes(60);
+      // Recompute the "1 hour from now" default freshly each time the sheet
+      // opens — using the memoized initialDefaults would freeze it at the
+      // first-mount time.
+      const target = new Date(Date.now() + 60 * 60_000);
+      const h24 = target.getHours();
+      const period: 'AM' | 'PM' = h24 >= 12 ? 'PM' : 'AM';
+      const h12 = h24 % 12 === 0 ? 12 : h24 % 12;
+      setClockHour(String(h12));
+      setClockMinute(String(target.getMinutes()).padStart(2, '0'));
+      setClockPeriod(period);
       setPending(false);
       setError(null);
       setAwaitingSync(false);
@@ -106,12 +113,13 @@ export default function LockNowSheet({ visible, policy, onCancel, onLocked }: Pr
     }
   }, [visible]);
 
-  const targetTs = useMemo(() => {
-    if (selected === 'custom') return Date.now() + customMinutes * 60_000;
-    const preset = PRESETS.find(p => p.id === selected);
-    return preset ? preset.compute() : Date.now() + 60 * 60_000;
-  }, [selected, customMinutes]);
-
+  // Resolve HH:MM AM/PM to the next-occurring absolute timestamp. If the time
+  // has already passed today, clockTargetTimestampMs auto-bumps to tomorrow
+  // (matches the user's mental model of "lock until X PM").
+  const targetTs = useMemo(
+    () => clockTargetTimestampMs(clockHour || '12', clockMinute || '0', clockPeriod),
+    [clockHour, clockMinute, clockPeriod],
+  );
   const remainingMs = targetTs - Date.now();
   const isValid = remainingMs >= LOCK_NOW_MIN_FUTURE_MS;
 
@@ -137,24 +145,24 @@ export default function LockNowSheet({ visible, policy, onCancel, onLocked }: Pr
     return () => clearTimeout(t);
   }, [awaitingSync]);
 
-  const adjustCustom = (deltaMin: number) => {
-    setCustomMinutes(prev => {
-      const next = prev + deltaMin;
-      if (next < 1) return 1;
-      if (next > 60 * 24 * 7) return 60 * 24 * 7;
-      return next;
-    });
-  };
-
   const handleConfirm = async () => {
     if (!policy || pending || awaitingSync || !isValid) return;
     setPending(true);
     setError(null);
-    const ts = targetTs;
+    // Recompute fresh at confirm time. clockTargetTimestampMs anchors the
+    // tomorrow-bump decision to "now at click", not "now at last keystroke",
+    // which prevents an off-by-one-day error if the user enters a time near
+    // the current moment and waits to press Lock.
+    const ts = clockTargetTimestampMs(clockHour || '12', clockMinute || '0', clockPeriod);
     confirmedTsRef.current = ts;
     const result = await lockPolicyNow(policy, ts);
     setPending(false);
     if (result.ok) {
+      // Pull the freshly-written marker into PolicyContext BEFORE flipping into
+      // awaiting-sync. When the RTDB lock arrives moments later, the selector
+      // already has the marker → PolicyCard freezes the bar at the snapshot
+      // instead of briefly showing the live server value.
+      await refreshManualLocks();
       setAwaitingSync(true);
     } else {
       confirmedTsRef.current = null;
@@ -209,57 +217,51 @@ export default function LockNowSheet({ visible, policy, onCancel, onLocked }: Pr
             </View>
           ) : (
             <>
-              <Text style={s.sectionLabel}>End time</Text>
-              <View style={s.presetsWrap}>
-                {PRESETS.map(p => (
+              <Text style={s.sectionLabel}>Lock until</Text>
+              <View style={s.durationRow}>
+                <View style={s.durationBox}>
+                  <Text style={s.durationLabel}>Hour</Text>
+                  <TextInput
+                    value={clockHour}
+                    onChangeText={t => setClockHour(clampClockHour(t))}
+                    keyboardType="number-pad"
+                    style={s.durationInput}
+                    placeholder="12"
+                    placeholderTextColor="#CBD5E1"
+                    editable={!pending}
+                    maxLength={2}
+                  />
+                </View>
+                <View style={s.durationBox}>
+                  <Text style={s.durationLabel}>Minute</Text>
+                  <TextInput
+                    value={clockMinute}
+                    onChangeText={t => setClockMinute(clampClockMinute(t))}
+                    keyboardType="number-pad"
+                    style={s.durationInput}
+                    placeholder="00"
+                    placeholderTextColor="#CBD5E1"
+                    editable={!pending}
+                    maxLength={2}
+                  />
+                </View>
+              </View>
+
+              <View style={s.periodRow}>
+                {(['AM', 'PM'] as const).map(period => (
                   <TouchableOpacity
-                    key={p.id}
-                    style={[s.chip, selected === p.id && s.chipActive]}
-                    onPress={() => setSelected(p.id)}
+                    key={period}
+                    style={[s.periodBtn, clockPeriod === period && s.periodBtnActive]}
+                    onPress={() => setClockPeriod(period)}
                     disabled={pending}
                     activeOpacity={0.8}
                   >
-                    <Text style={[s.chipText, selected === p.id && s.chipTextActive]}>
-                      {p.label}
+                    <Text style={[s.periodBtnText, clockPeriod === period && s.periodBtnTextActive]}>
+                      {period}
                     </Text>
                   </TouchableOpacity>
                 ))}
-                <TouchableOpacity
-                  style={[s.chip, selected === 'custom' && s.chipActive]}
-                  onPress={() => setSelected('custom')}
-                  disabled={pending}
-                  activeOpacity={0.8}
-                >
-                  <Text style={[s.chipText, selected === 'custom' && s.chipTextActive]}>
-                    Custom
-                  </Text>
-                </TouchableOpacity>
               </View>
-
-              {selected === 'custom' && (
-                <View style={s.customRow}>
-                  <TouchableOpacity
-                    style={s.stepBtn}
-                    onPress={() => adjustCustom(-15)}
-                    disabled={pending || customMinutes <= 1}
-                    activeOpacity={0.7}
-                  >
-                    <Minus size={16} color="#0F172A" />
-                  </TouchableOpacity>
-                  <View style={s.stepValueWrap}>
-                    <Text style={s.stepValue}>{formatDuration(customMinutes * 60_000)}</Text>
-                    <Text style={s.stepHint}>from now</Text>
-                  </View>
-                  <TouchableOpacity
-                    style={s.stepBtn}
-                    onPress={() => adjustCustom(15)}
-                    disabled={pending}
-                    activeOpacity={0.7}
-                  >
-                    <Plus size={16} color="#0F172A" />
-                  </TouchableOpacity>
-                </View>
-              )}
 
               <View style={s.previewBox}>
                 <Clock size={14} color="#64748B" />
@@ -269,7 +271,7 @@ export default function LockNowSheet({ visible, policy, onCancel, onLocked }: Pr
               </View>
 
               {!isValid && (
-                <Text style={s.errorText}>End time must be at least 60 seconds away.</Text>
+                <Text style={s.errorText}>Lock end must be at least {MIN_LOCK_SECONDS} seconds in the future.</Text>
               )}
               {error && <Text style={s.errorText}>{error}</Text>}
 
@@ -339,40 +341,54 @@ const s = StyleSheet.create({
     letterSpacing: 0.5,
     marginBottom: 10,
   },
-  presetsWrap: { flexDirection: 'row', flexWrap: 'wrap', gap: 8, marginBottom: 14 },
-  chip: {
-    paddingHorizontal: 14,
-    paddingVertical: 10,
-    borderRadius: 22,
-    backgroundColor: '#F1F5F9',
-    borderWidth: 1,
-    borderColor: '#E2E8F0',
+  durationRow: { flexDirection: 'row', gap: 10, marginBottom: 14 },
+  durationBox: { flex: 1 },
+  durationLabel: {
+    color: '#64748B',
+    fontSize: 11,
+    marginBottom: 6,
+    fontWeight: '700',
+    textAlign: 'center',
   },
-  chipActive: { backgroundColor: '#0F172A', borderColor: '#0F172A' },
-  chipText: { fontSize: 13, fontWeight: '600', color: '#475569' },
-  chipTextActive: { color: '#FFFFFF' },
-  customRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
+  durationInput: {
+    borderWidth: 1,
+    borderColor: '#CBD5E1',
+    borderRadius: 12,
+    paddingHorizontal: 10,
+    paddingVertical: Platform.OS === 'ios' ? 14 : 10,
     backgroundColor: '#F8FAFC',
-    borderRadius: 14,
-    padding: 8,
-    marginBottom: 14,
-    gap: 10,
+    color: '#0F172A',
+    fontSize: 20,
+    fontWeight: '700',
+    textAlign: 'center',
   },
-  stepBtn: {
-    width: 36,
-    height: 36,
-    borderRadius: 18,
-    backgroundColor: '#FFFFFF',
+  periodRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 14,
+  },
+  periodBtn: {
+    flex: 1,
+    paddingVertical: 12,
+    borderRadius: 12,
     borderWidth: 1,
     borderColor: '#E2E8F0',
+    backgroundColor: '#F8FAFC',
     alignItems: 'center',
-    justifyContent: 'center',
   },
-  stepValueWrap: { flex: 1, alignItems: 'center' },
-  stepValue: { fontSize: 16, fontWeight: '700', color: '#0F172A' },
-  stepHint: { fontSize: 11, color: '#94A3B8', marginTop: 2 },
+  periodBtnActive: {
+    borderColor: '#0F172A',
+    backgroundColor: '#0F172A',
+  },
+  periodBtnText: {
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#475569',
+    letterSpacing: 0.5,
+  },
+  periodBtnTextActive: {
+    color: '#FFFFFF',
+  },
   previewBox: {
     flexDirection: 'row',
     alignItems: 'center',

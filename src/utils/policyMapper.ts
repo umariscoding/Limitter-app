@@ -18,10 +18,23 @@ export interface UIPolicy {
   daily_reset_time_local: string;
   lock_until_timestamp_ms: number | null;
   _nativeBudgetSeconds?: number;
+  // Derived display state for an active manual Lock Now session. is_manual_locked
+  // is true ONLY when a marker exists AND is_blocked is true — a marker alone is
+  // stale (lock cancelled / reset wins) and must not freeze the UI.
+  is_manual_locked: boolean;
+  manual_lock_snapshot_seconds: number | null;
+  manual_lock_until_ms: number | null;
   // lockVersion and updatedAt are SERVER-ONLY — never mutated by client code.
   lockVersion?: number;
   updatedAt?: number;
 }
+
+// Structural subset of ManualLockMarker the selector needs. Defined locally to
+// avoid a circular import with services/lockPolicyNow (which imports UIPolicy).
+export type ManualLockSnapshot = {
+  snapshotUsedSeconds: number;
+  untilTs: number;
+};
 
 function humanizePackageName(packageName: string): string {
   const generic = new Set(['com', 'org', 'net', 'io', 'android', 'app', 'apps', 'mobile', 'lite']);
@@ -63,13 +76,20 @@ export function mapPolicyToUI(item: any): UIPolicy {
     created_at: p.createdAt?._seconds ? p.createdAt._seconds * 1000 : Date.now(),
     daily_reset_time_local: typeof p.dailyResetTimeLocal === 'string' ? p.dailyResetTimeLocal : '00:00',
     lock_until_timestamp_ms: typeof p.lockUntilTimestampMs === 'number' ? p.lockUntilTimestampMs : null,
+    is_manual_locked: false,
+    manual_lock_snapshot_seconds: null,
+    manual_lock_until_ms: null,
     // Do NOT set lockVersion/updatedAt here — they are read-only from the server.
   };
 }
 
 
 
-export function selectPolicyState(rtdbLocks: Record<string, LiveLockEvent>, httpState: UIPolicy): UIPolicy {
+export function selectPolicyState(
+  rtdbLocks: Record<string, LiveLockEvent>,
+  manualLocks: Record<string, ManualLockSnapshot>,
+  httpState: UIPolicy,
+): UIPolicy {
   const key = getPolicyPackageKey(httpState);
   const rawKey = key.replace(/^website:/, '');
 
@@ -80,28 +100,63 @@ export function selectPolicyState(rtdbLocks: Record<string, LiveLockEvent>, http
   const isLockedRemotely =
     lock && lock.isLocked && typeof lock.blockedUntil === 'number' && lock.blockedUntil > now;
 
-  // === PATH 1: RTDB says locked → lock wins unconditionally ===
+  // Resolve base lock state first — RTDB > HTTP.
+  let resolved: UIPolicy;
   if (isLockedRemotely) {
+    // === PATH 1: RTDB says locked → lock wins unconditionally ===
     if (!httpState.is_blocked) {
       console.warn('[selectPolicyState] RTDB LOCK OVERRIDE HTTP STATE', key);
     }
-    return {
+    resolved = {
       ...httpState,
       is_blocked: true,
       status: 'blocked',
       blocked_until_timestamp: lock.blockedUntil as number,
     };
+  } else {
+    // === PATH 2: RTDB has NO active lock ===
+    // Firestore (HTTP) `isExhaustedToday` is durable truth for the daily quota
+    // (CLAUDE.md §3). RTDB live-lock is only a fast path for active sessions;
+    // its absence MUST NOT unblock an already-exhausted policy. Preserve the
+    // HTTP-derived is_blocked/status as-is and only clear the RTDB-specific
+    // blocked_until_timestamp.
+    resolved = {
+      ...httpState,
+      blocked_until_timestamp: 0,
+    };
   }
 
-  // === PATH 2: RTDB has NO active lock ===
-  // Firestore (HTTP) `isExhaustedToday` is durable truth for the daily quota
-  // (CLAUDE.md §3). RTDB live-lock is only a fast path for active sessions;
-  // its absence MUST NOT unblock an already-exhausted policy. Preserve the
-  // HTTP-derived is_blocked/status as-is and only clear the RTDB-specific
-  // blocked_until_timestamp.
+  // Layer manual-lock display state on top. Per spec ("Single Source of Truth
+  // — 1. Active Lock State (highest)"), the marker IS the active lock state
+  // and drives the freeze independently. Conditions for "active":
+  //   - marker exists
+  //   - marker.untilTs is a valid number in the future (lock period not over)
+  // Requiring is_blocked from RTDB/HTTP would re-introduce a race window where
+  // the marker is in context but the upstream block flag hasn't propagated /
+  // had a key-format mismatch / was poisoned by a stale fetch — during that
+  // window the display would fall back to the live (potentially corrupted)
+  // time_used_minutes.
+  //
+  // When markerActive is true we ALSO force is_blocked=true so PolicyCard
+  // renders the blocked visual treatment. This is correct: from the user's
+  // perspective they pressed Lock Now, they expect the card to look blocked.
+  // The unlock loop in useLockStateSync remains responsible for clearing the
+  // marker when the lock truly ends (natural end / override / reset).
+  const marker = manualLocks[httpState.id];
+  const now2 = Date.now();
+  const markerActive =
+    !!marker &&
+    typeof marker.untilTs === 'number' &&
+    Number.isFinite(marker.untilTs) &&
+    marker.untilTs > now2;
+
   return {
-    ...httpState,
-    blocked_until_timestamp: 0,
+    ...resolved,
+    is_blocked: resolved.is_blocked || markerActive,
+    status: markerActive ? 'blocked' : resolved.status,
+    is_manual_locked: markerActive,
+    manual_lock_snapshot_seconds: markerActive ? marker.snapshotUsedSeconds : null,
+    manual_lock_until_ms: markerActive ? marker.untilTs : null,
   };
 }
 
@@ -216,17 +271,26 @@ export function mergeLiveTimerUsageIntoPolicies(
     const remaining = Math.max(0, Number(timer.remainingSeconds) || 0);
     const liveTimerUsageSec = Math.max(0, Math.min(budget, budget - remaining));
     const maxMin = Number(item.max_time_minutes) || 0;
-    
-    // Server is the absolute source of truth for is_blocked and status.
-    // Only use local native timers to smoothly interpolate time_used_minutes for the progress bar.
-    if (item.is_blocked) {
+    const nativeStatus = String(timer.status || '').toLowerCase();
+
+    // When native is in "blocked" status its remainingSeconds=0, which makes
+    // liveTimerUsageSec saturate at the full budget. That saturated value is
+    // only meaningful when the block was caused by quota exhaustion — for a
+    // manual Lock Now the user may be at e.g. 35s of a 2m quota, and merging
+    // the saturated 2m here would force the bar to falsely show 2m/2m,
+    // bypassing the snapshot freeze in PolicyCard during any propagation
+    // race. Trust the backend's cumulative time_used_minutes instead.
+    if (nativeStatus === 'blocked') {
       return {
         ...item,
-        time_used_minutes: maxMin > 0 ? maxMin : liveTimerUsageSec / 60,
         _nativeBudgetSeconds: budget > 0 ? budget : undefined,
       };
     }
 
+    // Native is actively running — interpolate from its tick. Server is still
+    // the source of truth for cumulative usage; native just provides smoother
+    // sub-second updates. Math.max so a slow server fetch can't visually
+    // rewind the bar.
     const nativeUsedMinutes = liveTimerUsageSec / 60;
     const cappedUsed = maxMin > 0 ? Math.min(nativeUsedMinutes, maxMin) : nativeUsedMinutes;
     const backendUsed = Number(item.time_used_minutes) || 0;
@@ -235,7 +299,6 @@ export function mergeLiveTimerUsageIntoPolicies(
     return {
       ...item,
       time_used_minutes: bestUsed,
-      // Never override server's unblocked status, just update the visual usage.
       _nativeBudgetSeconds: budget > 0 ? budget : undefined,
     };
   });

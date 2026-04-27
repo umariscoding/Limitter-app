@@ -11,17 +11,29 @@ interface PolicyCardProps {
 }
 
 export default function PolicyCard({ limit, onOverride, onLockNow }: PolicyCardProps) {
+  // During an active manual lock, display is driven by the snapshot captured
+  // at lock start — not the live server value. This freezes the bar/percentage
+  // at exactly what the user saw when they pressed Lock Now, regardless of any
+  // server-side drift, native-side ticking, or other-device aggregation lag.
+  const isManualLocked = limit.is_manual_locked;
+  const displayUsedMinutes = isManualLocked
+    ? (limit.manual_lock_snapshot_seconds ?? 0) / 60
+    : (limit.time_used_minutes || 0);
+
   const pct = limit.max_time_minutes > 0
-    ? Math.min((limit.time_used_minutes / limit.max_time_minutes) * 100, 100)
+    ? Math.min((displayUsedMinutes / limit.max_time_minutes) * 100, 100)
     : 0;
   // Defensive: any policy at-or-over its daily quota is blocked, even if the
   // upstream is_blocked flag desyncs (e.g., RTDB lock cleared but quota still
-  // exhausted). Status badge must always agree with the progress bar.
-  const isExhausted = limit.max_time_minutes > 0 && limit.time_used_minutes >= limit.max_time_minutes;
+  // exhausted). Computed against the displayed value so a frozen-below-quota
+  // snapshot does not falsely flip exhaustion on/off during a manual lock.
+  const isExhausted = limit.max_time_minutes > 0 && displayUsedMinutes >= limit.max_time_minutes;
   const isBlocked = limit.is_blocked || isExhausted;
   const isWarning = pct >= 75 && !isBlocked;
-  const isActive = !isBlocked && (limit.time_used_minutes || 0) > 0;
+  const isActive = !isBlocked && displayUsedMinutes > 0;
 
+  // Bar color is driven by pct, which is frozen during a manual lock — matches
+  // spec: color stays whatever it was at lock moment (red if exceeded, etc.).
   const progressColors: [string, string] = isBlocked
     ? ['#EF4444', '#DC2626']
     : isWarning
@@ -31,12 +43,37 @@ export default function PolicyCard({ limit, onOverride, onLockNow }: PolicyCardP
   const targetName = limit.target_label || limit.app_name || limit.category || 'App';
   const typeLabel = limit.target_type === 'website' ? 'Website' : limit.target_type === 'category' ? 'Category' : 'App';
 
+  // Status badge: manual lock is its own visual state (amber) so the user can
+  // distinguish "I locked this myself" from "quota exhausted" (red).
+  const badgeStyle = isManualLocked
+    ? s.statusLocked
+    : isBlocked
+      ? s.statusBlocked
+      : isActive
+        ? s.statusActive
+        : s.statusIdle;
+  const dotStyle = isManualLocked
+    ? s.dotLocked
+    : isBlocked
+      ? s.dotBlocked
+      : isActive
+        ? s.dotActive
+        : s.dotIdle;
+  const textStyle = isManualLocked
+    ? s.statusLockedText
+    : isBlocked
+      ? s.statusBlockedText
+      : isActive
+        ? s.statusActiveText
+        : s.statusIdleText;
+  const statusLabel = isManualLocked ? 'Locked' : isBlocked ? 'Blocked' : isActive ? 'Active' : 'Ready';
+
   return (
     <View style={[s.card, isBlocked && s.cardBlocked]}>
       <View style={s.topRow}>
         <View style={s.iconWrap}>
           {isBlocked ? (
-            <ShieldOff size={20} color="#EF4444" />
+            <ShieldOff size={20} color={isManualLocked ? '#D97706' : '#EF4444'} />
           ) : (
             <Shield size={20} color="#21e396ff" />
           )}
@@ -45,11 +82,9 @@ export default function PolicyCard({ limit, onOverride, onLockNow }: PolicyCardP
           <Text style={s.name} numberOfLines={1}>{targetName}</Text>
           <Text style={s.typeLabel}>{typeLabel}</Text>
         </View>
-        <View style={[s.statusBadge, isBlocked ? s.statusBlocked : isActive ? s.statusActive : s.statusIdle]}>
-          <View style={[s.statusDot, isBlocked ? s.dotBlocked : isActive ? s.dotActive : s.dotIdle]} />
-          <Text style={[s.statusText, isBlocked ? s.statusBlockedText : isActive ? s.statusActiveText : s.statusIdleText]}>
-            {isBlocked ? 'Blocked' : isActive ? 'Active' : 'Ready'}
-          </Text>
+        <View style={[s.statusBadge, badgeStyle]}>
+          <View style={[s.statusDot, dotStyle]} />
+          <Text style={[s.statusText, textStyle]}>{statusLabel}</Text>
         </View>
       </View>
 
@@ -57,13 +92,14 @@ export default function PolicyCard({ limit, onOverride, onLockNow }: PolicyCardP
         <View style={s.usageLeft}>
           <Clock size={14} color="#94A3B8" />
           <Text style={s.usageText}>
-            {formatUsageTime(limit.time_used_minutes || 0)}
+            {formatUsageTime(displayUsedMinutes)}
             <Text style={s.usageSeparator}> / </Text>
             {formatLimitTime(limit.max_time_minutes)}
+            {isManualLocked && <Text style={s.frozenLabel}>  (Frozen)</Text>}
           </Text>
         </View>
-        <Text style={[s.remainingText, isBlocked && s.remainingBlocked]}>
-          {isBlocked ? 'Limit reached' : `${Math.round(pct)}% used`}
+        <Text style={[s.remainingText, isBlocked && !isManualLocked && s.remainingBlocked, isManualLocked && s.remainingLocked]}>
+          {isManualLocked ? 'Locked' : isBlocked ? 'Limit reached' : `${Math.round(pct)}% used`}
         </Text>
       </View>
 
@@ -146,15 +182,20 @@ const s = StyleSheet.create({
   },
   statusActive: { backgroundColor: '#F0FDF4' },
   statusBlocked: { backgroundColor: '#FEF2F2' },
+  statusLocked: { backgroundColor: '#FEF3C7' },
   statusIdle: { backgroundColor: '#F8FAFC' },
   statusDot: { width: 6, height: 6, borderRadius: 3 },
   dotActive: { backgroundColor: '#10B981' },
   dotBlocked: { backgroundColor: '#EF4444' },
+  dotLocked: { backgroundColor: '#F59E0B' },
   dotIdle: { backgroundColor: '#CBD5E1' },
   statusText: { fontSize: 11, fontWeight: '700' },
   statusActiveText: { color: '#059669' },
   statusBlockedText: { color: '#DC2626' },
+  statusLockedText: { color: '#B45309' },
   statusIdleText: { color: '#94A3B8' },
+  frozenLabel: { color: '#B45309', fontWeight: '700', fontSize: 11 },
+  remainingLocked: { color: '#B45309' },
   usageRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',

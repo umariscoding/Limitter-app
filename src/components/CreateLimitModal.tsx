@@ -49,9 +49,6 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
   const [clockHour, setClockHour] = useState('12');
   const [clockMinute, setClockMinute] = useState('00');
   const [clockPeriod, setClockPeriod] = useState<'AM' | 'PM'>('PM');
-  const [dailyResetTimeLocal, setDailyResetTimeLocal] = useState('00:00');
-  const [endTimeHHMM, setEndTimeHHMM] = useState('');
-  const [endTimeDay, setEndTimeDay] = useState<'today' | 'tomorrow'>('today');
 
 
   useEffect(() => {
@@ -100,9 +97,6 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
     setClockHour('12');
     setClockMinute('00');
     setClockPeriod('PM');
-    setDailyResetTimeLocal('00:00');
-    setEndTimeHHMM('');
-    setEndTimeDay('today');
   };
 
   const handleSubmit = () => {
@@ -120,7 +114,9 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
       createCategory, createWebsiteUrl,
       hours, minutes, seconds, singleTimerValue, singleTimerUnit,
       clockHour, clockMinute, clockPeriod,
-      dailyResetTimeLocal, endTimeHHMM, endTimeDay,
+      dailyResetTimeLocal: '00:00',
+      endTimeHHMM: '',
+      endTimeDay: 'today' as const,
     };
     resetForm();
     onClose();
@@ -271,45 +267,6 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
             </>
           )}
 
-          <Text style={s.subTitle}>Limit Reset Time (24h)</Text>
-          <Text style={s.helpText}>When this limit's daily counter resets. Default 00:00 (midnight).</Text>
-          <TextInput
-            value={dailyResetTimeLocal}
-            onChangeText={setDailyResetTimeLocal}
-            placeholder="00:00"
-            style={s.input}
-            placeholderTextColor="#94A3B8"
-            maxLength={5}
-            autoCapitalize="none"
-          />
-
-          <Text style={s.subTitle}>Default Block End Time (optional)</Text>
-          <Text style={s.helpText}>When the app gets blocked, unblock at this time instead of next reset.</Text>
-          <TextInput
-            value={endTimeHHMM}
-            onChangeText={setEndTimeHHMM}
-            placeholder="e.g. 21:00 (leave blank to use reset time)"
-            style={s.input}
-            placeholderTextColor="#94A3B8"
-            maxLength={5}
-            autoCapitalize="none"
-          />
-          {endTimeHHMM ? (
-            <View style={s.selectorRow}>
-              {(['today', 'tomorrow'] as const).map(d => (
-                <TouchableOpacity
-                  key={d}
-                  style={[s.selectorBtn, endTimeDay === d && s.selectorBtnActive]}
-                  onPress={() => setEndTimeDay(d)}
-                >
-                  <Text style={[s.selectorBtnText, endTimeDay === d && s.selectorBtnTextActive]}>
-                    {d === 'today' ? 'Today' : 'Tomorrow'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-          ) : null}
-
           <View style={s.targetBox}>
             <Text style={s.targetText}>
               {targetType === 'app' ? (selectedInstalledApp?.appName || appSearch || 'No app selected')
@@ -369,5 +326,4 @@ const s = StyleSheet.create({
   createBtn: { backgroundColor: '#10B981' },
   cancelText: { color: '#334155', fontWeight: '700' },
   createText: { color: '#FFFFFF', fontWeight: '700' },
-  helpText: { color: '#94A3B8', fontSize: 11, marginBottom: 6 },
 });

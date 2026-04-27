@@ -6,8 +6,76 @@ import {
   startAppUsageTimer,
   startBulkWebsiteTimers,
   updateBlockedApps,
+  getNativeTimerStates,
+  resetNativeTimerForReset,
+  type NativeTimerState,
 } from '../services/appBlockerService';
 import { hydratePoliciesForUi } from '../helpers/helper';
+
+// Reset-detection tolerance — covers tick lag (typically ≤30s between native
+// session updates and server tick reports) plus modest clock skew. Anything
+// larger than this means the server is structurally lower than native, which
+// only happens after an authoritative reset (daily cron, admin action).
+const RESET_DETECTION_TOLERANCE_SEC = 60;
+
+// If server's usageTodayMinutes is significantly LOWER than what the native
+// timer currently believes, an authoritative reset just happened (daily cron
+// at the policy's daily_reset_time_local). Native's addTimers uses
+// maxOf(existing, new) which would silently preserve the stale higher value,
+// so we explicitly force-reset the affected timer to {usedSeconds=0,
+// status="waiting"} BEFORE the existing startAppUsageTimer call re-seeds it.
+async function reconcileNativeAfterReset(limits: any[]): Promise<void> {
+  let nativeStates: NativeTimerState[];
+  try {
+    nativeStates = await getNativeTimerStates();
+  } catch (err) {
+    console.error('[PolicyFetcher] reconcile: getNativeTimerStates failed:', err);
+    return;
+  }
+  if (nativeStates.length === 0) return;
+
+  const nativeByPkg = new Map<string, NativeTimerState>();
+  for (const t of nativeStates) {
+    const k = String(t.package || '').trim().toLowerCase();
+    if (k) nativeByPkg.set(k, t);
+  }
+
+  for (const limit of limits) {
+    const rawPkg = String(
+      limit.app_name || limit.package_name || limit.packageName || '',
+    )
+      .trim()
+      .toLowerCase();
+    if (!rawPkg) continue;
+
+    const isWebsite = limit.target_type === 'website';
+    const nativeKey = isWebsite
+      ? rawPkg.startsWith('website:')
+        ? rawPkg
+        : `website:${rawPkg}`
+      : rawPkg;
+    const native = nativeByPkg.get(nativeKey);
+    if (!native) continue;
+
+    const budgetSec = Math.max(0, Number(native.liveTimerUsageBudgetSeconds || 0));
+    const remainingSec = Math.max(0, Number(native.remainingSeconds || 0));
+    const nativeUsedSec = Math.max(0, budgetSec - remainingSec);
+    const serverUsedSec = Math.max(0, (limit.time_used_minutes || 0) * 60);
+
+    if (nativeUsedSec - serverUsedSec > RESET_DETECTION_TOLERANCE_SEC) {
+      console.log(
+        '[PolicyFetcher] Reset detected for',
+        nativeKey,
+        '— native',
+        Math.round(nativeUsedSec),
+        's, server',
+        Math.round(serverUsedSec),
+        's. Resyncing.',
+      );
+      await resetNativeTimerForReset(nativeKey, limit.target_label || rawPkg);
+    }
+  }
+}
 
 export function usePolicyFetcher() {
   const { setPolicies, setIsLoading, setLastFetchedAt } = usePolicyContext();
@@ -42,9 +110,10 @@ export function usePolicyFetcher() {
       // === STRICT RULE: HTTP writes ONLY metadata fields ===
       // setPolicies here sets httpPolicies inside PolicyContext.
       // The derived `policies` value is computed as:
-      //   httpPolicies.map(p => selectPolicyState(rtdbLocks, p))
-      // This means RTDB lock state automatically overlays on top — no merge needed here.
-      // We set the array directly; we do NOT read or preserve previous UI state.
+      //   httpPolicies.map(p => selectPolicyState(rtdbLocks, manualLocks, p))
+      // RTDB lock state and manual-lock markers automatically overlay on top —
+      // no merge needed here. We set the array directly; we do NOT read or
+      // preserve previous UI state.
       setPolicies(httpLimits);
 
       setLastFetchedAt(Date.now());
@@ -62,6 +131,16 @@ export function usePolicyFetcher() {
 }
 
 function startTimersInBackground(finalLimits: any[]) {
+  // Reconcile FIRST so any reset-detected timers are cleared to zero before
+  // the merge-based arming below runs. Without this, a non-exhausted policy
+  // that was just reset on the server would keep its stale higher usedSeconds
+  // in native (TimerStateManager addTimers uses maxOf merge).
+  reconcileNativeAfterReset(finalLimits)
+    .catch(err => console.error('[PolicyFetcher] reconcile failed:', err))
+    .finally(() => armTimers(finalLimits));
+}
+
+function armTimers(finalLimits: any[]) {
   // We use the RAW HTTP limits here (not the RTDB-merged result) because we only want
   // to start native timers for policies that are NOT currently blocked by RTDB.
   // useLockStateSync handles native blocker commands for locked policies.

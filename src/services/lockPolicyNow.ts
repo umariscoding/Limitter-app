@@ -109,6 +109,24 @@ export async function markPolicyManuallyLocked(
   return writeMarkers(markers);
 }
 
+// Read-only snapshot of all markers. Used by the startup-restore scan in
+// useLockStateSync, which iterates markers without consuming them via pop
+// (pop's staleness check would also discard recently-expired-but-valid ones).
+export async function getAllManualLockMarkers(): Promise<Record<string, ManualLockMarker>> {
+  return readMarkers();
+}
+
+// Delete a single marker without staleness-checking or returning it. Used by
+// the startup-restore scan after a successful two-step restore — only delete
+// on success so failed restores are retried on the next mount.
+export async function deleteManualLockMarker(policyId: string): Promise<void> {
+  if (!policyId) return;
+  const markers = await readMarkers();
+  if (!(policyId in markers)) return;
+  delete markers[policyId];
+  await writeMarkers(markers);
+}
+
 export async function popManualLockMarker(policyId: string): Promise<ManualLockMarker | null> {
   if (!policyId) return null;
   const markers = await readMarkers();

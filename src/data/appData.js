@@ -185,8 +185,8 @@ export const overrideConfig = {
   feeLabel: "$1.99",
   overrideTitle: "Temporary Override",
   overrideDescription: "Temporarily unlocks the selected device",
-  expiresAt: "at midnight (daily reset)",
-  expiresLabel: "Override expires at midnight (daily reset)",
+  expiresAt: "at the limit's daily reset time",
+  expiresLabel: "Override expires at the limit's next reset",
 };
 
 
