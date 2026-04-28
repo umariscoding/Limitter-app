@@ -1,6 +1,7 @@
 import { useEffect, useRef } from 'react';
 import { subscribeLockState, type LiveLockEvent } from '../services/timerRealtimeService';
 import { usePolicyContext } from '../context/PolicyContext';
+import { usePolicyFetcher } from './usePolicyFetcher';
 import { getPolicyPackageKey, type UIPolicy } from '../utils/policyMapper';
 import {
   grantTemporaryOverrideAccess,
@@ -17,13 +18,12 @@ import {
   type ManualLockMarker,
 } from '../services/lockPolicyNow';
 
-// Two-step restore for a manual-lock marker. The native timer entry is pinned
-// at status="blocked" (sticky), so we must:
-//   1. UNBLOCK_APP — clears the sticky blocked status, resets usedSeconds=0
-//   2. START_TIMERS with snapshot — addTimers' maxOf(existing=0, snapshot)
-//      writes back the snapshotted usedSeconds, status stays "waiting"
-// Used both by the inline unlock loop (manual-lock end while app is running)
-// and the startup scan (manual-lock end while app was killed).
+// When a manual-lock ends, reset the native timer to a fresh window:
+// usedSeconds=0, original durationSeconds preserved, so the user gets the
+// FULL daily limit again, tracked from zero — they do NOT resume from where
+// the lock started. The marker's snapshotUsedSeconds field is kept around
+// only for the freeze-time display in PolicyCard; it is intentionally
+// ignored here on unlock.
 async function restoreFromMarker(marker: ManualLockMarker, key: string): Promise<void> {
   const isWebsite = marker.packageName.startsWith('website:') || key.startsWith('website:');
   if (isWebsite) {
@@ -33,7 +33,7 @@ async function restoreFromMarker(marker: ManualLockMarker, key: string): Promise
       {
         domain,
         durationSeconds: marker.durationSeconds,
-        usedSeconds: marker.snapshotUsedSeconds,
+        usedSeconds: 0,
       },
     ]);
   } else {
@@ -42,7 +42,7 @@ async function restoreFromMarker(marker: ManualLockMarker, key: string): Promise
       marker.packageName,
       marker.appName,
       marker.durationSeconds,
-      marker.snapshotUsedSeconds,
+      0,
     );
   }
 }
@@ -109,10 +109,13 @@ export function useLockStateSync(accountId: string | undefined) {
   //   httpPolicies.map(p => selectPolicyState(rtdbLocks, manualLocks, p))
   // so updating rtdbLocks is the ONLY correct way to propagate lock state.
   const { setRtdbLocks, policies: currentPolicies, refreshManualLocks } = usePolicyContext();
+  const { fetchPolicies } = usePolicyFetcher();
   const setRtdbLocksRef = useRef(setRtdbLocks);
   setRtdbLocksRef.current = setRtdbLocks;
   const refreshManualLocksRef = useRef(refreshManualLocks);
   refreshManualLocksRef.current = refreshManualLocks;
+  const fetchPoliciesRef = useRef(fetchPolicies);
+  fetchPoliciesRef.current = fetchPolicies;
 
   // Keep a ref to current policies purely for side-effect commands (native blocker).
   // We do NOT use them as merge inputs — they are read-only here.
@@ -304,13 +307,14 @@ export function useLockStateSync(accountId: string | undefined) {
     maybeRunStartupScanRef.current();
   }, [currentPolicies]);
 
-  // Per-marker expiry scheduler. While the app is foregrounded, time passing
-  // alone triggers no RTDB events — RTDB only emits on data writes — so
-  // without these timers the manual-lock UI stays "Frozen" forever after the
-  // chosen end time and the native blocker never restores from the snapshot.
-  // Each timer fires at its marker's untilTs, pops the marker (clearing the
-  // Frozen badge via the manualLocks state change), and runs restoreFromMarker
-  // so native tracking resumes from the snapshotted usedSeconds.
+  // Per-marker expiry trigger. RTDB does not emit on time-based expiry — its
+  // events fire only on data writes — so when the user is sitting on a screen
+  // and the manual-lock end time arrives, nothing else fires. We schedule a
+  // setTimeout per active marker that calls fetchPolicies() at untilTs. That
+  // single fetch causes the server's getPolicies cleanup to run (clears the
+  // RTDB lock + zeroes server usage), updates httpPolicies (UI shows 0/full
+  // limit), and re-arms the native blocker via reconcile/armTimers — all the
+  // existing flow, just triggered at the right moment.
   useEffect(() => {
     const timers: Array<ReturnType<typeof setTimeout>> = [];
 
@@ -318,28 +322,11 @@ export function useLockStateSync(accountId: string | undefined) {
       if (!policy.is_manual_locked) continue;
       if (typeof policy.manual_lock_until_ms !== 'number') continue;
 
-      const policyId = policy.id;
-      const key = getPolicyPackageKey(policy);
-      const rawTarget = key.replace(/^website:/, '').toLowerCase();
       const delayMs = Math.max(0, policy.manual_lock_until_ms - Date.now()) + 100;
-
-      const timer = setTimeout(async () => {
-        try {
-          const marker = await popManualLockMarker(policyId);
-          if (marker) {
-            await restoreFromMarker(marker, key);
-          }
-          // Pre-clear this target from prevLockedTargets so a subsequent
-          // subscribeLockState callback (triggered by any unrelated lock
-          // change) does not classify it as "newly unlocked" and undo the
-          // restoreFromMarker by resetting native usedSeconds to 0.
-          prevLockedTargetsRef.current.delete(rawTarget);
-          prevLockedTargetsRef.current.delete(key.toLowerCase());
-        } catch (err) {
-          console.error('[useLockStateSync] manual lock expiry handler failed for', policyId, err);
-        } finally {
-          await refreshManualLocksRef.current();
-        }
+      const timer = setTimeout(() => {
+        fetchPoliciesRef.current().catch(err =>
+          console.error('[useLockStateSync] manual lock expiry fetch failed:', err),
+        );
       }, delayMs);
 
       timers.push(timer);
