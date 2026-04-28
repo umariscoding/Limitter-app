@@ -303,4 +303,50 @@ export function useLockStateSync(accountId: string | undefined) {
   useEffect(() => {
     maybeRunStartupScanRef.current();
   }, [currentPolicies]);
+
+  // Per-marker expiry scheduler. While the app is foregrounded, time passing
+  // alone triggers no RTDB events — RTDB only emits on data writes — so
+  // without these timers the manual-lock UI stays "Frozen" forever after the
+  // chosen end time and the native blocker never restores from the snapshot.
+  // Each timer fires at its marker's untilTs, pops the marker (clearing the
+  // Frozen badge via the manualLocks state change), and runs restoreFromMarker
+  // so native tracking resumes from the snapshotted usedSeconds.
+  useEffect(() => {
+    const timers: Array<ReturnType<typeof setTimeout>> = [];
+
+    for (const policy of currentPolicies) {
+      if (!policy.is_manual_locked) continue;
+      if (typeof policy.manual_lock_until_ms !== 'number') continue;
+
+      const policyId = policy.id;
+      const key = getPolicyPackageKey(policy);
+      const rawTarget = key.replace(/^website:/, '').toLowerCase();
+      const delayMs = Math.max(0, policy.manual_lock_until_ms - Date.now()) + 100;
+
+      const timer = setTimeout(async () => {
+        try {
+          const marker = await popManualLockMarker(policyId);
+          if (marker) {
+            await restoreFromMarker(marker, key);
+          }
+          // Pre-clear this target from prevLockedTargets so a subsequent
+          // subscribeLockState callback (triggered by any unrelated lock
+          // change) does not classify it as "newly unlocked" and undo the
+          // restoreFromMarker by resetting native usedSeconds to 0.
+          prevLockedTargetsRef.current.delete(rawTarget);
+          prevLockedTargetsRef.current.delete(key.toLowerCase());
+        } catch (err) {
+          console.error('[useLockStateSync] manual lock expiry handler failed for', policyId, err);
+        } finally {
+          await refreshManualLocksRef.current();
+        }
+      }, delayMs);
+
+      timers.push(timer);
+    }
+
+    return () => {
+      timers.forEach(t => clearTimeout(t));
+    };
+  }, [currentPolicies]);
 }
