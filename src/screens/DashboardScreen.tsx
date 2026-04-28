@@ -119,9 +119,9 @@ export default function DashboardScreen() {
       const overriddenPkg = justOverriddenPackageRef.current;
       if (overriddenPkg) justOverriddenPackageRef.current = null;
 
-      await fetchPolicies();
-
-      getPlanLimits(true).then(data => setPlanLimits(data)).catch(() => { });
+      const policiesPromise = fetchPolicies();
+      const planPromise = getPlanLimits(true).then(data => setPlanLimits(data)).catch(() => {});
+      await Promise.all([policiesPromise, planPromise]);
     } finally {
       fetchInProgressRef.current = false;
       setRefreshing(false);
@@ -173,11 +173,9 @@ export default function DashboardScreen() {
 
   const onRefresh = async () => {
     setRefreshing(true);
-    try {
-      const data = await refreshBootstrap();
-      setAccountData(data);
-    } catch { }
-    fetchLimits();
+    const bootstrapPromise = refreshBootstrap().then(data => setAccountData(data)).catch(() => {});
+    const limitsPromise = fetchLimits();
+    await Promise.all([bootstrapPromise, limitsPromise]);
   };
 
   const handleOpenCreateModal = () => {

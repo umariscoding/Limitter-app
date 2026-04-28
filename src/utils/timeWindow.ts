@@ -80,6 +80,13 @@ export function validateUntilTimestamp(
   return { ok: true, value: v };
 }
 
+export function formatHHMMtoAMPM(hhmm: string): string {
+  const { hour, minute } = parseHHMM(hhmm);
+  const period = hour >= 12 ? 'PM' : 'AM';
+  const h12 = hour % 12 === 0 ? 12 : hour % 12;
+  return `${h12}:${minute < 10 ? '0' : ''}${minute} ${period}`;
+}
+
 // Display helper: "06:00 (in 3h 12m)" etc.
 export function formatRelativeTime(targetMs: number, now: number = Date.now()): string {
   const diffMs = Math.max(0, targetMs - now);

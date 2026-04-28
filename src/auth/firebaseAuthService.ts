@@ -71,6 +71,7 @@ export async function signUp(
     await axiosService.post(API.SetupAccount, {
       email,
       displayName,
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       device: { installationId, ...deviceInfo },
     });
   } catch (setupError) {
@@ -103,6 +104,7 @@ export async function signIn(email: string, password: string) {
     accountData = await axiosService.post(API.SetupAccount, {
       email,
       displayName: credential.user.displayName || email.split("@")[0],
+      timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
       device: { installationId, ...deviceInfo },
     });
   } catch (setupErr: any) {

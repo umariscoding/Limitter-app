@@ -31,7 +31,8 @@ export const getCachedPolicies = async (): Promise<any | null> => {
 
 export const getPoliciesAPI = async () => {
   try {
-    const result = await axiosService.get(API.Policies);
+    const tz = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    const result = await axiosService.get(`${API.Policies}?timezone=${encodeURIComponent(tz)}`);
     AsyncStorage.setItem(POLICY_CACHE_KEY, JSON.stringify(result)).catch(() => {});
     return result;
   } catch (error) {

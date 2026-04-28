@@ -18,6 +18,7 @@ import { useUser } from '../context/UserContext';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
 import { updatePolicyAPI, archivePolicyAPI, lockNowAPI } from '../services/policyService';
+import { invalidatePlanCache } from '../services/planGuardService';
 import BottomNav from '../components/BottomNav';
 import {
   Home,
@@ -32,11 +33,8 @@ import {
   Lock,
 } from 'lucide-react-native';
 import {
-  hhmmToTimestampMs,
   isValidHHMM,
-  validateUntilTimestamp,
-  formatRelativeTime,
-  nextResetTimestamp,
+  formatHHMMtoAMPM,
 } from '../utils/timeWindow';
 import {
   formatUsageTime,
@@ -59,20 +57,11 @@ export default function PoliciesScreen() {
   const [editLimitValue, setEditLimitValue] = useState('');
   const [editLabel, setEditLabel] = useState('');
   const [editResetTime, setEditResetTime] = useState('00:00');
-  const [editEndTimeHHMM, setEditEndTimeHHMM] = useState('');
-  const [editEndTimeDay, setEditEndTimeDay] = useState<'today' | 'tomorrow'>('today');
   const [editError, setEditError] = useState<string | null>(null);
   const [editLoading, setEditLoading] = useState(false);
 
   const [lockModalVisible, setLockModalVisible] = useState(false);
   const [lockingPolicy, setLockingPolicy] = useState<UIPolicy | null>(null);
-  const [lockTimerType, setLockTimerType] = useState<'duration' | 'clock'>('duration');
-  const [lockHours, setLockHours] = useState('');
-  const [lockMinutes, setLockMinutes] = useState('');
-  const [lockSeconds, setLockSeconds] = useState('');
-  const [lockClockHour, setLockClockHour] = useState('');
-  const [lockClockMinute, setLockClockMinute] = useState('');
-  const [lockEndTimeDay, setLockEndTimeDay] = useState<'today' | 'tomorrow'>('today');
   const [lockError, setLockError] = useState<string | null>(null);
   const [lockLoading, setLockLoading] = useState(false);
 
@@ -87,6 +76,31 @@ export default function PoliciesScreen() {
     fetchRef.current();
   }, []);
 
+  useEffect(() => {
+    if (policies.length === 0) return;
+
+    const now = Date.now();
+    let nearest = Infinity;
+
+    for (const p of policies) {
+      if (p.next_reset_at_ms > now && p.next_reset_at_ms < nearest) {
+        nearest = p.next_reset_at_ms;
+      }
+      if (p.blocked_until_timestamp > now && p.blocked_until_timestamp < nearest) {
+        nearest = p.blocked_until_timestamp;
+      }
+    }
+
+    if (!Number.isFinite(nearest)) return;
+
+    const delay = nearest - now + 2000;
+    const timer = setTimeout(() => {
+      fetchRef.current();
+    }, delay);
+
+    return () => clearTimeout(timer);
+  }, [policies]);
+
   const handleDelete = (policy: UIPolicy) => {
     showAlert(
       'Delete Limit',
@@ -100,6 +114,7 @@ export default function PoliciesScreen() {
             try {
               await archivePolicyAPI(policy.id);
               setPolicies((prev) => prev.filter((p) => p.id !== policy.id));
+              invalidatePlanCache();
             } catch (err: any) {
               showAlert('Error', err?.message || 'Failed to delete limit');
             }
@@ -114,21 +129,12 @@ export default function PoliciesScreen() {
     setEditLimitValue(String(policy.max_time_minutes));
     setEditLabel(policy.target_label);
     setEditResetTime(policy.daily_reset_time_local || '00:00');
-    setEditEndTimeHHMM('');
-    setEditEndTimeDay('today');
     setEditError(null);
     setEditModalVisible(true);
   };
 
   const openLockModal = (policy: UIPolicy) => {
     setLockingPolicy(policy);
-    setLockTimerType('duration');
-    setLockHours('');
-    setLockMinutes('');
-    setLockSeconds('');
-    setLockClockHour('');
-    setLockClockMinute('');
-    setLockEndTimeDay('today');
     setLockError(null);
     setLockModalVisible(true);
   };
@@ -136,45 +142,9 @@ export default function PoliciesScreen() {
   const handleLockConfirm = async () => {
     if (!lockingPolicy) return;
     setLockError(null);
-
-    let untilTimestampMs: number | null = null;
-
-    if (lockTimerType === 'clock') {
-      if (lockClockHour.trim() !== '' || lockClockMinute.trim() !== '') {
-        const hh = lockClockHour.padStart(2, '0');
-        const mm = lockClockMinute.padStart(2, '0');
-        const timeStr = `${hh}:${mm}`;
-        if (!isValidHHMM(timeStr)) {
-          setLockError('Time must be valid HH and MM (e.g. 21 and 00)');
-          return;
-        }
-        const ts = hhmmToTimestampMs(timeStr, lockEndTimeDay);
-        const check = validateUntilTimestamp(ts);
-        if (!check.ok) {
-          setLockError(check.reason);
-          return;
-        }
-        untilTimestampMs = check.value;
-      }
-    } else {
-      const h = parseInt(lockHours || '0', 10);
-      const m = parseInt(lockMinutes || '0', 10);
-      const s = parseInt(lockSeconds || '0', 10);
-      if (!isNaN(h) && !isNaN(m) && !isNaN(s) && (h > 0 || m > 0 || s > 0)) {
-        const totalMinutes = h * 60 + m + s / 60;
-        const ts = Date.now() + Math.round(totalMinutes * 60 * 1000);
-        const check = validateUntilTimestamp(ts);
-        if (!check.ok) {
-          setLockError(check.reason);
-          return;
-        }
-        untilTimestampMs = check.value;
-      }
-    }
-
     setLockLoading(true);
     try {
-      const result = await lockNowAPI(lockingPolicy.id, untilTimestampMs);
+      const result = await lockNowAPI(lockingPolicy.id);
       const blockedUntil = result?.blockedUntil || 0;
       setPolicies((prev) =>
         prev.map((p) =>
@@ -184,6 +154,7 @@ export default function PoliciesScreen() {
         ),
       );
       setLockModalVisible(false);
+      fetchPolicies().catch(() => {});
     } catch (err: any) {
       setLockError(err?.message || 'Failed to lock');
     } finally {
@@ -215,43 +186,20 @@ export default function PoliciesScreen() {
 
     const trimmedReset = (editResetTime || '00:00').trim();
     if (!isValidHHMM(trimmedReset)) {
-      setEditError('Reset time must be HH:MM (e.g. 06:00)');
+      setEditError('End time must be a valid time (use the picker)');
       return;
     }
 
-    // CLAUDE.md §6.1 override-safety: cannot shorten the reset window after
-    // usage has started today (would let the user bypass overrides by editing
-    // the reset to "1 minute from now" once exhausted). Allow moving LATER.
     const oldReset = editingPolicy.daily_reset_time_local || '00:00';
     if (trimmedReset !== oldReset) {
-      const now = new Date();
-      const oldNext = nextResetTimestamp(oldReset, now);
-      const newNext = nextResetTimestamp(trimmedReset, now);
-      if (newNext < oldNext) {
-        if (editingPolicy.is_blocked) {
-          setEditError('Cannot shorten the reset time while this limit is blocked. Use an override.');
-          return;
-        }
-        if (editingPolicy.time_used_minutes > 0) {
-          setEditError("Reset time can only be moved later once today's usage has started.");
-          return;
-        }
-      }
-    }
-
-    let nextLockUntilTimestampMs: number | null | undefined = undefined;
-    if (editEndTimeHHMM.trim() !== '') {
-      if (!isValidHHMM(editEndTimeHHMM)) {
-        setEditError('End time must be HH:MM');
+      if (editingPolicy.is_blocked) {
+        setEditError('End time cannot be changed while this limit is exhausted. Use an override.');
         return;
       }
-      const ts = hhmmToTimestampMs(editEndTimeHHMM, editEndTimeDay);
-      const check = validateUntilTimestamp(ts);
-      if (!check.ok) {
-        setEditError(check.reason);
+      if (editingPolicy.time_used_minutes > 0) {
+        setEditError('End time cannot be changed after usage has started today.');
         return;
       }
-      nextLockUntilTimestampMs = check.value;
     }
 
     setEditLoading(true);
@@ -261,9 +209,6 @@ export default function PoliciesScreen() {
       if (editLabel.trim() !== editingPolicy.target_label) updates.targetLabel = editLabel.trim();
       if (trimmedReset !== (editingPolicy.daily_reset_time_local || '00:00')) {
         updates.dailyResetTimeLocal = trimmedReset;
-      }
-      if (nextLockUntilTimestampMs !== undefined) {
-        updates.lockUntilTimestampMs = nextLockUntilTimestampMs;
       }
 
       if (Object.keys(updates).length === 0) {
@@ -280,10 +225,6 @@ export default function PoliciesScreen() {
                 max_time_minutes: newMinutes,
                 target_label: editLabel.trim(),
                 daily_reset_time_local: trimmedReset,
-                lock_until_timestamp_ms:
-                  nextLockUntilTimestampMs !== undefined
-                    ? nextLockUntilTimestampMs
-                    : p.lock_until_timestamp_ms,
               }
             : p,
         ),
@@ -328,7 +269,7 @@ export default function PoliciesScreen() {
             <Text style={s.cardName} numberOfLines={1}>{item.target_label}</Text>
             <View style={s.cardMeta}>
               <Clock size={11} color="#94A3B8" />
-              <Text style={s.cardMetaText}>{item.target_type} · {formatLimitTime(item.max_time_minutes)} daily</Text>
+              <Text style={s.cardMetaText}>{item.target_type} · {formatLimitTime(item.max_time_minutes)} · Ends {formatHHMMtoAMPM(item.daily_reset_time_local || '00:00')}</Text>
             </View>
           </View>
           <View style={[
@@ -458,39 +399,13 @@ export default function PoliciesScreen() {
             <Text style={s.fieldLabel}>Daily Limit (minutes)</Text>
             <RNTextInput style={s.fieldInput} value={editLimitValue} onChangeText={setEditLimitValue} keyboardType="numeric" placeholder="e.g. 30" placeholderTextColor="#94A3B8" />
 
-            <Text style={s.fieldLabel}>Daily Reset Time</Text>
+            <Text style={s.fieldLabel}>End Time</Text>
             <TimeOfDayPicker
               value={editResetTime}
               onChange={setEditResetTime}
-              helperText="Applies from the next reset cycle — today's usage stays in today's bucket."
+              format="12h"
+              helperText="The time when this limit resets each day."
             />
-
-            <Text style={s.fieldLabel}>Default Block End Time (optional)</Text>
-            <Text style={s.fieldHelp}>When this limit gets blocked, unblock at this time instead of next reset. Leave blank to use the reset time.</Text>
-            <RNTextInput
-              style={s.fieldInput}
-              value={editEndTimeHHMM}
-              onChangeText={setEditEndTimeHHMM}
-              placeholder="e.g. 21:00"
-              placeholderTextColor="#94A3B8"
-              maxLength={5}
-              autoCapitalize="none"
-            />
-            {editEndTimeHHMM ? (
-              <View style={s.dayToggleRow}>
-                {(['today', 'tomorrow'] as const).map(d => (
-                  <TouchableOpacity
-                    key={d}
-                    style={[s.dayToggle, editEndTimeDay === d && s.dayToggleActive]}
-                    onPress={() => setEditEndTimeDay(d)}
-                  >
-                    <Text style={[s.dayToggleText, editEndTimeDay === d && s.dayToggleTextActive]}>
-                      {d === 'today' ? 'Today' : 'Tomorrow'}
-                    </Text>
-                  </TouchableOpacity>
-                ))}
-              </View>
-            ) : null}
 
             {editingPolicy && editingPolicy.time_used_minutes > 0 && (
               <View style={s.warningBox}>
@@ -539,84 +454,10 @@ export default function PoliciesScreen() {
                 <View style={{ flex: 1 }}>
                   <Text style={s.modalInfoName}>{lockingPolicy.target_label}</Text>
                   <Text style={s.modalInfoMeta}>
-                    Will be blocked until your next reset
-                    {lockingPolicy.daily_reset_time_local ? ` (${lockingPolicy.daily_reset_time_local})` : ''}
+                    Will be locked until {formatHHMMtoAMPM(lockingPolicy.daily_reset_time_local || '00:00')}
                   </Text>
                 </View>
               </View>
-            )}
-
-            <View style={s.selectorRow}>
-              {(['duration', 'clock'] as const).map(t => (
-                <TouchableOpacity
-                  key={t}
-                  style={[s.selectorBtn, lockTimerType === t && s.selectorBtnActive]}
-                  onPress={() => setLockTimerType(t)}
-                >
-                  <Text style={[s.selectorBtnText, lockTimerType === t && s.selectorBtnTextActive]}>
-                    {t === 'duration' ? 'Duration' : 'Exact Time'}
-                  </Text>
-                </TouchableOpacity>
-              ))}
-            </View>
-
-            {lockTimerType === 'duration' ? (
-              <>
-                <Text style={s.fieldLabel}>Lock Duration (optional)</Text>
-                <Text style={s.fieldHelp}>How long to lock for. Leave blank to lock until next reset.</Text>
-                <View style={s.timeRow}>
-                  <View style={s.timeBox}>
-                    <Text style={s.timeLabel}>Hours</Text>
-                    <RNTextInput value={lockHours} onChangeText={setLockHours} keyboardType="number-pad" style={s.timeInput} placeholder="0" placeholderTextColor="#CBD5E1" maxLength={2} />
-                  </View>
-                  <View style={s.timeBox}>
-                    <Text style={s.timeLabel}>Minutes</Text>
-                    <RNTextInput value={lockMinutes} onChangeText={setLockMinutes} keyboardType="number-pad" style={s.timeInput} placeholder="0" placeholderTextColor="#CBD5E1" maxLength={2} />
-                  </View>
-                  <View style={s.timeBox}>
-                    <Text style={s.timeLabel}>Seconds</Text>
-                    <RNTextInput value={lockSeconds} onChangeText={setLockSeconds} keyboardType="number-pad" style={s.timeInput} placeholder="0" placeholderTextColor="#CBD5E1" maxLength={2} />
-                  </View>
-                </View>
-              </>
-            ) : (
-              <>
-                <Text style={s.fieldLabel}>Custom End Time (optional)</Text>
-                <Text style={s.fieldHelp}>Override this lock's end time. Leave blank to lock until next reset.</Text>
-                <View style={s.timeRow}>
-                  <View style={s.timeBox}>
-                    <Text style={s.timeLabel}>Hour (00-23)</Text>
-                    <RNTextInput value={lockClockHour} onChangeText={setLockClockHour} keyboardType="number-pad" style={s.timeInput} placeholder="21" placeholderTextColor="#CBD5E1" maxLength={2} />
-                  </View>
-                  <View style={s.timeBox}>
-                    <Text style={s.timeLabel}>Minute (00-59)</Text>
-                    <RNTextInput value={lockClockMinute} onChangeText={setLockClockMinute} keyboardType="number-pad" style={s.timeInput} placeholder="00" placeholderTextColor="#CBD5E1" maxLength={2} />
-                  </View>
-                </View>
-                {(lockClockHour || lockClockMinute) ? (
-                  <>
-                    <View style={s.dayToggleRow}>
-                      {(['today', 'tomorrow'] as const).map(d => (
-                        <TouchableOpacity
-                          key={d}
-                          style={[s.dayToggle, lockEndTimeDay === d && s.dayToggleActive]}
-                          onPress={() => setLockEndTimeDay(d)}
-                        >
-                          <Text style={[s.dayToggleText, lockEndTimeDay === d && s.dayToggleTextActive]}>
-                            {d === 'today' ? 'Today' : 'Tomorrow'}
-                          </Text>
-                        </TouchableOpacity>
-                      ))}
-                    </View>
-                    {isValidHHMM(`${lockClockHour.padStart(2, '0')}:${lockClockMinute.padStart(2, '0')}`) && (
-                      <Text style={s.fieldHelp}>
-                        Locks until {lockEndTimeDay === 'tomorrow' ? 'tomorrow ' : ''}{`${lockClockHour.padStart(2, '0')}:${lockClockMinute.padStart(2, '0')}`}{' '}
-                        ({formatRelativeTime(hhmmToTimestampMs(`${lockClockHour.padStart(2, '0')}:${lockClockMinute.padStart(2, '0')}`, lockEndTimeDay))}).
-                      </Text>
-                    )}
-                  </>
-                ) : null}
-              </>
             )}
 
             {lockError && (
@@ -709,21 +550,6 @@ const s = StyleSheet.create({
   modalSave: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#4F46E5', alignItems: 'center' },
   modalSaveText: { fontSize: 14, fontWeight: '700', color: '#FFF' },
   modalLockBtn: { flex: 1, paddingVertical: 14, borderRadius: 12, backgroundColor: '#0F172A', alignItems: 'center' },
-  fieldHelp: { fontSize: 11, color: '#94A3B8', marginTop: -2, marginBottom: 6 },
-  dayToggleRow: { flexDirection: 'row', gap: 8, marginBottom: 12 },
-  dayToggle: { flex: 1, paddingVertical: 10, borderRadius: 10, borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center', backgroundColor: '#F8FAFC' },
-  dayToggleActive: { borderColor: '#4F46E5', backgroundColor: '#EEF2FF' },
-  dayToggleText: { fontSize: 12, fontWeight: '600', color: '#64748B' },
-  dayToggleTextActive: { color: '#4F46E5' },
   actionLock: { fontSize: 13, fontWeight: '600', color: '#0F172A', marginLeft: 6 },
   actionLockDisabled: { color: '#CBD5E1' },
-  selectorRow: { flexDirection: 'row', gap: 8, marginBottom: 16 },
-  selectorBtn: { flex: 1, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, paddingVertical: 10, alignItems: 'center', backgroundColor: '#F8FAFC' },
-  selectorBtnActive: { borderColor: '#4F46E5', backgroundColor: '#EEF2FF' },
-  selectorBtnText: { color: '#475569', fontWeight: '600', fontSize: 13 },
-  selectorBtnTextActive: { color: '#4F46E5' },
-  timeRow: { flexDirection: 'row', gap: 12, marginBottom: 16 },
-  timeBox: { flex: 1 },
-  timeLabel: { color: '#64748B', fontSize: 12, marginBottom: 4, fontWeight: '700' },
-  timeInput: { borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 12, paddingHorizontal: 16, paddingVertical: 12, backgroundColor: '#FFF', color: '#0F172A', fontSize: 16, textAlign: 'center' },
 });

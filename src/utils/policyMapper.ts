@@ -17,6 +17,7 @@ export interface UIPolicy {
   created_at: number;
   daily_reset_time_local: string;
   lock_until_timestamp_ms: number | null;
+  next_reset_at_ms: number;
   _nativeBudgetSeconds?: number;
   // Derived display state for an active manual Lock Now session. is_manual_locked
   // is true ONLY when a marker exists AND is_blocked is true — a marker alone is
@@ -76,6 +77,7 @@ export function mapPolicyToUI(item: any): UIPolicy {
     created_at: p.createdAt?._seconds ? p.createdAt._seconds * 1000 : Date.now(),
     daily_reset_time_local: typeof p.dailyResetTimeLocal === 'string' ? p.dailyResetTimeLocal : '00:00',
     lock_until_timestamp_ms: typeof p.lockUntilTimestampMs === 'number' ? p.lockUntilTimestampMs : null,
+    next_reset_at_ms: typeof item.nextResetAtMs === 'number' ? item.nextResetAtMs : 0,
     is_manual_locked: false,
     manual_lock_snapshot_seconds: null,
     manual_lock_until_ms: null,

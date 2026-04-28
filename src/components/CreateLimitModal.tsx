@@ -13,6 +13,8 @@ import { getInstalledApps, getCachedApps, InstalledApp } from '../services/appLi
 import { filterInstalledApps } from '../helpers/helper';
 import type { CreateLimitState } from '../hooks/useCreateLimit';
 import { showAlert } from './AppAlert';
+import TimeOfDayPicker from './TimeOfDayPicker';
+import { formatHHMMtoAMPM } from '../utils/timeWindow';
 interface PlanLimitsData {
   planCode: string;
   maxPolicies: number | null;
@@ -49,6 +51,7 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
   const [clockHour, setClockHour] = useState('12');
   const [clockMinute, setClockMinute] = useState('00');
   const [clockPeriod, setClockPeriod] = useState<'AM' | 'PM'>('PM');
+  const [endTime, setEndTime] = useState('00:00');
 
 
   useEffect(() => {
@@ -97,6 +100,7 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
     setClockHour('12');
     setClockMinute('00');
     setClockPeriod('PM');
+    setEndTime('00:00');
   };
 
   const handleSubmit = () => {
@@ -114,7 +118,7 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
       createCategory, createWebsiteUrl,
       hours, minutes, seconds, singleTimerValue, singleTimerUnit,
       clockHour, clockMinute, clockPeriod,
-      dailyResetTimeLocal: '00:00',
+      dailyResetTimeLocal: endTime,
       endTimeHHMM: '',
       endTimeDay: 'today' as const,
     };
@@ -267,6 +271,16 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
             </>
           )}
 
+          <Text style={s.subTitle}>End Time</Text>
+          <Text style={s.endTimeHelp}>The time when this limit resets each day. Currently set to {formatHHMMtoAMPM(endTime)}.</Text>
+          <TimeOfDayPicker
+            value={endTime}
+            onChange={setEndTime}
+            format="12h"
+            showNextPreview={false}
+          />
+          <View style={{ height: 10 }} />
+
           <View style={s.targetBox}>
             <Text style={s.targetText}>
               {targetType === 'app' ? (selectedInstalledApp?.appName || appSearch || 'No app selected')
@@ -297,6 +311,7 @@ const s = StyleSheet.create({
   planRestrictionBanner: { backgroundColor: '#FFFBEB', borderWidth: 1, borderColor: '#FDE68A', borderRadius: 8, padding: 10, marginBottom: 10 },
   planRestrictionText: { fontSize: 12, color: '#92400E', fontWeight: '600' },
   subTitle: { color: '#334155', fontWeight: '700', marginBottom: 8, marginTop: 4 },
+  endTimeHelp: { fontSize: 12, color: '#64748B', marginBottom: 8 },
   selectorRow: { flexDirection: 'row', gap: 8, marginBottom: 10 },
   selectorBtn: { flex: 1, borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, paddingVertical: 9, alignItems: 'center', backgroundColor: '#F8FAFC' },
   selectorBtnActive: { borderColor: '#10B981', backgroundColor: '#EEF2FF' },
