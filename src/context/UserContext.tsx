@@ -83,17 +83,14 @@ function parseAccountData(data: any, existing?: AccountContext | null): AccountC
     null;
 
   const overridesBlock = data.overrides || data.account?.overrides || null;
-  const unlimitedOverrides = planCode === 'elite' || planCode === 'ultra_elite';
-  const freeRemaining = unlimitedOverrides
-    ? getPlanOverrideLimit(planCode)
-    : (overridesBlock?.freeRemaining ?? existing?.freeCreditsRemaining ?? getPlanOverrideLimit(planCode));
+  const freeRemaining =
+    overridesBlock?.freeRemaining ?? existing?.freeCreditsRemaining ?? getPlanOverrideLimit(planCode);
   const grantedRemaining =
     overridesBlock?.grantedRemaining ??
     existing?.grantedCredits ??
     0;
-  const totalAvailable = unlimitedOverrides
-    ? getPlanOverrideLimit(planCode)
-    : (overridesBlock?.totalAvailable ?? (freeRemaining + grantedRemaining));
+  const totalAvailable =
+    overridesBlock?.totalAvailable ?? (freeRemaining + grantedRemaining);
 
   return {
     uid: data.user?.uid || data.uid || existing?.uid || "",

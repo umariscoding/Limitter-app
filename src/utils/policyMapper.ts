@@ -48,7 +48,10 @@ export function mapPolicyToUI(item: any): UIPolicy {
   const p = item.policy || item;
   const state = item.policyState || {};
 
-  const usedMinutes = Number(state.usageTodayMinutes) || 0;
+  const rawUsedMinutes = Number(state.usageTodayMinutes) || 0;
+  const maxMinutes = Number(p.dailyLimitMinutes) || 0;
+  // Clamp at the limit so a backend overshoot never leaks into the UI as "3m / 2m".
+  const usedMinutes = maxMinutes > 0 ? Math.min(rawUsedMinutes, maxMinutes) : rawUsedMinutes;
   const isExhausted = !!state.isExhaustedToday && usedMinutes > 0;
 
   let status: 'active' | 'inactive' | 'blocked' = 'inactive';
@@ -283,8 +286,13 @@ export function mergeLiveTimerUsageIntoPolicies(
     // bypassing the snapshot freeze in PolicyCard during any propagation
     // race. Trust the backend's cumulative time_used_minutes instead.
     if (nativeStatus === 'blocked') {
+      // Native blocker is on-device truth for "currently blocked right now".
+      // Propagate is_blocked even if backend's isExhaustedToday hasn't caught
+      // up yet. selectPolicyState refines further for manual-lock markers.
       return {
         ...item,
+        is_blocked: true,
+        status: 'blocked',
         _nativeBudgetSeconds: budget > 0 ? budget : undefined,
       };
     }
@@ -296,7 +304,8 @@ export function mergeLiveTimerUsageIntoPolicies(
     const nativeUsedMinutes = liveTimerUsageSec / 60;
     const cappedUsed = maxMin > 0 ? Math.min(nativeUsedMinutes, maxMin) : nativeUsedMinutes;
     const backendUsed = Number(item.time_used_minutes) || 0;
-    const bestUsed = Math.max(cappedUsed, backendUsed);
+    const cappedBackendUsed = maxMin > 0 ? Math.min(backendUsed, maxMin) : backendUsed;
+    const bestUsed = Math.max(cappedUsed, cappedBackendUsed);
 
     return {
       ...item,

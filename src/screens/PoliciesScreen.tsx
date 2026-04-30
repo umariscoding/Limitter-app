@@ -154,7 +154,7 @@ export default function PoliciesScreen() {
         ),
       );
       setLockModalVisible(false);
-      fetchPolicies().catch(() => {});
+      fetchPolicies().catch(() => { });
     } catch (err: any) {
       setLockError(err?.message || 'Failed to lock');
     } finally {
@@ -221,11 +221,11 @@ export default function PoliciesScreen() {
         prev.map((p) =>
           p.id === editingPolicy.id
             ? {
-                ...p,
-                max_time_minutes: newMinutes,
-                target_label: editLabel.trim(),
-                daily_reset_time_local: trimmedReset,
-              }
+              ...p,
+              max_time_minutes: newMinutes,
+              target_label: editLabel.trim(),
+              daily_reset_time_local: trimmedReset,
+            }
             : p,
         ),
       );
@@ -399,12 +399,12 @@ export default function PoliciesScreen() {
             <Text style={s.fieldLabel}>Daily Limit (minutes)</Text>
             <RNTextInput style={s.fieldInput} value={editLimitValue} onChangeText={setEditLimitValue} keyboardType="numeric" placeholder="e.g. 30" placeholderTextColor="#94A3B8" />
 
-            <Text style={s.fieldLabel}>End Time</Text>
+            <Text style={s.fieldLabel}>Reset Time</Text>
             <TimeOfDayPicker
               value={editResetTime}
               onChange={setEditResetTime}
               format="12h"
-              helperText="The time when this limit resets each day."
+              helperText="Your limit resets daily at this time."
             />
 
             {editingPolicy && editingPolicy.time_used_minutes > 0 && (

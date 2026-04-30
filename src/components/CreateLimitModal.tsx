@@ -235,7 +235,7 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
                   onPress={() => setTimerType(t)}
                 >
                   <Text style={[s.selectorBtnText, timerType === t && s.selectorBtnTextActive]}>
-                    {t === 'combined' ? 'Duration' : 'Exact Time'}
+                    {t === 'combined' ? 'Duration' : 'Schedule Time'}
                   </Text>
                 </TouchableOpacity>
               ))}
@@ -270,9 +270,9 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
               </View>
             </>
           )}
-
-          <Text style={s.subTitle}>End Time</Text>
-          <Text style={s.endTimeHelp}>The time when this limit resets each day. Currently set to {formatHHMMtoAMPM(endTime)}.</Text>
+          <Text style={s.endTimeHelp}>You'll be blocked after this limit</Text>
+          <Text style={s.subTitle}>Reset Time</Text>
+          <Text style={s.endTimeHelp}>Your limit resets daily at this time. Currently set to {formatHHMMtoAMPM(endTime)}.</Text>
           <TimeOfDayPicker
             value={endTime}
             onChange={setEndTime}
@@ -281,13 +281,14 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
           />
           <View style={{ height: 10 }} />
 
-          <View style={s.targetBox}>
+          {/* <View style={s.targetBox}>
             <Text style={s.targetText}>
               {targetType === 'app' ? (selectedInstalledApp?.appName || appSearch || 'No app selected')
                 : targetType === 'category' ? createCategory || 'No category selected'
                   : createWebsiteUrl || 'No website selected'}
             </Text>
-          </View>
+          </View> */}
+
           <View style={s.actions}>
             <TouchableOpacity style={[s.actionBtn, s.cancelBtn]} onPress={onClose}>
               <Text style={s.cancelText}>Cancel</Text>

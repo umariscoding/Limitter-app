@@ -3,8 +3,8 @@ export type NormalizedPlan = 'free' | 'pro' | 'elite' | 'ultra_elite';
 const PLAN_OVERRIDE_LIMITS: Record<NormalizedPlan, number> = {
   free: 3,
   pro: 15,
-  elite: 9999,
-  ultra_elite: 9999,
+  elite: 50,
+  ultra_elite: 100,
 };
 
 export const formatPlanName = (rawPlan?: string | null): string => {
@@ -36,9 +36,9 @@ export const computeNextOverrides = (
   }
 
   const normalizedPlan = normalizePlan(rawPlan);
-  if (normalizedPlan === 'elite' || normalizedPlan === 'ultra_elite') {
-    return getPlanOverrideLimit(normalizedPlan);
-  }
+  // if (normalizedPlan === 'elite' || normalizedPlan === 'ultra_elite') {
+  //   return getPlanOverrideLimit(normalizedPlan);
+  // }
 
   const current = Number.isFinite(Number(currentOverrides)) ? Number(currentOverrides) : getPlanOverrideLimit(normalizedPlan);
   return Math.max(0, Math.floor(current - 1));
