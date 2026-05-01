@@ -12,17 +12,40 @@ export function useNativeTimerSync(
   setState: React.Dispatch<React.SetStateAction<any[]>>,
 ) {
   useEffect(() => {
+    const markBlockedInState = (eventPkg: string) => {
+      setState(prev => {
+        let changed = false;
+        const next = prev.map(item => {
+          if (!nativeKeyMatches(getPolicyPackageKey(item), eventPkg)) return item;
+          if (item.is_blocked && item.status === 'blocked') return item;
+          changed = true;
+          return {
+            ...item,
+            is_blocked: true,
+            status: 'blocked' as const,
+          };
+        });
+        return changed ? next : prev;
+      });
+    };
+
     const unsubTick = subscribeTimerTicks(event => {
       if (!event?.package) return;
       const eventPkg = String(event.package).trim().toLowerCase();
-      // When native is in "blocked" status its `remaining` saturates at 0 and
-      // computed used would jump to the full quota. Skip — backend remains
-      // the source of truth for cumulative usage, and PolicyCard uses the
-      // manual-lock snapshot for display during locks. Same reason as the
-      // merge function's blocked-skip in policyMapper.
       const isBlockedStatus =
         event.isBlocked === true || String(event.status || '').toLowerCase() === 'blocked';
-      if (isBlockedStatus) return;
+      // Propagate the block immediately so the badge/bar reflect "Blocked"
+      // without waiting for a manual refresh or the next 15s server tick.
+      // We deliberately do NOT mutate time_used_minutes here — when native is
+      // in blocked status its `remaining` saturates at 0, and forcing the
+      // value to max would break the manual-lock snapshot freeze during the
+      // race between the block event and the marker becoming active.
+      // PolicyCard handles the visual full-bar treatment for the blocked-but-
+      // not-manually-locked case.
+      if (isBlockedStatus) {
+        markBlockedInState(eventPkg);
+        return;
+      }
 
       setState(prev => {
         let changed = false;
@@ -52,12 +75,10 @@ export function useNativeTimerSync(
 
     const unsubBlocked = subscribeTimerBlocked(event => {
       if (!event?.package) return;
-      // Intentionally do NOT mutate time_used_minutes on TIMER_BLOCKED.
-      // Forcing it to max conflated quota-exhaustion-blocking with manual-lock
-      // blocking and broke the snapshot freeze (the locked card would show
-      // 2m/2m instead of the frozen pre-lock value). The is_blocked flag is
-      // propagated via RTDB / HTTP / manual-lock-marker through PolicyContext;
-      // this listener no longer needs to touch the usage value.
+      // Mirror the tick-path treatment so a TIMER_BLOCKED event arriving without
+      // a preceding blocked-status TIMER_TICK also flips the UI to blocked
+      // immediately. Do NOT touch time_used_minutes — see tick handler comment.
+      markBlockedInState(String(event.package).trim().toLowerCase());
     });
 
     return () => {

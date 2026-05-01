@@ -121,15 +121,27 @@ export const subscribeLockState = (
 ): (() => void) => {
   const locksRef = ref(realtimeDB, `live/accounts/${accountId}/locks`);
 
-  // onValue returns the unsubscribe function directly
-  const unsubscribeHandler = onValue(locksRef, (snapshot) => {
-    const val = snapshot.val();
-    if (!val) {
+  // onValue returns the unsubscribe function directly. The third arg is the
+  // cancel/error callback — without it, a transient permission_denied (common
+  // right after a fresh install when the Auth ID token has not yet propagated
+  // to the database client) surfaces as an unhandled promise rejection /
+  // red-box. Treat any error as "no locks visible right now" so downstream
+  // state stays consistent; the next reconnect will deliver real data.
+  const unsubscribeHandler = onValue(
+    locksRef,
+    (snapshot) => {
+      const val = snapshot.val();
+      if (!val) {
+        listener({});
+        return;
+      }
+      listener(val as Record<string, LiveLockEvent>);
+    },
+    (error) => {
+      console.warn('[subscribeLockState] RTDB listener error:', error?.message || error);
       listener({});
-      return;
-    }
-    listener(val as Record<string, LiveLockEvent>);
-  });
+    },
+  );
 
   const unsubscribe = () => {
     unsubscribeHandler();

@@ -137,13 +137,60 @@ function startTimersInBackground(finalLimits: any[]) {
   // in native (TimerStateManager addTimers uses maxOf merge).
   reconcileNativeAfterReset(finalLimits)
     .catch(err => console.error('[PolicyFetcher] reconcile failed:', err))
-    .finally(() => armTimers(finalLimits));
+    .finally(() => {
+      armTimers(finalLimits).catch(err =>
+        console.error('[PolicyFetcher] armTimers failed:', err),
+      );
+    });
 }
 
-function armTimers(finalLimits: any[]) {
+// Mirror tolerance of reconcileNativeAfterReset (60s) but applied in the
+// inverse direction: native significantly LOWER than server means an override
+// just reset native locally while the server's daily aggregate remains high.
+const OVERRIDE_DETECTION_TOLERANCE_SEC = 60;
+
+async function buildNativeUsedByKey(): Promise<Map<string, number>> {
+  const map = new Map<string, number>();
+  try {
+    const states = await getNativeTimerStates();
+    for (const s of states) {
+      const k = String(s.package || '').trim().toLowerCase();
+      if (!k) continue;
+      const budget = Math.max(0, Number(s.liveTimerUsageBudgetSeconds) || 0);
+      const remaining = Math.max(0, Number(s.remainingSeconds) || 0);
+      map.set(k, Math.max(0, budget - remaining));
+    }
+  } catch (err) {
+    console.error('[PolicyFetcher] buildNativeUsedByKey failed:', err);
+  }
+  return map;
+}
+
+// When native has been deliberately reset (e.g., by an override grant) but the
+// server's time_used_minutes still reflects the pre-override aggregate, seeding
+// addTimers with serverUsedSec gets MAX-merged on top of native's 0 and blocks
+// the user almost immediately. Detect that case and prefer native's lower
+// value so the user gets the fresh window the override granted.
+function resolveSeedUsedSec(
+  nativeUsedByKey: Map<string, number>,
+  rawPkg: string,
+  isWebsite: boolean,
+  serverUsedSec: number,
+): number {
+  const nativeKey = isWebsite
+    ? rawPkg.startsWith('website:') ? rawPkg : `website:${rawPkg}`
+    : rawPkg;
+  const nativeUsed = nativeUsedByKey.get(nativeKey);
+  if (nativeUsed === undefined) return serverUsedSec;
+  if (serverUsedSec - nativeUsed > OVERRIDE_DETECTION_TOLERANCE_SEC) return nativeUsed;
+  return serverUsedSec;
+}
+
+async function armTimers(finalLimits: any[]) {
   // We use the RAW HTTP limits here (not the RTDB-merged result) because we only want
   // to start native timers for policies that are NOT currently blocked by RTDB.
   // useLockStateSync handles native blocker commands for locked policies.
+  const nativeUsedByKey = await buildNativeUsedByKey();
   const appTimerPromises: Promise<any>[] = [];
 
   for (const limit of finalLimits) {
@@ -152,7 +199,9 @@ function armTimers(finalLimits: any[]) {
     if (!pkg) continue;
 
     const totalSeconds = Math.max(0, limit.max_time_minutes * 60);
-    const usedSeconds = Math.max(0, (limit.time_used_minutes || 0) * 60);
+    const serverUsedSec = Math.max(0, (limit.time_used_minutes || 0) * 60);
+    const rawPkg = String(pkg).trim().toLowerCase();
+    const usedSeconds = resolveSeedUsedSec(nativeUsedByKey, rawPkg, false, serverUsedSec);
     if (usedSeconds >= totalSeconds) continue;
 
     appTimerPromises.push(
@@ -169,7 +218,9 @@ function armTimers(finalLimits: any[]) {
     if (!domain) continue;
 
     const totalSeconds = Math.max(0, limit.max_time_minutes * 60);
-    const usedSeconds = Math.max(0, (limit.time_used_minutes || 0) * 60);
+    const serverUsedSec = Math.max(0, (limit.time_used_minutes || 0) * 60);
+    const rawDomain = String(domain).trim().toLowerCase();
+    const usedSeconds = resolveSeedUsedSec(nativeUsedByKey, rawDomain, true, serverUsedSec);
     if (usedSeconds >= totalSeconds) continue;
 
     websiteTimers.push({ domain, durationSeconds: totalSeconds, usedSeconds });

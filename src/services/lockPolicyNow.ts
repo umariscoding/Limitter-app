@@ -1,6 +1,36 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lockNowAPI, type LockNowResponse } from './policyService';
+import { getNativeTimerStates } from './appBlockerService';
 import type { UIPolicy } from '../utils/policyMapper';
+
+// Reads the most up-to-date used-seconds for a policy directly from the native
+// timer. Necessary because policy.time_used_minutes in React state can lag the
+// real per-device usage (e.g., the user used the target app while the React
+// app was backgrounded, or the server's daily aggregate was not reset by an
+// override grant). Returns null when no matching native timer is registered,
+// in which case the caller should fall back to policy.time_used_minutes.
+async function readNativeUsedSeconds(packageName: string): Promise<number | null> {
+  try {
+    const states = await getNativeTimerStates();
+    if (!Array.isArray(states) || states.length === 0) return null;
+    const raw = String(packageName || '').trim().toLowerCase();
+    if (!raw) return null;
+    const candidates = raw.startsWith('website:')
+      ? [raw, raw.replace(/^website:/, '')]
+      : [raw, `website:${raw}`];
+    const found = states.find(s => {
+      const k = String(s.package || '').trim().toLowerCase();
+      return candidates.includes(k);
+    });
+    if (!found) return null;
+    const budget = Math.max(0, Number(found.liveTimerUsageBudgetSeconds) || 0);
+    const remaining = Math.max(0, Number(found.remainingSeconds) || 0);
+    return Math.max(0, budget - remaining);
+  } catch (err) {
+    console.error('[lockPolicyNow] readNativeUsedSeconds failed:', err);
+    return null;
+  }
+}
 
 // 60s minimum future-time absorbs typical client/server clock drift (NTP-class)
 // and prevents "instant unlock" UX when network latency stacks on top of the
@@ -97,12 +127,22 @@ export async function markPolicyManuallyLocked(
     return false;
   }
 
+  // Prefer the native timer's current used-seconds — it is the per-device
+  // source of truth and reflects post-override resets immediately, whereas
+  // policy.time_used_minutes can lag (server aggregate not reset by override,
+  // or React state never received a tick because the user was in the target
+  // app while this app was backgrounded). Fall back to the React value only
+  // when native has no entry for this package (e.g., timer not yet armed).
+  const nativeUsedSec = await readNativeUsedSeconds(packageName);
+  const fallbackUsedSec = Math.max(0, Math.round((policy.time_used_minutes || 0) * 60));
+  const snapshotUsedSeconds = nativeUsedSec !== null ? nativeUsedSec : fallbackUsedSec;
+
   const markers = await readMarkers();
   markers[policy.id] = {
     packageName,
     appName: policy.target_label || packageName,
     durationSeconds: Math.max(1, Math.round((policy.max_time_minutes || 0) * 60)),
-    snapshotUsedSeconds: Math.max(0, Math.round((policy.time_used_minutes || 0) * 60)),
+    snapshotUsedSeconds,
     lockedAtMs: Date.now(),
     untilTs,
   };

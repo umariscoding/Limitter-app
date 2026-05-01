@@ -16,19 +16,30 @@ export default function PolicyCard({ limit, onOverride, onLockNow }: PolicyCardP
   // at exactly what the user saw when they pressed Lock Now, regardless of any
   // server-side drift, native-side ticking, or other-device aggregation lag.
   const isManualLocked = limit.is_manual_locked;
-  const displayUsedMinutes = isManualLocked
+  const rawUsedMinutes = isManualLocked
     ? (limit.manual_lock_snapshot_seconds ?? 0) / 60
     : (limit.time_used_minutes || 0);
+
+  // Defensive: any policy at-or-over its daily quota is blocked, even if the
+  // upstream is_blocked flag desyncs (e.g., RTDB lock cleared but quota still
+  // exhausted). Computed against the raw value so a frozen-below-quota
+  // snapshot does not falsely flip exhaustion on/off during a manual lock.
+  const isExhausted = limit.max_time_minutes > 0 && rawUsedMinutes >= limit.max_time_minutes;
+  const isBlocked = limit.is_blocked || isExhausted;
+
+  // When blocked by quota exhaustion (not a manual lock), the bar/text must
+  // show the full limit even if our local time_used_minutes is stale. The
+  // useUsageReporter only flushes ticks every 15s, so right after the native
+  // blocker fires the server-side total can lag the actual usage by up to a
+  // tick interval — without this, the card briefly shows e.g. "10s / 1m" with
+  // a small bar while the badge says Blocked.
+  const displayUsedMinutes = isBlocked && !isManualLocked
+    ? limit.max_time_minutes
+    : rawUsedMinutes;
 
   const pct = limit.max_time_minutes > 0
     ? Math.min((displayUsedMinutes / limit.max_time_minutes) * 100, 100)
     : 0;
-  // Defensive: any policy at-or-over its daily quota is blocked, even if the
-  // upstream is_blocked flag desyncs (e.g., RTDB lock cleared but quota still
-  // exhausted). Computed against the displayed value so a frozen-below-quota
-  // snapshot does not falsely flip exhaustion on/off during a manual lock.
-  const isExhausted = limit.max_time_minutes > 0 && displayUsedMinutes >= limit.max_time_minutes;
-  const isBlocked = limit.is_blocked || isExhausted;
   const isWarning = pct >= 75 && !isBlocked;
   const isActive = !isBlocked && displayUsedMinutes > 0;
 

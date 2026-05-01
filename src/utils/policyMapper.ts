@@ -149,11 +149,18 @@ export function selectPolicyState(
   // marker when the lock truly ends (natural end / override / reset).
   const marker = manualLocks[httpState.id];
   const now2 = Date.now();
+  // Hold the manual-lock visual state through the unlock-propagation gap.
+  // After untilTs passes, RTDB/HTTP take ~100ms+ to clear is_blocked. Without
+  // this, markerActive flips to false the instant untilTs is reached and the
+  // badge briefly flashes red "Blocked" before settling to "Ready". By keeping
+  // markerActive true while resolved.is_blocked is still true, the card stays
+  // amber "Locked" until the upstream confirms the unlock — then transitions
+  // straight to Ready with no red flash.
   const markerActive =
     !!marker &&
     typeof marker.untilTs === 'number' &&
     Number.isFinite(marker.untilTs) &&
-    marker.untilTs > now2;
+    (marker.untilTs > now2 || resolved.is_blocked);
 
   return {
     ...resolved,

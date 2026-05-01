@@ -17,6 +17,7 @@ import { resolveCurrentDeviceId } from "./src/services/currentDeviceService";
 import { getPolicyPackageKey } from "./src/utils/policyMapper";
 import { useFcm } from "./src/hooks/useFcm";
 import { AppAlertProvider } from "./src/components/AppAlert";
+import TermsAndConditionsScreen, { isTermsAcceptedForAccount } from "./src/screens/TermsAndConditionsScreen";
 
 const navigationRef = createNavigationContainerRef<any>();
 
@@ -238,6 +239,40 @@ function AppInner(): React.JSX.Element {
     return () => sub.remove();
   }, []);
 
+  // Account-scoped Terms & Conditions gate. Runs only AFTER the user is
+  // authenticated and an accountId is available (signup/login complete + bootstrap
+  // returned). Each accountId stores its own acceptance flag in AsyncStorage, so
+  // a different account on the same device sees the screen again, and the same
+  // account on a new device also sees it once. Once accepted, in-memory state
+  // skips the gate for the rest of this session; on next launch the persisted
+  // flag is read and the gate is bypassed.
+  const accountId = user?.accountId || '';
+  const [termsAccountId, setTermsAccountId] = React.useState<string | null>(null);
+  const [termsAccepted, setTermsAccepted] = React.useState<boolean>(false);
+  const [termsChecking, setTermsChecking] = React.useState<boolean>(false);
+
+  React.useEffect(() => {
+    if (!accountId) {
+      setTermsAccountId(null);
+      setTermsAccepted(false);
+      setTermsChecking(false);
+      return;
+    }
+    if (termsAccountId === accountId) return;
+    let cancelled = false;
+    setTermsChecking(true);
+    (async () => {
+      const accepted = await isTermsAcceptedForAccount(accountId);
+      if (cancelled) return;
+      setTermsAccountId(accountId);
+      setTermsAccepted(accepted);
+      setTermsChecking(false);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [accountId, termsAccountId]);
+
   if (bootstrapError) {
     return (
       <View style={errorStyles.container}>
@@ -259,6 +294,23 @@ function AppInner(): React.JSX.Element {
           )}
         </TouchableOpacity>
       </View>
+    );
+  }
+
+  if (accountId && (termsChecking || termsAccountId !== accountId)) {
+    return (
+      <View style={gateStyles.loading}>
+        <ActivityIndicator size="large" color="#10B981" />
+      </View>
+    );
+  }
+
+  if (accountId && !termsAccepted) {
+    return (
+      <TermsAndConditionsScreen
+        accountId={accountId}
+        onAccept={() => setTermsAccepted(true)}
+      />
     );
   }
 
@@ -298,6 +350,10 @@ const errorStyles = StyleSheet.create({
   message: { fontSize: 15, color: '#64748B', textAlign: 'center', marginBottom: 32, lineHeight: 22 },
   retryBtn: { backgroundColor: '#4F46E5', paddingHorizontal: 32, paddingVertical: 14, borderRadius: 12 },
   retryText: { color: '#FFFFFF', fontWeight: '700', fontSize: 16 },
+});
+
+const gateStyles = StyleSheet.create({
+  loading: { flex: 1, justifyContent: 'center', alignItems: 'center', backgroundColor: '#FFFFFF' },
 });
 
 export default App;

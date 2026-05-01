@@ -288,6 +288,12 @@ export function useLockStateSync(accountId: string | undefined) {
               console.error('[useLockStateSync] unlock handling failed for', item.key, err);
             }
           }
+          // Refetch policies BEFORE clearing the marker from React state, so
+          // httpState.is_blocked is already false by the time markerActive flips.
+          // Without this ordering the marker disappears from state while the
+          // stale is_blocked=true is still in httpPolicies, briefly flashing
+          // the card to red "Blocked" before the next fetch catches up.
+          await fetchPoliciesRef.current();
           // Always refresh after an unlock batch — popManualLockMarker silently
           // mutates storage when it finds a stale marker too, so we can't tell
           // from its return value alone whether storage changed.
