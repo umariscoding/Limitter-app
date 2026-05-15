@@ -8,6 +8,7 @@ import {
   StatusBar,
   ActivityIndicator,
   RefreshControl,
+  Modal,
 } from 'react-native';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -48,6 +49,7 @@ import LockNowSheet from '../components/LockNowSheet';
 import BottomNav from '../components/BottomNav';
 import type { UIPolicy } from '../utils/policyMapper';
 import { cleanupStaleMarkers } from '../services/lockPolicyNow';
+import AccessibilityDisclosureScreen from './AccessibilityDisclosureScreen';
 import type { CreateLimitState } from '../hooks/useCreateLimit';
 import { showAlert } from '../components/AppAlert';
 
@@ -84,7 +86,12 @@ export default function DashboardScreen() {
     },
   ).current;
 
-  const { createLimit } = useCreateLimit(
+  const {
+    createLimit,
+    needsAccessibilityDisclosure,
+    onAccessibilityDisclosureComplete,
+    onAccessibilityDisclosureDecline,
+  } = useCreateLimit(
     user?.uid,
     deviceId,
     (label) => {
@@ -264,6 +271,16 @@ export default function DashboardScreen() {
         onCancel={() => setLockNowSheet({ visible: false, policy: null })}
         onLocked={handleLockNowConfirmed}
       />
+      <Modal
+        visible={needsAccessibilityDisclosure}
+        animationType="slide"
+        presentationStyle="fullScreen"
+      >
+        <AccessibilityDisclosureScreen
+          onComplete={onAccessibilityDisclosureComplete}
+          onDecline={onAccessibilityDisclosureDecline}
+        />
+      </Modal>
 
       <ScrollView
         contentContainerStyle={styles.scrollContent}

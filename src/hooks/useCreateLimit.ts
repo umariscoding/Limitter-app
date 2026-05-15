@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { createPolicyAPI } from '../services/policyService';
 import { showAlert } from '../components/AppAlert';
 import { enforceDailyLimitMinutes, invalidatePlanCache } from '../services/planGuardService';
@@ -18,6 +18,7 @@ import {
   isValidHHMM,
   validateUntilTimestamp,
 } from '../utils/timeWindow';
+import { checkPermissions } from '../services/permissionsService';
 
 export interface CreateLimitState {
   targetType: 'app' | 'category' | 'website';
@@ -49,6 +50,8 @@ export function useCreateLimit(
   setLoading: (v: boolean) => void,
 ) {
   const [isCreating, setIsCreating] = useState(false);
+  const [needsAccessibilityDisclosure, setNeedsAccessibilityDisclosure] = useState(false);
+  const pendingWebsiteStateRef = React.useRef<CreateLimitState | null>(null);
 
   const createLimit = async (state: CreateLimitState) => {
     if (!uid) {
@@ -130,6 +133,15 @@ export function useCreateLimit(
     if (!Number.isFinite(totalSeconds) || totalSeconds < 60) {
       showAlert('Validation', 'Minimum limit is 1 minute (60 seconds)');
       return false;
+    }
+
+    if (targetType === 'website') {
+      const perms = await checkPermissions();
+      if (!perms.accessibility) {
+        pendingWebsiteStateRef.current = state;
+        setNeedsAccessibilityDisclosure(true);
+        return false;
+      }
     }
 
     setIsCreating(true);
@@ -224,5 +236,25 @@ export function useCreateLimit(
     }
   };
 
-  return { createLimit, isCreating };
+  const onAccessibilityDisclosureComplete = async (granted: boolean) => {
+    setNeedsAccessibilityDisclosure(false);
+    const pending = pendingWebsiteStateRef.current;
+    pendingWebsiteStateRef.current = null;
+    if (granted && pending) {
+      await createLimit(pending);
+    }
+  };
+
+  const onAccessibilityDisclosureDecline = () => {
+    setNeedsAccessibilityDisclosure(false);
+    pendingWebsiteStateRef.current = null;
+  };
+
+  return {
+    createLimit,
+    isCreating,
+    needsAccessibilityDisclosure,
+    onAccessibilityDisclosureComplete,
+    onAccessibilityDisclosureDecline,
+  };
 }
