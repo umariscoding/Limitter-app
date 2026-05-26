@@ -5,11 +5,11 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft, Zap, Clock, FileText } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
@@ -106,11 +106,9 @@ export default function OverrideLogsScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       <View style={s.header}>
-        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
-          <ChevronLeft size={22} color="#0F172A" />
-        </TouchableOpacity>
+        <HamburgerButton onPress={() => setDrawerOpen(true)} color="#0F172A" />
         <Text style={s.headerTitle}>Overrides</Text>
-        <HamburgerButton onPress={() => setDrawerOpen(true)} />
+        <View style={{ width: 32 }} />
       </View>
 
       <ScrollView
@@ -224,7 +222,7 @@ export default function OverrideLogsScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F1F5F9' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingTop: 24, paddingBottom: 14, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   backBtn: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' },
   headerTitle: { fontSize: 17, fontWeight: '700', color: '#0F172A' },
   scrollContent: { padding: 20 },

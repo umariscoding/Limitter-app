@@ -51,11 +51,9 @@ export default function AddContentScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <ArrowLeft size={24} color="#0F172A" />
-        </TouchableOpacity>
+        <HamburgerButton onPress={() => setDrawerOpen(true)} color="#0F172A" />
         <Text style={styles.headerTitle}>{addContentLabels.headerTitle}</Text>
-        <HamburgerButton onPress={() => setDrawerOpen(true)} />
+        <View style={{ width: 32 }} />
       </View>
 
       {/* Content */}
@@ -98,9 +96,8 @@ const styles = StyleSheet.create({
   header: {
     flexDirection: 'row',
     alignItems: 'center',
-    paddingHorizontal: 20,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
-    paddingBottom: 15,
+    paddingHorizontal: 16,
+    paddingVertical: 14,
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
     backgroundColor: '#FFFFFF',
@@ -115,7 +112,7 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   headerTitle: {
-    fontSize: 20,
+    fontSize: 17,
     fontWeight: '700',
     color: '#0F172A',
     flex: 1,

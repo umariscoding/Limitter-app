@@ -3,11 +3,11 @@ import {
   View,
   Text,
   StyleSheet,
-  SafeAreaView,
   TouchableOpacity,
   ScrollView,
   RefreshControl,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft } from 'lucide-react-native';
 import { usePolicyContext } from '../context/PolicyContext';
@@ -59,11 +59,9 @@ export default function DailyLimitsGraphScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <ChevronLeft size={24} color="#0F172A" />
-        </TouchableOpacity>
+        <HamburgerButton onPress={() => setDrawerOpen(true)} color="#0F172A" />
         <Text style={styles.title}>Daily Time Limits Graph</Text>
-        <HamburgerButton onPress={() => setDrawerOpen(true)} />
+        <View style={{ width: 32 }} />
       </View>
 
       <ScrollView
@@ -123,13 +121,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     paddingHorizontal: 16,
-    paddingVertical: 12,
+    paddingVertical: 14,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
   },
   backButton: { padding: 8 },
-  title: { flex: 1, textAlign: 'center', fontSize: 18, fontWeight: '700', color: '#0F172A' },
+  title: { flex: 1, textAlign: 'center', fontSize: 17, fontWeight: '700', color: '#0F172A' },
   headerSpacer: { width: 40 },
   content: { padding: 16 },
   centerWrap: { marginTop: 60, alignItems: 'center' },

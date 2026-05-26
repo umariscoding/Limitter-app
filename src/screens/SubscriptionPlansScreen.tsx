@@ -5,12 +5,12 @@ import {
   StyleSheet,
   TouchableOpacity,
   ScrollView,
-  SafeAreaView,
   StatusBar,
   ActivityIndicator,
   Keyboard,
   Platform,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft, Check, X, Zap, Shield, ShieldCheck, ChevronRight } from 'lucide-react-native';
@@ -110,11 +110,9 @@ export default function SubscriptionPlansScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
 
       <View style={s.header}>
-        <TouchableOpacity style={s.backBtn} onPress={() => navigation.goBack()}>
-          <ChevronLeft size={22} color="#0F172A" />
-        </TouchableOpacity>
+        <HamburgerButton onPress={() => setDrawerOpen(true)} color="#0F172A" />
         <Text style={s.headerTitle}>Choose Your Plan</Text>
-        <HamburgerButton onPress={() => setDrawerOpen(true)} />
+        <View style={{ width: 32 }} />
       </View>
 
       <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>

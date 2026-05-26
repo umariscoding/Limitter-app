@@ -46,14 +46,9 @@ export default function ActivityScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
-        <HamburgerButton onPress={() => setDrawerOpen(true)} />
-        <View>
-          <Text style={styles.title}>Complete Activity</Text>
-          <Text style={styles.subtitle}>{limits.length} total limits</Text>
-        </View>
-        <TouchableOpacity style={styles.backBtn} onPress={() => navigation.goBack()}>
-          <Text style={styles.backBtnText}>Back</Text>
-        </TouchableOpacity>
+        <HamburgerButton onPress={() => setDrawerOpen(true)} color="#0F172A" />
+        <Text style={styles.title}>Complete Activity</Text>
+        <View style={{ width: 32 }} />
       </View>
 
       <ScrollView
@@ -106,8 +101,8 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFFFFF',
   },
   title: {
-    fontSize: 22,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#0F172A',
   },
   subtitle: {

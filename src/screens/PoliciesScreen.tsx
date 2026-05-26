@@ -338,14 +338,9 @@ export default function PoliciesScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
       <View style={s.header}>
-        <HamburgerButton onPress={() => setDrawerOpen(true)} />
-        <View>
-          <Text style={s.headerTitle}>My Limits</Text>
-          <Text style={s.headerSub}>{policies.length} active limit{policies.length !== 1 ? 's' : ''}</Text>
-        </View>
-        <TouchableOpacity style={s.headerBtn} onPress={() => navigation.navigate('DashboardScreen')}>
-          <Home size={20} color="#0F172A" />
-        </TouchableOpacity>
+        <HamburgerButton onPress={() => setDrawerOpen(true)} color="#0F172A" />
+        <Text style={s.headerTitle}>My Limits</Text>
+        <View style={{ width: 32 }} />
       </View>
 
       {loading ? (
@@ -492,8 +487,8 @@ export default function PoliciesScreen() {
 
 const s = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F8FAFC' },
-  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 20, paddingTop: 8, paddingBottom: 16 },
-  headerTitle: { fontSize: 24, fontWeight: '900', color: '#0F172A' },
+  header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', backgroundColor: '#FFFFFF' },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: '#0F172A' },
   headerSub: { fontSize: 13, color: '#94A3B8', marginTop: 2 },
   headerBtn: { width: 42, height: 42, borderRadius: 12, backgroundColor: '#FFF', borderWidth: 1, borderColor: '#E2E8F0', alignItems: 'center', justifyContent: 'center' },
   card: { backgroundColor: '#FFFFFF', borderRadius: 16, marginHorizontal: 16, marginBottom: 12, shadowColor: '#0F172A', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.06, shadowRadius: 8, elevation: 3 },

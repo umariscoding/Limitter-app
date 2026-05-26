@@ -4,7 +4,6 @@ import {
   Text,
   StyleSheet,
   TouchableOpacity,
-  SafeAreaView,
   StatusBar,
   ScrollView,
   ActivityIndicator,
@@ -12,6 +11,7 @@ import {
   Modal,
   TextInput,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { useUser } from '../context/UserContext';
@@ -151,7 +151,7 @@ export default function SettingsScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
       <View style={styles.header}>
-        <HamburgerButton onPress={() => setDrawerOpen(true)} />
+        <HamburgerButton onPress={() => setDrawerOpen(true)} color="#0F172A" />
         <Text style={styles.headerTitle}>Settings</Text>
         <View style={{ width: 32 }} />
       </View>
@@ -305,8 +305,8 @@ export default function SettingsScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F1F5F9' },
-  header: { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingVertical: 40, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', alignItems: 'center', justifyContent: 'space-between' },
-  headerTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
+  header: { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingVertical: 14, paddingHorizontal: 16, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', alignItems: 'center', justifyContent: 'space-between' },
+  headerTitle: { fontSize: 17, fontWeight: '700', color: '#0F172A' },
   scrollContent: { padding: 20 },
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 },
 

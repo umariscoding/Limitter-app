@@ -291,7 +291,7 @@ export default function DashboardScreen() {
         <LinearGradient colors={['#10B981', '#059669', '#0F172A']} style={styles.headerGradient}>
           <View style={styles.headerRow}>
             <HamburgerButton onPress={() => setDrawerOpen(true)} />
-            <View>
+            <View style={{ flex: 1, marginLeft: 12 }}>
               <Text style={styles.greeting}>Welcome back,</Text>
               <Text style={styles.userName}>{user?.name || 'User'}</Text>
             </View>
@@ -429,7 +429,7 @@ const styles = StyleSheet.create({
   scrollContent: { paddingBottom: 20 },
 
   headerGradient: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
-  headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },
+  headerRow: { flexDirection: 'row', alignItems: 'center', marginBottom: 20 },
   greeting: { fontSize: 14, color: 'rgba(255,255,255,0.7)', fontWeight: '500' },
   userName: { fontSize: 24, fontWeight: '800', color: '#FFFFFF', marginTop: 2 },
 

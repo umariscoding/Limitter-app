@@ -1,5 +1,6 @@
 import React, { useRef, useMemo, useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, StatusBar, Platform } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, StatusBar, Platform } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft } from 'lucide-react-native';
 import { useUsageContext } from '../context/UsageContext';
@@ -55,11 +56,9 @@ export default function UsageScreen() {
     <SafeAreaView style={styles.container}>
       <StatusBar barStyle="dark-content" backgroundColor="#FFFFFF" />
       <View style={styles.header}>
-        <TouchableOpacity style={styles.backButton} onPress={() => navigation.goBack()}>
-          <ChevronLeft size={24} color="#0F172A" />
-        </TouchableOpacity>
+        <HamburgerButton onPress={() => setDrawerOpen(true)} color="#0F172A" />
         <Text style={styles.headerTitle}>Usage</Text>
-        <HamburgerButton onPress={() => setDrawerOpen(true)} />
+        <View style={{ width: 32 }} />
       </View>
 
       <View style={styles.content}>
@@ -84,8 +83,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'android' ? (StatusBar.currentHeight || 0) + 12 : 12,
-    paddingBottom: 12,
+    paddingVertical: 14,
     backgroundColor: '#FFFFFF',
     borderBottomWidth: 1,
     borderBottomColor: '#E2E8F0',
@@ -102,8 +100,8 @@ const styles = StyleSheet.create({
     width: 40,
   },
   headerTitle: {
-    fontSize: 18,
-    fontWeight: '800',
+    fontSize: 17,
+    fontWeight: '700',
     color: '#0F172A',
   },
   content: {
