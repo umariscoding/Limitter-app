@@ -1,5 +1,6 @@
 import React from "react";
 import { Linking, View, Text, TouchableOpacity, ActivityIndicator, StyleSheet } from "react-native";
+import { SafeAreaProvider } from "react-native-safe-area-context";
 import {
   NavigationContainer,
   createNavigationContainerRef,
@@ -332,15 +333,17 @@ function AppInner(): React.JSX.Element {
 
 function App(): React.JSX.Element {
   return (
-    <AppAlertProvider>
-      <UserContextProvider>
-        <UsageContextProvider>
-          <PolicyContextProvider>
-            <AppInner />
-          </PolicyContextProvider>
-        </UsageContextProvider>
-      </UserContextProvider>
-    </AppAlertProvider>
+    <SafeAreaProvider>
+      <AppAlertProvider>
+        <UserContextProvider>
+          <UsageContextProvider>
+            <PolicyContextProvider>
+              <AppInner />
+            </PolicyContextProvider>
+          </UsageContextProvider>
+        </UserContextProvider>
+      </AppAlertProvider>
+    </SafeAreaProvider>
   );
 }
 

@@ -168,7 +168,7 @@ export default function ConfirmOverrideScreen() {
               ...(isUnlimited
                 ? [{ label: 'Overrides', value: 'Unlimited', color: '#10B981' }]
                 : [
-                    ...(balance.freeOverridesPerMonth != null && balance.freeOverridesPerMonth > 0 ? [{ label: 'Plan credits', value: `${balance.freeRemaining} / ${balance.freeOverridesPerMonth}` }] : []),
+                    ...(balance.freeOverridesPerMonth > 0 ? [{ label: 'Plan credits', value: `${balance.freeRemaining} / ${balance.freeOverridesPerMonth}` }] : []),
                     ...(balance.grantedCredits > 0 ? [{ label: 'Purchased', value: `${balance.grantedRemaining} / ${balance.grantedCredits}` }] : []),
                     { label: 'Total available', value: String(totalAvailable), color: totalAvailable > 0 ? '#10B981' : '#EF4444' },
                   ]),

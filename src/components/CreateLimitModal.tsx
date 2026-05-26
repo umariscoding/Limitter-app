@@ -17,9 +17,9 @@ import TimeOfDayPicker from './TimeOfDayPicker';
 import { formatHHMMtoAMPM } from '../utils/timeWindow';
 interface PlanLimitsData {
   planCode: string;
-  maxPolicies: number | null;
+  maxPolicies: number;
   currentPolicies: number;
-  policiesRemaining: number | null;
+  policiesRemaining: number;
   customTimers: boolean;
 }
 
@@ -133,7 +133,7 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
         <View style={s.card}>
           <View style={s.titleRow}>
             <Text style={s.title}>Create Limit</Text>
-            {planLimits?.maxPolicies !== null && planLimits?.maxPolicies !== undefined && (
+            {planLimits?.maxPolicies !== -1 && planLimits?.maxPolicies !== undefined && (
               <Text style={s.limitCounter}>
                 {planLimits.currentPolicies}/{planLimits.maxPolicies}
               </Text>

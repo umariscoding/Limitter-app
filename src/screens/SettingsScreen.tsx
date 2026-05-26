@@ -42,7 +42,7 @@ interface ProfileData {
   subscription: any;
   devices: { count: number; max: number | null; list: Array<{ deviceId: string; deviceName: string; platform: string }> };
   overrides: { freeRemaining: number; grantedRemaining: number; totalAvailable: number; totalUsedThisMonth: number; freeOverridesPerMonth: number };
-  planLimits: { maxPolicies: number | null; currentPolicies: number; customTimers: boolean };
+  planLimits: { maxPolicies: number; currentPolicies: number; customTimers: boolean };
 }
 
 const PLAN_COLORS: Record<string, [string, string]> = {
@@ -212,12 +212,12 @@ export default function SettingsScreen() {
               </View>
               <View style={styles.statBox}>
                 <Smartphone size={18} color="#3B82F6" />
-                <Text style={styles.statValue}>{profile.devices.count}/{profile.devices.max ?? '\u221E'}</Text>
+                <Text style={styles.statValue}>{profile.devices.count}/{profile.devices.max === -1 ? '\u221E' : profile.devices.max}</Text>
                 <Text style={styles.statLabel}>Devices</Text>
               </View>
               <TouchableOpacity style={styles.statBox} onPress={() => navigation.navigate('OverrideLogsScreen')} activeOpacity={0.8}>
                 <Zap size={18} color="#F59E0B" />
-                <Text style={styles.statValue}>{profile.overrides.freeOverridesPerMonth >= 9999 ? '\u221E' : profile.overrides.totalAvailable}</Text>
+                <Text style={styles.statValue}>{profile.overrides.freeOverridesPerMonth === -1 ? '\u221E' : profile.overrides.totalAvailable}</Text>
                 <Text style={styles.statLabel}>Overrides</Text>
               </TouchableOpacity>
             </View>

@@ -38,7 +38,7 @@ interface ProfileData {
     max: number | null;
     list: Array<{ deviceId: string; deviceName: string; platform: string; lastSeenAt: any }>;
   };
-  planLimits: { maxPolicies: number | null; currentPolicies: number; customTimers: boolean };
+  planLimits: { maxPolicies: number; currentPolicies: number; customTimers: boolean };
   overrides: { totalAvailable: number; freeOverridesPerMonth: number };
 }
 
@@ -72,8 +72,8 @@ export default function ControlPlansScreen() {
   const planCode = profile?.account.planCode || 'free';
   const planColors = PLAN_COLORS[planCode] || PLAN_COLORS.free;
   const deviceCount = profile?.devices.count || 0;
-  const deviceMax = profile?.devices.max ?? null;
-  const devicePct = deviceMax != null ? Math.min(100, (deviceCount / deviceMax) * 100) : 0;
+  const deviceMax = profile?.devices.max ?? -1;
+  const devicePct = deviceMax !== -1 ? Math.min(100, (deviceCount / deviceMax) * 100) : 0;
 
   const getDeviceIcon = (platform: string) => {
     const p = platform.toLowerCase();
@@ -124,17 +124,17 @@ export default function ControlPlansScreen() {
               <View style={s.planStatsRow}>
                 <View style={s.planStat}>
                   <Shield size={14} color="rgba(255,255,255,0.7)" />
-                  <Text style={s.planStatValue}>{profile.planLimits.maxPolicies != null ? `${profile.planLimits.currentPolicies}/${profile.planLimits.maxPolicies}` : `${profile.planLimits.currentPolicies}`}</Text>
+                  <Text style={s.planStatValue}>{profile.planLimits.maxPolicies !== -1 ? `${profile.planLimits.currentPolicies}/${profile.planLimits.maxPolicies}` : `${profile.planLimits.currentPolicies}`}</Text>
                   <Text style={s.planStatLabel}>Limits</Text>
                 </View>
                 <View style={s.planStat}>
                   <Smartphone size={14} color="rgba(255,255,255,0.7)" />
-                  <Text style={s.planStatValue}>{deviceCount}/{deviceMax ?? '\u221E'}</Text>
+                  <Text style={s.planStatValue}>{deviceCount}/{deviceMax === -1 ? '\u221E' : deviceMax}</Text>
                   <Text style={s.planStatLabel}>Devices</Text>
                 </View>
                 <View style={s.planStat}>
                   <Zap size={14} color="rgba(255,255,255,0.7)" />
-                  <Text style={s.planStatValue}>{profile.overrides.freeOverridesPerMonth >= 9999 ? '\u221E' : profile.overrides.totalAvailable}</Text>
+                  <Text style={s.planStatValue}>{profile.overrides.freeOverridesPerMonth === -1 ? '\u221E' : profile.overrides.totalAvailable}</Text>
                   <Text style={s.planStatLabel}>Overrides</Text>
                 </View>
               </View>
@@ -144,9 +144,9 @@ export default function ControlPlansScreen() {
             <View style={s.card}>
               <View style={s.quotaRow}>
                 <Text style={s.quotaLabel}>Used</Text>
-                <Text style={s.quotaValue}>{deviceCount} / {deviceMax ?? '\u221E'}</Text>
+                <Text style={s.quotaValue}>{deviceCount} / {deviceMax === -1 ? '\u221E' : deviceMax}</Text>
               </View>
-              {deviceMax != null && (
+              {deviceMax !== -1 && (
                 <View style={s.progressTrack}>
                   <LinearGradient
                     colors={devicePct >= 100 ? ['#EF4444', '#DC2626'] : ['#10B981', '#34D399']}
@@ -157,7 +157,7 @@ export default function ControlPlansScreen() {
                 </View>
               )}
               <Text style={s.quotaHint}>
-                {deviceMax == null
+                {deviceMax === -1
                   ? 'Unlimited devices'
                   : deviceMax - deviceCount > 0
                     ? `${deviceMax - deviceCount} slot${deviceMax - deviceCount > 1 ? 's' : ''} remaining`

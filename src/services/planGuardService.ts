@@ -3,9 +3,9 @@ import axiosService from "./axiosService";
 
 export interface PlanLimits {
   planCode: string;
-  maxPolicies: number | null;
+  maxPolicies: number;
   currentPolicies: number;
-  policiesRemaining: number | null;
+  policiesRemaining: number;
   maxDevices: number;
   currentDevices: number;
   devicesRemaining: number;
@@ -44,7 +44,7 @@ export const canCreatePolicy = async (): Promise<{
 }> => {
   const limits = await getPlanLimits();
 
-  if (limits.maxPolicies !== null && limits.policiesRemaining !== null && limits.policiesRemaining <= 0) {
+  if (limits.maxPolicies !== -1 && limits.policiesRemaining !== -1 && limits.policiesRemaining <= 0) {
     return {
       allowed: false,
       reason: `Your ${limits.planCode.toUpperCase()} plan allows ${limits.maxPolicies} limits. Upgrade for more.`,
@@ -62,7 +62,7 @@ export const canRegisterDevice = async (): Promise<{
 }> => {
   const limits = await getPlanLimits();
 
-  if (limits.devicesRemaining <= 0) {
+  if (limits.devicesRemaining !== -1 && limits.devicesRemaining <= 0) {
     return {
       allowed: false,
       reason: `Your ${limits.planCode.toUpperCase()} plan allows ${limits.maxDevices} device${limits.maxDevices > 1 ? 's' : ''}. Upgrade for more.`,

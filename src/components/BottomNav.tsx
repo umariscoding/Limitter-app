@@ -1,6 +1,7 @@
 import React from 'react';
-import { View, TouchableOpacity, Text, StyleSheet, Platform } from 'react-native';
+import { View, TouchableOpacity, Text, StyleSheet } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Home, Shield, BarChart2, Settings as SettingsIcon } from 'lucide-react-native';
 import { FileText } from 'lucide-react-native';
 type ActiveTab = 'home' | 'limits' | 'analytics' | 'settings' | 'overrides';
@@ -30,9 +31,10 @@ const INACTIVE_COLOR = '#000000';
 
 export default function BottomNav({ active }: BottomNavProps) {
   const navigation = useNavigation<any>();
+  const insets = useSafeAreaInsets();
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { paddingBottom: Math.max(insets.bottom, 8) }]}>
       {TABS.map(tab => {
         const isActive = tab.key === active;
         const color = isActive ? ACTIVE_COLOR : INACTIVE_COLOR;
@@ -68,7 +70,7 @@ const styles = StyleSheet.create({
     bottom: 0,
     left: 0,
     right: 0,
-    paddingBottom: Platform.OS === 'ios' ? 28 : 12,
+    paddingBottom: 8,
     shadowColor: '#000',
     shadowOffset: { width: 0, height: -2 },
     shadowOpacity: 0.04,
