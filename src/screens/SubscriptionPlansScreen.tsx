@@ -18,7 +18,8 @@ import { subscriptionPlans } from '../data/appData';
 import { useUser } from '../context/UserContext';
 import { useBilling, PlanCode, BillingCycle } from '../hooks/useBilling';
 import { normalizePlan } from '../utils/planRules';
-import BottomNav from '../components/BottomNav';
+import SideDrawer from '../components/SideDrawer';
+import HamburgerButton from '../components/HamburgerButton';
 import { showAlert } from '../components/AppAlert';
 
 const PLAN_GRADIENTS: Record<string, [string, string]> = {
@@ -51,6 +52,7 @@ export default function SubscriptionPlansScreen() {
   const { buyPlan, connected } = useBilling();
   const currentUserPlan = normalizePlan(user?.plan);
 
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [selectedPlanId, setSelectedPlanId] = useState(planIdForUserPlan(user?.plan || ''));
   const [cycleByPlan, setCycleByPlan] = useState<Record<string, BillingCycle>>({
     '2': 'monthly',
@@ -112,7 +114,7 @@ export default function SubscriptionPlansScreen() {
           <ChevronLeft size={22} color="#0F172A" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Choose Your Plan</Text>
-        <View style={{ width: 40 }} />
+        <HamburgerButton onPress={() => setDrawerOpen(true)} />
       </View>
 
       <ScrollView contentContainerStyle={s.scrollContent} showsVerticalScrollIndicator={false}>
@@ -218,7 +220,7 @@ export default function SubscriptionPlansScreen() {
           <Text style={s.trustText}>Managed by Google Play</Text>
         </View>
 
-        <View style={{ height: 180 }} />
+        <View style={{ height: 20 }} />
       </ScrollView>
 
       <View style={s.footer}>
@@ -251,7 +253,7 @@ export default function SubscriptionPlansScreen() {
         </View>
       </View>
 
-      <BottomNav active="settings" />
+      <SideDrawer visible={drawerOpen} active="settings" onClose={() => setDrawerOpen(false)} />
     </SafeAreaView>
   );
 }

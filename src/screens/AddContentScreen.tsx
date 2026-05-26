@@ -10,7 +10,8 @@ import {
   TrendingUp,
   ArrowLeft
 } from 'lucide-react-native';
-import BottomNav from '../components/BottomNav';
+import SideDrawer from '../components/SideDrawer';
+import HamburgerButton from '../components/HamburgerButton';
 
 type ContentItem = {
   id: string;
@@ -22,6 +23,7 @@ type ContentItem = {
 
 export default function AddContentScreen() {
   const navigation = useNavigation<any>();
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const [contentList, setContentList] = useState<ContentItem[]>(managedContent);
 
@@ -53,7 +55,7 @@ export default function AddContentScreen() {
           <ArrowLeft size={24} color="#0F172A" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>{addContentLabels.headerTitle}</Text>
-        <View style={styles.headerSpacer} />
+        <HamburgerButton onPress={() => setDrawerOpen(true)} />
       </View>
 
       {/* Content */}
@@ -81,9 +83,9 @@ export default function AddContentScreen() {
         <TouchableOpacity style={[styles.addButton, styles.addButtonDisabled]} disabled activeOpacity={0.6}>
           <Text style={styles.addButtonText}>{addContentLabels.addNew} (Coming Soon)</Text>
         </TouchableOpacity>
-        <View style={{ height: 80 }} />
+        <View style={{ height: 20 }} />
       </ScrollView>
-      <BottomNav active="home" />
+      <SideDrawer visible={drawerOpen} active="home" onClose={() => setDrawerOpen(false)} />
     </SafeAreaView>
   );
 }

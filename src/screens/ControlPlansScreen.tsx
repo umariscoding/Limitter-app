@@ -28,7 +28,8 @@ import {
 import { useUser } from '../context/UserContext';
 import axiosService from '../services/axiosService';
 import { API } from '../config/config';
-import BottomNav from '../components/BottomNav';
+import SideDrawer from '../components/SideDrawer';
+import HamburgerButton from '../components/HamburgerButton';
 import { formatPlanName } from '../utils/planRules';
 
 interface ProfileData {
@@ -52,6 +53,7 @@ const PLAN_COLORS: Record<string, [string, string]> = {
 export default function ControlPlansScreen() {
   const navigation = useNavigation<any>();
   const { user } = useUser();
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [profile, setProfile] = useState<ProfileData | null>(null);
   const [loading, setLoading] = useState(true);
   const [refreshing, setRefreshing] = useState(false);
@@ -92,7 +94,7 @@ export default function ControlPlansScreen() {
           <ChevronLeft size={22} color="#0F172A" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Devices & Plan</Text>
-        <View style={{ width: 40 }} />
+        <HamburgerButton onPress={() => setDrawerOpen(true)} />
       </View>
 
       <ScrollView
@@ -208,7 +210,7 @@ export default function ControlPlansScreen() {
               <ChevronRight size={18} color="#CBD5E1" />
             </TouchableOpacity>
 
-            <View style={{ height: 100 }} />
+            <View style={{ height: 20 }} />
           </>
         ) : (
           <View style={s.loadingWrap}>
@@ -217,7 +219,7 @@ export default function ControlPlansScreen() {
         )}
       </ScrollView>
 
-      <BottomNav active="settings" />
+      <SideDrawer visible={drawerOpen} active="settings" onClose={() => setDrawerOpen(false)} />
     </SafeAreaView>
   );
 }

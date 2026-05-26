@@ -21,7 +21,8 @@ import { updateBlockedApps, stopAllTimers } from '../services/appBlockerService'
 import { flushPendingUsage } from '../hooks/useUsageReporter';
 import axiosService from '../services/axiosService';
 import { API } from '../config/config';
-import BottomNav from '../components/BottomNav';
+import SideDrawer from '../components/SideDrawer';
+import HamburgerButton from '../components/HamburgerButton';
 import { showAlert } from '../components/AppAlert';
 import { formatPlanName } from '../utils/planRules';
 import {
@@ -62,6 +63,7 @@ export default function SettingsScreen() {
   const [showEditName, setShowEditName] = useState(false);
   const [editNameValue, setEditNameValue] = useState('');
   const [savingName, setSavingName] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const fetchProfile = async () => {
     try {
@@ -149,7 +151,9 @@ export default function SettingsScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
       <View style={styles.header}>
+        <HamburgerButton onPress={() => setDrawerOpen(true)} />
         <Text style={styles.headerTitle}>Settings</Text>
+        <View style={{ width: 32 }} />
       </View>
 
       <Modal visible={showEditName} transparent animationType="fade" onRequestClose={() => setShowEditName(false)}>
@@ -282,7 +286,7 @@ export default function SettingsScreen() {
               <Text style={styles.signOutText}>Sign Out</Text>
             </TouchableOpacity>
 
-            <View style={{ height: 100 }} />
+            <View style={{ height: 20 }} />
           </>
         ) : (
           <View style={styles.loadingWrap}>
@@ -294,14 +298,14 @@ export default function SettingsScreen() {
         )}
       </ScrollView>
 
-      <BottomNav active="settings" />
+      <SideDrawer visible={drawerOpen} active="settings" onClose={() => setDrawerOpen(false)} />
     </SafeAreaView>
   );
 }
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F1F5F9' },
-  header: { backgroundColor: '#FFFFFF', paddingVertical: 40, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', alignItems: 'center' },
+  header: { flexDirection: 'row', backgroundColor: '#FFFFFF', paddingVertical: 40, paddingHorizontal: 20, borderBottomWidth: 1, borderBottomColor: '#F1F5F9', alignItems: 'center', justifyContent: 'space-between' },
   headerTitle: { fontSize: 18, fontWeight: '800', color: '#0F172A' },
   scrollContent: { padding: 20 },
   loadingWrap: { flex: 1, justifyContent: 'center', alignItems: 'center', paddingTop: 60 },

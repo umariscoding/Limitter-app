@@ -13,7 +13,8 @@ import {
 import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft, Zap, Clock, FileText } from 'lucide-react-native';
 import { LinearGradient } from 'expo-linear-gradient';
-import BottomNav from '../components/BottomNav';
+import SideDrawer from '../components/SideDrawer';
+import HamburgerButton from '../components/HamburgerButton';
 import {
   getOverrideHistoryAPI,
   getOverrideBalanceAPI,
@@ -23,6 +24,7 @@ import {
 
 export default function OverrideLogsScreen() {
   const navigation = useNavigation<any>();
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [balance, setBalance] = useState<OverrideBalanceResponse | null>(null);
   const [logs, setLogs] = useState<OverrideRecordResponse[]>([]);
   const [loading, setLoading] = useState(true);
@@ -108,7 +110,7 @@ export default function OverrideLogsScreen() {
           <ChevronLeft size={22} color="#0F172A" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Overrides</Text>
-        <View style={{ width: 40 }} />
+        <HamburgerButton onPress={() => setDrawerOpen(true)} />
       </View>
 
       <ScrollView
@@ -210,12 +212,12 @@ export default function OverrideLogsScreen() {
               ))
             )}
 
-            <View style={{ height: 100 }} />
+            <View style={{ height: 20 }} />
           </>
         )}
       </ScrollView>
 
-      <BottomNav active="overrides" />
+      <SideDrawer visible={drawerOpen} active="overrides" onClose={() => setDrawerOpen(false)} />
     </SafeAreaView>
   );
 }

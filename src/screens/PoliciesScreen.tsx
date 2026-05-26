@@ -19,7 +19,8 @@ import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
 import { updatePolicyAPI, archivePolicyAPI, lockNowAPI } from '../services/policyService';
 import { invalidatePlanCache } from '../services/planGuardService';
-import BottomNav from '../components/BottomNav';
+import SideDrawer from '../components/SideDrawer';
+import HamburgerButton from '../components/HamburgerButton';
 import {
   Home,
   Globe,
@@ -64,6 +65,8 @@ export default function PoliciesScreen() {
   const [lockingPolicy, setLockingPolicy] = useState<UIPolicy | null>(null);
   const [lockError, setLockError] = useState<string | null>(null);
   const [lockLoading, setLockLoading] = useState(false);
+
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   const fetchRef = useRef(fetchPolicies);
   fetchRef.current = fetchPolicies;
@@ -335,6 +338,7 @@ export default function PoliciesScreen() {
       <StatusBar barStyle="dark-content" backgroundColor="#F8FAFC" />
 
       <View style={s.header}>
+        <HamburgerButton onPress={() => setDrawerOpen(true)} />
         <View>
           <Text style={s.headerTitle}>My Limits</Text>
           <Text style={s.headerSub}>{policies.length} active limit{policies.length !== 1 ? 's' : ''}</Text>
@@ -363,7 +367,7 @@ export default function PoliciesScreen() {
           data={policies}
           keyExtractor={(item) => item.id}
           renderItem={renderPolicy}
-          contentContainerStyle={{ paddingTop: 8, paddingBottom: 90 }}
+          contentContainerStyle={{ paddingTop: 8, paddingBottom: 20 }}
           refreshing={refreshing}
           onRefresh={() => { setRefreshing(true); fetchPolicies().finally(() => setRefreshing(false)); }}
           showsVerticalScrollIndicator={false}
@@ -481,7 +485,7 @@ export default function PoliciesScreen() {
         </KeyboardAvoidingView>
       </Modal>
 
-      <BottomNav active="limits" />
+      <SideDrawer visible={drawerOpen} active="limits" onClose={() => setDrawerOpen(false)} />
     </SafeAreaView>
   );
 }

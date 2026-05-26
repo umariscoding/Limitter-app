@@ -6,10 +6,12 @@ import { useUsageContext } from '../context/UsageContext';
 import { getWeeklyUsageAPI } from '../services/usageService';
 import { useUser } from '../context/UserContext';
 import { WeeklyUsageGraph } from '../components/WeeklyUsageGraph';
-import BottomNav from '../components/BottomNav';
+import SideDrawer from '../components/SideDrawer';
+import HamburgerButton from '../components/HamburgerButton';
 
 export default function UsageScreen() {
   const navigation = useNavigation<any>();
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const { user } = useUser();
   const { weeklyUsage, isLoadingWeekly, weeklyError, setWeeklyUsage, setIsLoadingWeekly, setWeeklyError } = useUsageContext();
   const [todayIndex, setTodayIndex] = useState(-1);
@@ -57,7 +59,7 @@ export default function UsageScreen() {
           <ChevronLeft size={24} color="#0F172A" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Usage</Text>
-        <View style={styles.rightSpace} />
+        <HamburgerButton onPress={() => setDrawerOpen(true)} />
       </View>
 
       <View style={styles.content}>
@@ -70,7 +72,7 @@ export default function UsageScreen() {
           onRefresh={handleRefresh}
         />
       </View>
-      <BottomNav active="analytics" />
+      <SideDrawer visible={drawerOpen} active="analytics" onClose={() => setDrawerOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -98,7 +100,6 @@ const styles = StyleSheet.create({
   },
   rightSpace: {
     width: 40,
-    height: 40,
   },
   headerTitle: {
     fontSize: 18,

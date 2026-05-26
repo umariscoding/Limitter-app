@@ -46,7 +46,8 @@ import { Toast } from '../../components';
 import CreateLimitModal from '../components/CreateLimitModal';
 import PolicyCard from '../components/PolicyCard';
 import LockNowSheet from '../components/LockNowSheet';
-import BottomNav from '../components/BottomNav';
+import SideDrawer from '../components/SideDrawer';
+import HamburgerButton from '../components/HamburgerButton';
 import type { UIPolicy } from '../utils/policyMapper';
 import { cleanupStaleMarkers } from '../services/lockPolicyNow';
 import AccessibilityDisclosureScreen from './AccessibilityDisclosureScreen';
@@ -61,6 +62,7 @@ export default function DashboardScreen() {
   const { fetchPolicies } = usePolicyFetcher();
   const { deviceId } = useDeviceResolver(user?.uid, clearUser);
 
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [showToast, setShowToast] = useState(false);
@@ -288,6 +290,7 @@ export default function DashboardScreen() {
       >
         <LinearGradient colors={['#10B981', '#059669', '#0F172A']} style={styles.headerGradient}>
           <View style={styles.headerRow}>
+            <HamburgerButton onPress={() => setDrawerOpen(true)} />
             <View>
               <Text style={styles.greeting}>Welcome back,</Text>
               <Text style={styles.userName}>{user?.name || 'User'}</Text>
@@ -414,7 +417,7 @@ export default function DashboardScreen() {
         </View>
       </ScrollView>
 
-      <BottomNav active="home" />
+      <SideDrawer visible={drawerOpen} active="home" onClose={() => setDrawerOpen(false)} />
     </SafeAreaView>
   );
 }
@@ -423,7 +426,7 @@ const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F1F5F9' },
   inlineLoader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 32, backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: '#E8ECF4' },
   inlineLoaderText: { color: '#64748B', fontSize: 14, fontWeight: '500' },
-  scrollContent: { paddingBottom: 100 },
+  scrollContent: { paddingBottom: 20 },
 
   headerGradient: { paddingHorizontal: 20, paddingTop: 16, paddingBottom: 24 },
   headerRow: { flexDirection: 'row', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 20 },

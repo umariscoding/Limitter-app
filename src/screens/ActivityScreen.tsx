@@ -12,7 +12,8 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
-import BottomNav from '../components/BottomNav';
+import SideDrawer from '../components/SideDrawer';
+import HamburgerButton from '../components/HamburgerButton';
 import { useNativeTimerSync } from '../hooks/useNativeTimerSync';
 import { formatLimitTime } from '../utils/policyMapper';
 
@@ -21,6 +22,7 @@ export default function ActivityScreen() {
   const { policies: limits, isLoading: loading, setPolicies: setLimits } = usePolicyContext();
   const { fetchPolicies } = usePolicyFetcher();
   const [refreshing, setRefreshing] = useState(false);
+  const [drawerOpen, setDrawerOpen] = useState(false);
 
   useNativeTimerSync(setLimits);
 
@@ -44,6 +46,7 @@ export default function ActivityScreen() {
   return (
     <SafeAreaView style={styles.container}>
       <View style={styles.header}>
+        <HamburgerButton onPress={() => setDrawerOpen(true)} />
         <View>
           <Text style={styles.title}>Complete Activity</Text>
           <Text style={styles.subtitle}>{limits.length} total limits</Text>
@@ -80,9 +83,9 @@ export default function ActivityScreen() {
             </View>
           ))
         )}
-        <View style={{ height: 80 }} />
+        <View style={{ height: 20 }} />
       </ScrollView>
-      <BottomNav active="home" />
+      <SideDrawer visible={drawerOpen} active="home" onClose={() => setDrawerOpen(false)} />
     </SafeAreaView>
   );
 }

@@ -9,7 +9,8 @@ import { usePolicyContext } from '../context/PolicyContext';
 import { WeeklyUsageGraph } from '../components/WeeklyUsageGraph';
 import { getWeeklyUsageAPI } from '../services/usageService';
 import { formatLimitTime } from '../utils/policyMapper';
-import BottomNav from '../components/BottomNav';
+import SideDrawer from '../components/SideDrawer';
+import HamburgerButton from '../components/HamburgerButton';
 
 interface BreakdownItem {
   id: string;
@@ -24,6 +25,7 @@ export default function AnalyticsScreen() {
   const { user } = useUser();
   const { weeklyUsage, isLoadingWeekly, weeklyError, setWeeklyUsage, setIsLoadingWeekly, setWeeklyError } = useUsageContext();
   const { policies } = usePolicyContext();
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const [refreshing, setRefreshing] = useState(false);
   const [todayIndex, setTodayIndex] = useState(-1);
 
@@ -94,7 +96,7 @@ export default function AnalyticsScreen() {
           <ChevronLeft size={22} color="#0F172A" />
         </TouchableOpacity>
         <Text style={s.headerTitle}>Analytics</Text>
-        <View style={{ width: 40 }} />
+        <HamburgerButton onPress={() => setDrawerOpen(true)} />
       </View>
 
       <ScrollView
@@ -152,10 +154,10 @@ export default function AnalyticsScreen() {
           })
         )}
 
-        <View style={{ height: 100 }} />
+        <View style={{ height: 20 }} />
       </ScrollView>
 
-      <BottomNav active="analytics" />
+      <SideDrawer visible={drawerOpen} active="analytics" onClose={() => setDrawerOpen(false)} />
     </SafeAreaView>
   );
 }

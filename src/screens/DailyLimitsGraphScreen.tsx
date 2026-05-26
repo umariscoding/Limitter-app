@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import {
   View,
   Text,
@@ -12,12 +12,14 @@ import { useNavigation } from '@react-navigation/native';
 import { ChevronLeft } from 'lucide-react-native';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
-import BottomNav from '../components/BottomNav';
+import SideDrawer from '../components/SideDrawer';
+import HamburgerButton from '../components/HamburgerButton';
 
 const BAR_COLORS = ['#4F46E5', '#0EA5E9', '#10B981', '#F59E0B', '#EF4444', '#14B8A6'];
 
 export default function DailyLimitsGraphScreen() {
   const navigation = useNavigation<any>();
+  const [drawerOpen, setDrawerOpen] = useState(false);
   const { policies, isLoading } = usePolicyContext();
   const { fetchPolicies } = usePolicyFetcher();
 
@@ -61,7 +63,7 @@ export default function DailyLimitsGraphScreen() {
           <ChevronLeft size={24} color="#0F172A" />
         </TouchableOpacity>
         <Text style={styles.title}>Daily Time Limits Graph</Text>
-        <View style={styles.headerSpacer} />
+        <HamburgerButton onPress={() => setDrawerOpen(true)} />
       </View>
 
       <ScrollView
@@ -108,9 +110,9 @@ export default function DailyLimitsGraphScreen() {
             ))}
           </>
         )}
-        <View style={{ height: 80 }} />
+        <View style={{ height: 20 }} />
       </ScrollView>
-      <BottomNav active="analytics" />
+      <SideDrawer visible={drawerOpen} active="analytics" onClose={() => setDrawerOpen(false)} />
     </SafeAreaView>
   );
 }
