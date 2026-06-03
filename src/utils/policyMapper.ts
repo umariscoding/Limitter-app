@@ -211,6 +211,20 @@ export function getPolicyPackageKey(item: any): string {
   return raw;
 }
 
+// Native blocker key for a policy. Apps block under their package key; websites
+// block under the "website:<domain>" key that the native timer store uses
+// (TimerStateManager keys website timers as "website:$domain"). Sending the raw
+// domain for a website makes the native BLOCK_APP lookup miss and silently
+// no-op — leaving the site accessible and still tracked. Returns null when the
+// policy has no usable identifier.
+export function resolveNativeBlockKey(
+  policy: Pick<UIPolicy, 'target_type' | 'app_name' | 'package_name' | 'packageName'>,
+): string | null {
+  const pkg = policy.app_name || policy.package_name || policy.packageName;
+  if (!pkg) return null;
+  return policy.target_type === 'website' ? getPolicyPackageKey(policy) : pkg;
+}
+
 export function normalizeNativePackageKey(pkg: string, targetType?: string): string {
   const raw = String(pkg || '').trim().toLowerCase();
   if (targetType === 'website') {

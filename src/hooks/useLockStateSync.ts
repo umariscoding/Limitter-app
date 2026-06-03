@@ -2,7 +2,7 @@ import { useEffect, useRef } from 'react';
 import { subscribeLockState, type LiveLockEvent } from '../services/timerRealtimeService';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from './usePolicyFetcher';
-import { getPolicyPackageKey, type UIPolicy } from '../utils/policyMapper';
+import { getPolicyPackageKey, resolveNativeBlockKey, type UIPolicy } from '../utils/policyMapper';
 import {
   grantTemporaryOverrideAccess,
   grantTemporaryWebsiteOverride,
@@ -190,9 +190,12 @@ export function useLockStateSync(accountId: string | undefined) {
           return key === raw || key === `website:${raw}` || key.replace(/^website:/, '') === raw;
         });
         if (matchingPolicy && !matchingPolicy.is_blocked) {
-          const pkg = matchingPolicy.app_name || matchingPolicy.package_name || matchingPolicy.packageName;
-          if (pkg) {
-            newlyBlocked.push({ package_name: pkg, app_name: pkg, blocked_until_timestamp: blockedUntil });
+          // Websites must be blocked under their "website:<domain>" native key,
+          // not the raw domain — otherwise BLOCK_APP finds no native timer and
+          // silently no-ops, leaving the site accessible and still tracked.
+          const nativeKey = resolveNativeBlockKey(matchingPolicy);
+          if (nativeKey) {
+            newlyBlocked.push({ package_name: nativeKey, app_name: nativeKey, blocked_until_timestamp: blockedUntil });
           }
         }
       }
