@@ -18,7 +18,7 @@ import { useUser } from '../context/UserContext';
 import { usePolicyContext } from '../context/PolicyContext';
 import { signOut, updateDisplayName, resetPassword } from '../auth/firebaseAuthService';
 import { updateBlockedApps, stopAllTimers } from '../services/appBlockerService';
-import { flushPendingUsage } from '../hooks/useUsageReporter';
+import { flushPendingUsage, flushNativeBlocks } from '../hooks/useUsageReporter';
 import axiosService from '../services/axiosService';
 import { API } from '../config/config';
 import SideDrawer from '../components/SideDrawer';
@@ -132,6 +132,13 @@ export default function SettingsScreen() {
             await flushPendingUsage(5000);
           } catch (err: any) {
             console.warn(`[SettingsScreen] usage flush on logout failed: ${err?.message || err}`);
+          }
+          // Persist any background website blocks to the server BEFORE wiping
+          // native state, so a blocked site stays blocked after signing back in.
+          try {
+            await flushNativeBlocks(5000);
+          } catch (err: any) {
+            console.warn(`[SettingsScreen] native-block flush on logout failed: ${err?.message || err}`);
           }
           await stopAllTimers();
           updateBlockedApps([]);

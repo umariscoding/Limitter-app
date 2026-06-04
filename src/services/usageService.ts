@@ -36,6 +36,7 @@ export const tickUsageAPI = async (data: {
   deltaSeconds: number;
   limitSeconds: number;
   targetKey: string;
+  isBlocked?: boolean;
 }): Promise<UsageTickResponse> => {
   return await axiosService.post<UsageTickResponse>(API.UsageTick, data);
 };

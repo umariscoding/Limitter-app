@@ -92,6 +92,9 @@ export default function PolicyCard({ limit, onOverride, onLockNow }: PolicyCardP
         <View style={s.titleWrap}>
           <Text style={s.name} numberOfLines={1}>{targetName}</Text>
           <Text style={s.typeLabel}>{typeLabel}</Text>
+          {limit.target_type === 'website' && (
+            <Text style={s.restrictedNote}>It is restricted only for this domain</Text>
+          )}
         </View>
         <View style={[s.statusBadge, badgeStyle]}>
           <View style={[s.statusDot, dotStyle]} />
@@ -183,6 +186,7 @@ const s = StyleSheet.create({
   titleWrap: { flex: 1 },
   name: { fontSize: 15, fontWeight: '700', color: '#0F172A' },
   typeLabel: { fontSize: 11, color: '#94A3B8', fontWeight: '500', marginTop: 1 },
+  restrictedNote: { fontSize: 10, color: '#10B981', fontWeight: '500', marginTop: 1, textDecorationLine: 'underline' },
   statusBadge: {
     flexDirection: 'row',
     alignItems: 'center',

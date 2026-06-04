@@ -1,0 +1,29 @@
+Starting project at E:\subhan-projects\limitter\Limitter-app
+Your Expo app does not have a 'userInterfaceStyle' setting which can to confusing color scheme behavior. Please set a 'userInterfaceStyle' to remove this warning (recommended 'automatic'). https://docs.expo.dev/develop/user-interface/color-themes
+Starting Metro Bundler
+
+warning: Bundler cache is empty, rebuilding (this may take a minute)
+Waiting on http://localhost:8088
+Logs for your project will appear below.
+Could not parse Expo config: android.googleServicesFile: "./android/app/google-services.json"
+Could not parse Expo config: android.googleServicesFile: "./android/app/google-services.json"
+Android .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android .\index.js ░░░░░░░░░░░░░░░░  4.0% ( 23/154)
+Android .\index.js ▓▓▓▓▓▓▓▓▓░░░░░░░ 58.1% (462/606)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓░░░░░░ 65.2% (626/807)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓░░░░ 79.1% (811/912)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 95.0% ( 972/1006)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.6% (1130/1132)
+[metro-file-map] Cache write error
+: Error: Data cannot be cloned, out of memory.
+    at serialize (node:v8:423:7)
+    at E:\subhan-projects\limitter\Limitter-app\node_modules\metro-file-map\src\cache\DiskCacheManager.js:82:30
+    at runNextTicks (node:internal/process/task_queues:65:5)
+    at processTimers (node:internal/timers:520:9)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.8% (1131/1132)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.8% (1380/2837)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.8% (2321/2837)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.8% (2947/2950)
+Android Bundling failed 69506ms index.js (2950 modules)
+ ERROR  DataCloneError: Data cannot be cloned, out of memory.
+    at new DOMException (node:internal/per_context/domexception:66:5)

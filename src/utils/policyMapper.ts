@@ -44,6 +44,22 @@ function humanizePackageName(packageName: string): string {
   return name.charAt(0).toUpperCase() + name.slice(1);
 }
 
+// Clean display name for a website target. Strips any "website:" prefix,
+// protocol, "www.", path, and the TLD/domain parts so a copied http/https
+// link (or a bare domain) renders as just the site name — e.g.
+// "https://www.geo.tv/x" → "Geo", "cnn.com" → "Cnn".
+function humanizeWebsiteName(target: string): string {
+  const cleaned = String(target || '')
+    .trim()
+    .toLowerCase()
+    .replace(/^website:/, '')
+    .replace(/^(https?:\/\/)?(www\.)?/, '')
+    .replace(/\/.*$/, '');
+  const namePart = cleaned.split('.')[0] || cleaned;
+  if (!namePart) return cleaned;
+  return namePart.charAt(0).toUpperCase() + namePart.slice(1);
+}
+
 export function mapPolicyToUI(item: any): UIPolicy {
   const p = item.policy || item;
   const state = item.policyState || {};
@@ -58,11 +74,13 @@ export function mapPolicyToUI(item: any): UIPolicy {
   if (isExhausted) status = 'blocked';
   else if (usedMinutes > 0) status = 'active';
 
-  const label = p.targetLabel && p.targetLabel !== p.targetKey
-    ? p.targetLabel
-    : p.type === 'app'
-      ? humanizePackageName(p.targetKey)
-      : p.targetLabel || p.targetKey;
+  const label = p.type === 'website'
+    ? humanizeWebsiteName(p.targetKey)
+    : p.targetLabel && p.targetLabel !== p.targetKey
+      ? p.targetLabel
+      : p.type === 'app'
+        ? humanizePackageName(p.targetKey)
+        : p.targetLabel || p.targetKey;
 
   return {
     id: p.policyId,

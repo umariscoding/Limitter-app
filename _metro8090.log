@@ -1,0 +1,114 @@
+Starting project at E:\subhan-projects\limitter\Limitter-app
+Your Expo app does not have a 'userInterfaceStyle' setting which can to confusing color scheme behavior. Please set a 'userInterfaceStyle' to remove this warning (recommended 'automatic'). https://docs.expo.dev/develop/user-interface/color-themes
+Starting Metro Bundler
+
+Waiting on http://localhost:8090
+Logs for your project will appear below.
+Could not parse Expo config: android.googleServicesFile: "./android/app/google-services.json"
+Could not parse Expo config: android.googleServicesFile: "./android/app/google-services.json"
+Android .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (2949/2950)
+Android .\index.js ▓▓▓▓▓▓▓▓▓▓▓▓▓▓▓░ 99.9% (2950/2950)
+Android Bundled 8719ms index.js (2950 modules)
+ WARN  The global process.env.EXPO_OS is not defined. This should be inlined by babel-preset-expo during transformation.
+ LOG  [UsageReporter] Tick success for 93613b3b-112e-4789-b0c2-a3322bed19b6 (target: website:wap.pk.infinixmobility.com). Total: 5/120
+Could not parse Expo config: android.googleServicesFile: "./android/app/google-services.json"
+Could not parse Expo config: android.googleServicesFile: "./android/app/google-services.json"
+Android .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 826ms index.js (1 module)
+ WARN  The global process.env.EXPO_OS is not defined. This should be inlined by babel-preset-expo during transformation.
+ LOG  [UsageReporter] Tick success for 6fbafd8d-7c96-4d87-85e1-565090ac65a0 (target: website:cnn.com). Total: 8/120
+ LOG  [UsageReporter] Flush success for 6fbafd8d-7c96-4d87-85e1-565090ac65a0
+ LOG  [UsageReporter] Tick success for 6fbafd8d-7c96-4d87-85e1-565090ac65a0 (target: website:cnn.com). Total: 29/120
+ LOG  [UsageReporter] Flush success for 6fbafd8d-7c96-4d87-85e1-565090ac65a0
+ LOG  [UsageReporter] Tick success for 6fbafd8d-7c96-4d87-85e1-565090ac65a0 (target: website:cnn.com). Total: 92/120
+ WARN  This method is deprecated (as well as all React Native Firebase namespaced API) and will be removed in the next major release as part of move to match Firebase Web modular SDK API. Please see migration guide for more details: https://rnfirebase.io/migrating-to-v22 Please use `getApp()` instead.
+ WARN  This method is deprecated (as well as all React Native Firebase namespaced API) and will be removed in the next major release as part of move to match Firebase Web modular SDK API. Please see migration guide for more details: https://rnfirebase.io/migrating-to-v22 Please use `getApp()` instead.
+ WARN  [fcmService] getToken failed: No Firebase App '[DEFAULT]' has been created - call firebase.initializeApp()
+ WARN  This method is deprecated (as well as all React Native Firebase namespaced API) and will be removed in the next major release as part of move to match Firebase Web modular SDK API. Please see migration guide for more details: https://rnfirebase.io/migrating-to-v22 Please use `getApp()` instead.
+ WARN  [useFcm] init failed: No Firebase App '[DEFAULT]' has been created - call firebase.initializeApp()
+ ERROR  React has detected a change in the order of Hooks called by %s. This will lead to bugs and errors if not fixed. For more information, read the Rules of Hooks: https://react.dev/link/rules-of-hooks
+
+   Previous render            Next render
+   ------------------------------------------------------
+%s   ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+ DashboardScreen 1. useContext                 useContext
+2. useContext                 useContext
+3. useContext                 useContext
+4. useContext                 useContext
+5. useContext                 useContext
+6. useContext                 useContext
+7. useRef                     useRef
+8. useRef                     useRef
+9. useState                   useState
+10. useState                  useState
+11. useState                  useState
+12. useRef                    useRef
+13. useEffect                 useEffect
+14. useState                  useState
+15. useState                  useState
+16. useState                  useState
+17. useState                  useState
+18. useState                  useState
+19. useState                  useState
+20. useState                  useState
+21. useRef                    useRef
+22. useRef                    useRef
+23. useState                  useState
+24. useState                  useState
+25. useRef                    useRef
+26. useState                  useState
+27. useState                  useState
+28. useRef                    useRef
+29. useEffect                 useEffect
+30. useEffect                 useEffect
+31. useContext                useContext
+32. useRef                    useRef
+33. useRef                    useRef
+34. useRef                    useRef
+35. useRef                    useRef
+36. useRef                    useRef
+37. useRef                    useRef
+38. useRef                    useRef
+39. useRef                    useRef
+40. useEffect                 useEffect
+41. useEffect                 useEffect
+42. useRef                    useRef
+43. useRef                    useRef
+44. useEffect                 useRef
+ ERROR  [Error: Rendered more hooks than during the previous render.]
+Could not parse Expo config: android.googleServicesFile: "./android/app/google-services.json"
+Could not parse Expo config: android.googleServicesFile: "./android/app/google-services.json"
+Android .\index.js ░░░░░░░░░░░░░░░░  0.0% (0/1)
+Android Bundled 210ms index.js (1 module)
+ WARN  The global process.env.EXPO_OS is not defined. This should be inlined by babel-preset-expo during transformation.
+ WARN  This method is deprecated (as well as all React Native Firebase namespaced API) and will be removed in the next major release as part of move to match Firebase Web modular SDK API. Please see migration guide for more details: https://rnfirebase.io/migrating-to-v22 Please use `getApp()` instead.
+ WARN  This method is deprecated (as well as all React Native Firebase namespaced API) and will be removed in the next major release as part of move to match Firebase Web modular SDK API. Please see migration guide for more details: https://rnfirebase.io/migrating-to-v22 Please use `getApp()` instead.
+ WARN  [fcmService] getToken failed: No Firebase App '[DEFAULT]' has been created - call firebase.initializeApp()
+ WARN  This method is deprecated (as well as all React Native Firebase namespaced API) and will be removed in the next major release as part of move to match Firebase Web modular SDK API. Please see migration guide for more details: https://rnfirebase.io/migrating-to-v22 Please use `getApp()` instead.
+ WARN  [useFcm] init failed: No Firebase App '[DEFAULT]' has been created - call firebase.initializeApp()
+ LOG  [UsageReporter] Tick success for 5eabaee4-432d-472a-93e7-baab13cd618c (target: website:geo.tv). Total: 7/120
+ LOG  [UsageReporter] Flush success for 5eabaee4-432d-472a-93e7-baab13cd618c
+ LOG  [UsageReporter] Tick success for 5eabaee4-432d-472a-93e7-baab13cd618c (target: website:geo.tv). Total: 13/120
+ LOG  [UsageReporter] Flush success for 5eabaee4-432d-472a-93e7-baab13cd618c
+ LOG  [UsageReporter] Tick success for c442f562-04ea-46e3-90b1-8ff9f29beb9f (target: website:arynews.tv). Total: 5/120
+ LOG  [UsageReporter] Flush success for c442f562-04ea-46e3-90b1-8ff9f29beb9f
+ WARN  This method is deprecated (as well as all React Native Firebase namespaced API) and will be removed in the next major release as part of move to match Firebase Web modular SDK API. Please see migration guide for more details: https://rnfirebase.io/migrating-to-v22 Please use `getApp()` instead.
+ WARN  This method is deprecated (as well as all React Native Firebase namespaced API) and will be removed in the next major release as part of move to match Firebase Web modular SDK API. Please see migration guide for more details: https://rnfirebase.io/migrating-to-v22 Please use `getApp()` instead.
+ WARN  [fcmService] getToken failed: No Firebase App '[DEFAULT]' has been created - call firebase.initializeApp()
+ WARN  This method is deprecated (as well as all React Native Firebase namespaced API) and will be removed in the next major release as part of move to match Firebase Web modular SDK API. Please see migration guide for more details: https://rnfirebase.io/migrating-to-v22 Please use `getApp()` instead.
+ WARN  [useFcm] init failed: No Firebase App '[DEFAULT]' has been created - call firebase.initializeApp()
+ LOG  [UsageReporter] Tick success for c442f562-04ea-46e3-90b1-8ff9f29beb9f (target: website:arynews.tv). Total: 5/120
+ LOG  [UsageReporter] Flush success for c442f562-04ea-46e3-90b1-8ff9f29beb9f
+ WARN  This method is deprecated (as well as all React Native Firebase namespaced API) and will be removed in the next major release as part of move to match Firebase Web modular SDK API. Please see migration guide for more details: https://rnfirebase.io/migrating-to-v22 Please use `getApp()` instead.
+ WARN  This method is deprecated (as well as all React Native Firebase namespaced API) and will be removed in the next major release as part of move to match Firebase Web modular SDK API. Please see migration guide for more details: https://rnfirebase.io/migrating-to-v22 Please use `getApp()` instead.
+ WARN  [fcmService] getToken failed: No Firebase App '[DEFAULT]' has been created - call firebase.initializeApp()
+ WARN  This method is deprecated (as well as all React Native Firebase namespaced API) and will be removed in the next major release as part of move to match Firebase Web modular SDK API. Please see migration guide for more details: https://rnfirebase.io/migrating-to-v22 Please use `getApp()` instead.
+ WARN  [useFcm] init failed: No Firebase App '[DEFAULT]' has been created - call firebase.initializeApp()
+ LOG  [UsageReporter] Flush success for c442f562-04ea-46e3-90b1-8ff9f29beb9f
+ LOG  [UsageReporter] Tick success for c442f562-04ea-46e3-90b1-8ff9f29beb9f (target: website:arynews.tv). Total: 117/120
+ WARN  This method is deprecated (as well as all React Native Firebase namespaced API) and will be removed in the next major release as part of move to match Firebase Web modular SDK API. Please see migration guide for more details: https://rnfirebase.io/migrating-to-v22 Please use `getApp()` instead.
+ WARN  This method is deprecated (as well as all React Native Firebase namespaced API) and will be removed in the next major release as part of move to match Firebase Web modular SDK API. Please see migration guide for more details: https://rnfirebase.io/migrating-to-v22 Please use `getApp()` instead.
+ WARN  [fcmService] getToken failed: No Firebase App '[DEFAULT]' has been created - call firebase.initializeApp()
+ WARN  This method is deprecated (as well as all React Native Firebase namespaced API) and will be removed in the next major release as part of move to match Firebase Web modular SDK API. Please see migration guide for more details: https://rnfirebase.io/migrating-to-v22 Please use `getApp()` instead.
+ WARN  [useFcm] init failed: No Firebase App '[DEFAULT]' has been created - call firebase.initializeApp()
