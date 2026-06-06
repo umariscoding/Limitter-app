@@ -44,7 +44,7 @@ export const canCreatePolicy = async (): Promise<{
 }> => {
   const limits = await getPlanLimits();
 
-  if (limits.maxPolicies !== -1 && limits.policiesRemaining !== -1 && limits.policiesRemaining <= 0) {
+  if (limits.maxPolicies !== -1 && limits.policiesRemaining !== -1 && limits.maxPolicies > 0 && limits.policiesRemaining <= 0) {
     return {
       allowed: false,
       reason: `Your ${limits.planCode.toUpperCase()} plan allows ${limits.maxPolicies} limits. Upgrade for more.`,

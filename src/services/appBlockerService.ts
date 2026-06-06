@@ -291,6 +291,17 @@ export const updateBlockedApps = (newList: Array<{ package_name: string; app_nam
   });
 };
 
+export const syncUsageToNative = async (
+  timers: Array<{ package: string; appName: string; usedSeconds: number; durationSeconds: number }>,
+): Promise<void> => {
+  try {
+    if (!LimitterModule?.syncUsage || timers.length === 0) return;
+    await LimitterModule.syncUsage({ timers });
+  } catch (err) {
+    console.error('[syncUsageToNative] failed:', err);
+  }
+};
+
 export async function getNativeTimerStates(): Promise<NativeTimerState[]> {
   try {
     if (!LimitterModule?.getActiveTimers) {

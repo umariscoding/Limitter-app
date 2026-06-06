@@ -215,6 +215,9 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
                 autoCorrect={false}
                 placeholderTextColor="#94A3B8"
               />
+              <Text style={s.websiteNote}>
+                This limit covers only this website. For example, limiting youtube.com won't limit music.youtube.com
+              </Text>
             </>
           )}
 
@@ -281,14 +284,6 @@ export default function CreateLimitModal({ visible, onClose, onSubmit, existingT
           />
           <View style={{ height: 10 }} />
 
-          {/* <View style={s.targetBox}>
-            <Text style={s.targetText}>
-              {targetType === 'app' ? (selectedInstalledApp?.appName || appSearch || 'No app selected')
-                : targetType === 'category' ? createCategory || 'No category selected'
-                  : createWebsiteUrl || 'No website selected'}
-            </Text>
-          </View> */}
-
           <View style={s.actions}>
             <TouchableOpacity style={[s.actionBtn, s.cancelBtn]} onPress={onClose}>
               <Text style={s.cancelText}>Cancel</Text>
@@ -319,6 +314,7 @@ const s = StyleSheet.create({
   selectorBtnText: { color: '#475569', fontWeight: '600', fontSize: 12 },
   selectorBtnTextActive: { color: '#10B981' },
   input: { borderWidth: 1, borderColor: '#CBD5E1', borderRadius: 10, paddingHorizontal: 12, paddingVertical: Platform.OS === 'ios' ? 12 : 10, fontSize: 14, color: '#0F172A', marginBottom: 10, backgroundColor: '#F8FAFC' },
+  websiteNote: { fontSize: 11, color: '#64748B', marginBottom: 8, lineHeight: 16 },
   availableText: { color: '#64748B', fontSize: 11, marginBottom: 6 },
   suggestionList: { maxHeight: 180, marginBottom: 10, borderWidth: 1, borderColor: '#E2E8F0', borderRadius: 10, backgroundColor: '#FFFFFF' },
   suggestionItem: { paddingVertical: 12, paddingHorizontal: 14, borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },

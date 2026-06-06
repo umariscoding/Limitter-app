@@ -100,6 +100,7 @@ export default function DashboardScreen() {
       setToastMessage(`Limit created for ${label}`);
       setShowToast(true);
       setShowCreateModal(false);
+      fetchLimits();
     },
     setLoading,
   );

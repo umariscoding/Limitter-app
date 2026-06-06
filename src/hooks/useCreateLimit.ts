@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createPolicyAPI } from '../services/policyService';
 import { showAlert } from '../components/AppAlert';
-import { enforceDailyLimitMinutes, invalidatePlanCache } from '../services/planGuardService';
+import { canUseCustomTimers, enforceDailyLimitMinutes, invalidatePlanCache } from '../services/planGuardService';
 import {
   startAppClockTimer,
   startAppUsageTimer,
@@ -100,12 +100,21 @@ export function useCreateLimit(
       .replace(/^(https?:\/\/)?(www\.)?/, '')
       .replace(/\/.*$/, '');
 
-    const totalSeconds = calculateTotalSecondsFromInputs({
-      timerType, hours, minutes, seconds,
-      singleTimerValue, singleTimerUnit, clockHour, clockMinute, clockPeriod,
-    });
-    const rawMinutes = Math.round(totalSeconds / 60) || 1;
-    const parsedMinutes = await enforceDailyLimitMinutes(rawMinutes);
+    const customTimersAllowed = await canUseCustomTimers();
+    let totalSeconds: number;
+    let parsedMinutes: number;
+
+    if (!customTimersAllowed) {
+      totalSeconds = 3600;
+      parsedMinutes = 60;
+    } else {
+      totalSeconds = calculateTotalSecondsFromInputs({
+        timerType, hours, minutes, seconds,
+        singleTimerValue, singleTimerUnit, clockHour, clockMinute, clockPeriod,
+      });
+      const rawMinutes = Math.round(totalSeconds / 60) || 1;
+      parsedMinutes = await enforceDailyLimitMinutes(rawMinutes);
+    }
 
     if (targetType === 'app') {
       if (!selectedInstalledApp || !appName) {

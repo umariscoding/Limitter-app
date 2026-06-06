@@ -37,6 +37,7 @@ async function saveSessionsToStorage(sessions: Map<string, PolicySession>) {
       policyId: s.policyId,
       accumulatedSeconds: s.accumulatedSeconds,
       targetKey: s.targetKey,
+      limitSeconds: s.limitSeconds,
     }));
 
   if (entries.length === 0) {
@@ -54,21 +55,11 @@ async function recoverAndFlushStaleSessions(deviceId: string) {
   await AsyncStorage.removeItem(STORAGE_KEY);
 
   try {
-    const entries: { pkg: string; policyId: string; accumulatedSeconds: number; targetKey?: string }[] = JSON.parse(raw);
+    const entries: { pkg: string; policyId: string; accumulatedSeconds: number; targetKey?: string; limitSeconds?: number }[] = JSON.parse(raw);
     for (const entry of entries) {
       if (entry.accumulatedSeconds <= 0) continue;
       try {
-        // Use tickUsageAPI (RTDB path) instead of recordUsageAPI (Firestore-only path).
-        // This ensures the exhausted → setLockState path runs for sessions that
-        // crashed right at the limit boundary.
-        await tickUsageAPI({
-          policyId: entry.policyId,
-          deviceId,
-          accumulatedSeconds: entry.accumulatedSeconds,
-          deltaSeconds: entry.accumulatedSeconds, // treat full count as delta; server handles stale detection
-          limitSeconds: 0, // server will use policy's own limit
-          targetKey: entry.targetKey || entry.pkg || entry.policyId,
-        });
+        await recordUsageAPI(entry.policyId, deviceId, entry.accumulatedSeconds);
         console.log(`[UsageReporter] Recover stale session success for ${entry.policyId}`);
       } catch (error: any) {
         console.error(`[UsageReporter] Recover stale session failure for ${entry.policyId}:`, error?.message || error);

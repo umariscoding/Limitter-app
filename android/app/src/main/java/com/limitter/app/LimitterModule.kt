@@ -328,6 +328,69 @@ class LimitterModule(private val reactContext: ReactApplicationContext) :
     }
 
     @ReactMethod
+    fun syncUsage(params: ReadableMap, promise: Promise) {
+        try {
+            val timersArray = params.getArray("timers") ?: run {
+                promise.resolve("OK")
+                return
+            }
+
+            val today = todayDate()
+            var changed = false
+
+            for (i in 0 until timersArray.size()) {
+                val item = timersArray.getMap(i) ?: continue
+                val pkg = (item.getString("package") ?: "").trim().lowercase()
+                val serverUsedSeconds = item.getInt("usedSeconds")
+                val durationSeconds = item.getInt("durationSeconds")
+                val appName = item.getString("appName") ?: pkg
+
+                if (pkg.isEmpty() || durationSeconds <= 0) continue
+
+                val existing = TimerStateManager.activeTimers[pkg]
+                if (existing != null && existing.startDate == today) {
+                    if (serverUsedSeconds > existing.usedSeconds) {
+                        val newStatus = when {
+                            existing.status == "blocked" -> "blocked"
+                            serverUsedSeconds >= durationSeconds -> "blocked"
+                            else -> existing.status
+                        }
+                        TimerStateManager.activeTimers[pkg] = existing.copy(
+                            usedSeconds = serverUsedSeconds,
+                            durationSeconds = durationSeconds,
+                            status = newStatus
+                        )
+                        if (newStatus == "blocked") TimerStateManager.blockedPackages.add(pkg)
+                        changed = true
+                    }
+                } else if (existing == null) {
+                    val cappedUsed = minOf(serverUsedSeconds, durationSeconds)
+                    val status = if (cappedUsed >= durationSeconds) "blocked" else "waiting"
+                    TimerStateManager.activeTimers[pkg] = TimerStateManager.TimerEntry(
+                        packageName = pkg,
+                        appName = appName,
+                        durationSeconds = durationSeconds,
+                        usedSeconds = cappedUsed,
+                        status = status
+                    )
+                    if (status == "blocked") TimerStateManager.blockedPackages.add(pkg)
+                    changed = true
+                }
+            }
+
+            if (changed) {
+                TimerStateManager.persistToPrefs(reactContext)
+                NotificationHelper.update(reactContext, null)
+            }
+
+            promise.resolve("OK")
+        } catch (e: Exception) {
+            Log.e("LimitterModule", "syncUsage error", e)
+            promise.reject("SYNC_USAGE_ERROR", e.message, e)
+        }
+    }
+
+    @ReactMethod
     fun getWebsiteBlockerStatus(promise: Promise) {
         val map = WritableNativeMap()
         map.putBoolean("overlayEnabled", PermissionChecker.hasOverlay(reactContext))
