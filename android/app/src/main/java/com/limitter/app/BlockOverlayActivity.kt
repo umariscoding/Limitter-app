@@ -21,6 +21,9 @@ import android.widget.TextView
 class BlockOverlayActivity : Activity() {
 
     companion object {
+        @Volatile var lastContinueBrowsingTimestamp: Long = 0
+        const val CONTINUE_BROWSING_SUPPRESSION_MS = 5000L
+
         val NUDGES = listOf(
             "You've already proven you can wait. Keep going.",
             "Every minute off-screen is a minute invested in yourself.",
@@ -273,6 +276,26 @@ class BlockOverlayActivity : Activity() {
         }
         content.addView(overrideBtn, lp { bottomMargin = dp(14) })
 
+        val isWebsite = (intent.getStringExtra("package_name") ?: "").startsWith("website:")
+
+        if (isWebsite) {
+            val continueBtn = TextView(this).apply {
+                text = "\uD83C\uDF10  Continue Browsing"
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
+                setTextColor(Color.parseColor("#6EE7B7"))
+                typeface = Typeface.create("sans-serif-medium", Typeface.NORMAL)
+                gravity = Gravity.CENTER
+                setPadding(dp(24), dp(14), dp(24), dp(14))
+                val bg = GradientDrawable()
+                bg.cornerRadius = dp(14).toFloat()
+                bg.setColor(Color.parseColor("#0D3D2E"))
+                bg.setStroke(dp(1), Color.parseColor("#34D399"))
+                background = bg
+                setOnClickListener { continueBrowsing() }
+            }
+            content.addView(continueBtn, lp { bottomMargin = dp(10) })
+        }
+
         val goBackBtn = TextView(this).apply {
             text = "Go Home"
             setTextSize(TypedValue.COMPLEX_UNIT_SP, 15f)
@@ -305,7 +328,12 @@ class BlockOverlayActivity : Activity() {
     }
 
     override fun onBackPressed() {
-        goHome()
+        val isWebsite = (intent.getStringExtra("package_name") ?: "").startsWith("website:")
+        if (isWebsite) {
+            continueBrowsing()
+        } else {
+            goHome()
+        }
     }
 
     private fun goHome() {
@@ -314,6 +342,20 @@ class BlockOverlayActivity : Activity() {
             flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK
         }
         startActivity(homeIntent)
+        finish()
+    }
+
+    private fun continueBrowsing() {
+        lastContinueBrowsingTimestamp = System.currentTimeMillis()
+        try {
+            val browserIntent = android.content.Intent(android.content.Intent.ACTION_VIEW, Uri.parse("https://www.google.com")).apply {
+                flags = android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TOP
+            }
+            startActivity(browserIntent)
+        } catch (_: Exception) {
+            goHome()
+            return
+        }
         finish()
     }
 

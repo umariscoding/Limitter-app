@@ -235,6 +235,10 @@ class LimitterForegroundService : Service() {
 
             if (isOnSite) {
                 if (timer.status == "blocked") {
+                    val sinceLastContinue = now - BlockOverlayActivity.lastContinueBrowsingTimestamp
+                    if (sinceLastContinue < BlockOverlayActivity.CONTINUE_BROWSING_SUPPRESSION_MS) {
+                        continue
+                    }
                     launchBlockOverlay(domain, key)
                     continue
                 }
