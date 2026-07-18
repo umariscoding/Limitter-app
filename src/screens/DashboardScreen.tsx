@@ -146,6 +146,11 @@ export default function DashboardScreen() {
 
   const totalUsageText = React.useMemo(() => formatTotalUsageFromLimits(limits), [limits]);
 
+  const activeLimits = React.useMemo(
+    () => limits.filter(l => l.status === 'active' || l.status === 'blocked'),
+    [limits],
+  );
+
   const existingTargetKeys = React.useMemo(() => {
     const keys = new Set<string>();
     for (const l of limits) {
@@ -310,7 +315,7 @@ export default function DashboardScreen() {
               <View style={styles.statIconWrap}>
                 <Shield size={16} color="#10B981" />
               </View>
-              <Text style={styles.statValue}>{limits.length}</Text>
+              <Text style={styles.statValue}>{activeLimits.length}</Text>
               <Text style={styles.statLabel}>Limits</Text>
             </View>
 
@@ -358,27 +363,27 @@ export default function DashboardScreen() {
               <ActivityIndicator size="small" color="#10B981" />
               <Text style={styles.inlineLoaderText}>Loading limits...</Text>
             </View>
-          ) : limits.length === 0 ? (
+          ) : activeLimits.length === 0 ? (
             <View style={styles.emptyState}>
               <View style={styles.emptyIconWrap}>
                 <Shield size={40} color="#CBD5E1" />
               </View>
-              <Text style={styles.emptyTitle}>No limits yet</Text>
-              <Text style={styles.emptyDesc}>Create your first limit to start tracking app usage</Text>
-              <TouchableOpacity onPress={handleOpenCreateModal} activeOpacity={0.8}>
+              <Text style={styles.emptyTitle}>No active limits</Text>
+              <Text style={styles.emptyDesc}>You currently have no running or blocked limits.</Text>
+              <TouchableOpacity onPress={() => navigation.navigate('PoliciesScreen')} activeOpacity={0.8}>
                 <LinearGradient colors={['#10B981', '#059669']} style={styles.emptyBtn}>
                   <PlusIcon size={16} color="#FFFFFF" />
-                  <Text style={styles.emptyBtnText}>Create First Limit</Text>
+                  <Text style={styles.emptyBtnText}>View Limits</Text>
                 </LinearGradient>
               </TouchableOpacity>
             </View>
           ) : (
             <ScrollView
-              style={limits.length > 2 ? styles.limitsScroll : undefined}
+              style={activeLimits.length > 2 ? styles.limitsScroll : undefined}
               nestedScrollEnabled
-              showsVerticalScrollIndicator={limits.length > 2}
+              showsVerticalScrollIndicator={activeLimits.length > 2}
             >
-              {limits.slice(0, visibleCount).map((limit: any) => (
+              {activeLimits.slice(0, visibleCount).map((limit: any) => (
                 <PolicyCard
                   key={limit.id}
                   limit={limit}
@@ -386,14 +391,14 @@ export default function DashboardScreen() {
                   onLockNow={handleLockNow}
                 />
               ))}
-              {limits.length > visibleCount && (
+              {activeLimits.length > visibleCount && (
                 <TouchableOpacity
                   style={styles.loadMoreBtn}
                   onPress={() => setVisibleCount(prev => prev + 10)}
                   activeOpacity={0.8}
                 >
                   <Text style={styles.loadMoreText}>
-                    Load More ({limits.length - visibleCount} remaining)
+                    Load More ({activeLimits.length - visibleCount} remaining)
                   </Text>
                 </TouchableOpacity>
               )}

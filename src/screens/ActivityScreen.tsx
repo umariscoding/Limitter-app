@@ -72,8 +72,17 @@ export default function ActivityScreen() {
                   Created: {new Date(item.created_at).toLocaleDateString()}
                 </Text>
               )}
-              <Text style={[styles.status, item.is_blocked ? styles.blocked : styles.active]}>
-                {item.is_blocked ? 'BLOCKED' : 'ACTIVE'}
+              <Text
+                style={[
+                  styles.status,
+                  item.status === 'blocked'
+                    ? styles.blocked
+                    : item.status === 'active'
+                    ? styles.active
+                    : styles.idle,
+                ]}
+              >
+                {item.status === 'blocked' ? 'BLOCKED' : item.status === 'active' ? 'ACTIVE' : 'READY'}
               </Text>
             </View>
           ))
@@ -180,5 +189,8 @@ const styles = StyleSheet.create({
   },
   blocked: {
     color: '#DC2626',
+  },
+  idle: {
+    color: '#64748B',
   },
 });

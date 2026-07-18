@@ -8,6 +8,7 @@ import {
   updateBlockedApps,
   getNativeTimerStates,
   resetNativeTimerForReset,
+  stopAllTimers,
   type NativeTimerState,
 } from '../services/appBlockerService';
 import { hydratePoliciesForUi } from '../helpers/helper';
@@ -131,16 +132,24 @@ export function usePolicyFetcher() {
 }
 
 function startTimersInBackground(finalLimits: any[]) {
-  // Reconcile FIRST so any reset-detected timers are cleared to zero before
-  // the merge-based arming below runs. Without this, a non-exhausted policy
-  // that was just reset on the server would keep its stale higher usedSeconds
-  // in native (TimerStateManager addTimers uses maxOf merge).
-  reconcileNativeAfterReset(finalLimits)
-    .catch(err => console.error('[PolicyFetcher] reconcile failed:', err))
+  // Stop all native timers first so that any policies that were deleted on the server
+  // are removed from native's timer list. Without this, old policies accumulate in
+  // SharedPreferences and show up as extra "tracked" entries in the notification even
+  // after the user deletes them (TimerStateManager.addTimers only merges, never removes).
+  stopAllTimers()
+    .catch(err => console.error('[PolicyFetcher] stopAllTimers failed:', err))
     .finally(() => {
-      armTimers(finalLimits).catch(err =>
-        console.error('[PolicyFetcher] armTimers failed:', err),
-      );
+      // Reconcile FIRST so any reset-detected timers are cleared to zero before
+      // the merge-based arming below runs. Without this, a non-exhausted policy
+      // that was just reset on the server would keep its stale higher usedSeconds
+      // in native (TimerStateManager addTimers uses maxOf merge).
+      reconcileNativeAfterReset(finalLimits)
+        .catch(err => console.error('[PolicyFetcher] reconcile failed:', err))
+        .finally(() => {
+          armTimers(finalLimits).catch(err =>
+            console.error('[PolicyFetcher] armTimers failed:', err),
+          );
+        });
     });
 }
 

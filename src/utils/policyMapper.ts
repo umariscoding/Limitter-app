@@ -56,7 +56,6 @@ export function mapPolicyToUI(item: any): UIPolicy {
 
   let status: 'active' | 'inactive' | 'blocked' = 'inactive';
   if (isExhausted) status = 'blocked';
-  else if (usedMinutes > 0) status = 'active';
 
   const label = p.targetLabel && p.targetLabel !== p.targetKey
     ? p.targetLabel
@@ -277,7 +276,16 @@ export function mergeLiveTimerUsageIntoPolicies(
     const key = getPolicyPackageKey(item);
     const timer = byPkg.get(key);
 
-    if (!timer) return item;
+    if (!timer) {
+      // If the policy is not currently tracked by native, it should not show as
+      // actively running just because it has some daily usage from earlier.
+      // Native is the source of truth for live state; server-only history is
+      // shown as accumulated usage, not current activity.
+      return {
+        ...item,
+        status: item.is_blocked ? item.status : 'inactive',
+      };
+    }
 
     const budget = Math.max(0, Number(timer.liveTimerUsageBudgetSeconds) || 0);
     const remaining = Math.max(0, Number(timer.remainingSeconds) || 0);
@@ -313,6 +321,24 @@ export function mergeLiveTimerUsageIntoPolicies(
     const backendUsed = Number(item.time_used_minutes) || 0;
     const cappedBackendUsed = maxMin > 0 ? Math.min(backendUsed, maxMin) : backendUsed;
     const bestUsed = Math.max(cappedUsed, cappedBackendUsed);
+
+    if (nativeStatus === 'active') {
+      return {
+        ...item,
+        status: 'active',
+        time_used_minutes: bestUsed,
+        _nativeBudgetSeconds: budget > 0 ? budget : undefined,
+      };
+    }
+
+    if (nativeStatus === 'waiting') {
+      return {
+        ...item,
+        status: item.is_blocked ? 'blocked' : 'inactive',
+        time_used_minutes: bestUsed,
+        _nativeBudgetSeconds: budget > 0 ? budget : undefined,
+      };
+    }
 
     return {
       ...item,

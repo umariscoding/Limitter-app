@@ -41,7 +41,7 @@ export default function PolicyCard({ limit, onOverride, onLockNow }: PolicyCardP
     ? Math.min((displayUsedMinutes / limit.max_time_minutes) * 100, 100)
     : 0;
   const isWarning = pct >= 75 && !isBlocked;
-  const isActive = !isBlocked && displayUsedMinutes > 0;
+  const isActive = !isBlocked && limit.status === 'active';
 
   // Bar color is driven by pct, which is frozen during a manual lock — matches
   // spec: color stays whatever it was at lock moment (red if exceeded, etc.).
