@@ -27,6 +27,7 @@ class LimitterForegroundService : Service() {
 
     private val handler = Handler(Looper.getMainLooper())
     private var isPolling = false
+    private var isForeground = false
     private var lastDetectedForeground: String? = null
     private var persistCounter = 0
     // Grace period: when a website URL match fails temporarily, keep counting for 3 seconds
@@ -62,14 +63,14 @@ class LimitterForegroundService : Service() {
             ACTION_START_TIMERS -> {
                 val appsJson = intent.getStringExtra(EXTRA_APPS_JSON) ?: "[]"
                 TimerStateManager.addTimers(appsJson)
-                startForeground(NotificationHelper.NOTIFICATION_ID, NotificationHelper.build(this, lastDetectedForeground))
+                promoteForeground()
                 startPolling()
                 TimerStateManager.persistToPrefs(this)
             }
             ACTION_START_WEBSITE_TIMERS -> {
                 val websitesJson = intent.getStringExtra(EXTRA_WEBSITES_JSON) ?: "[]"
                 TimerStateManager.addWebsiteTimers(websitesJson)
-                startForeground(NotificationHelper.NOTIFICATION_ID, NotificationHelper.build(this, lastDetectedForeground))
+                promoteForeground()
                 startPolling()
                 TimerStateManager.persistToPrefs(this)
             }
@@ -78,6 +79,7 @@ class LimitterForegroundService : Service() {
                 TimerStateManager.clearAll()
                 TimerStateManager.persistToPrefs(this)
                 stopForeground(STOP_FOREGROUND_REMOVE)
+                isForeground = false
                 stopSelf()
             }
         }
@@ -93,6 +95,22 @@ class LimitterForegroundService : Service() {
         instance = null
         Log.w(TAG, "Service DESTROYED")
         super.onDestroy()
+    }
+
+    private fun promoteForeground() {
+        if (!isForeground) {
+            startForeground(NotificationHelper.NOTIFICATION_ID, NotificationHelper.build(this, lastDetectedForeground))
+            isForeground = true
+        } else {
+            NotificationHelper.update(this, lastDetectedForeground)
+        }
+    }
+
+    private fun demoteForeground() {
+        if (isForeground) {
+            stopForeground(STOP_FOREGROUND_REMOVE)
+            isForeground = false
+        }
     }
 
     private fun startPolling() {
@@ -304,7 +322,20 @@ class LimitterForegroundService : Service() {
             TimerStateManager.persistToPrefs(this)
         }
 
-        NotificationHelper.update(this, lastDetectedForeground)
+        // Promote / demote the foreground notification based on real-time state:
+        // • If any timer is active or blocked → show the persistent foreground banner
+        //   (live countdown or "N limits reached") so the user always knows what's happening.
+        // • If all timers are idle (waiting) → demote the foreground service so the
+        //   notification banner disappears. The service continues polling in the background
+        //   (no notification) so it can promote again the instant a monitored app is opened.
+        val hasActiveOrBlocked = TimerStateManager.activeTimers.values
+            .any { it.status == "active" || it.status == "blocked" }
+
+        if (hasActiveOrBlocked) {
+            promoteForeground()
+        } else {
+            demoteForeground()
+        }
     }
 
     private fun launchBlockOverlay(appName: String, packageName: String) {

@@ -4,58 +4,10 @@ import { getPoliciesAPI } from '../services/policyService';
 import {
   startAppUsageTimer,
   startBulkWebsiteTimers,
-  getNativeTimerStates,
-  resetNativeTimerForReset,
+  stopAllTimers,
   syncUsageToNative,
-  type NativeTimerState,
 } from '../services/appBlockerService';
 import { hydratePoliciesForUi } from '../helpers/helper';
-
-const RESET_DETECTION_TOLERANCE_SEC = 60;
-
-async function reconcileNativeAfterReset(limits: any[]): Promise<void> {
-  let nativeStates: NativeTimerState[];
-  try {
-    nativeStates = await getNativeTimerStates();
-  } catch (err) {
-    console.error('[PolicyFetcher] reconcile: getNativeTimerStates failed:', err);
-    return;
-  }
-  if (nativeStates.length === 0) return;
-
-  const nativeByPkg = new Map<string, NativeTimerState>();
-  for (const t of nativeStates) {
-    const k = String(t.package || '').trim().toLowerCase();
-    if (k) nativeByPkg.set(k, t);
-  }
-
-  for (const limit of limits) {
-    const rawPkg = String(
-      limit.app_name || limit.package_name || limit.packageName || '',
-    )
-      .trim()
-      .toLowerCase();
-    if (!rawPkg) continue;
-
-    const isWebsite = limit.target_type === 'website';
-    const nativeKey = isWebsite
-      ? rawPkg.startsWith('website:')
-        ? rawPkg
-        : `website:${rawPkg}`
-      : rawPkg;
-    const native = nativeByPkg.get(nativeKey);
-    if (!native) continue;
-
-    const budgetSec = Math.max(0, Number(native.liveTimerUsageBudgetSeconds || 0));
-    const remainingSec = Math.max(0, Number(native.remainingSeconds || 0));
-    const nativeUsedSec = Math.max(0, budgetSec - remainingSec);
-    const serverUsedSec = Math.max(0, (limit.time_used_minutes || 0) * 60);
-
-    if (nativeUsedSec - serverUsedSec > RESET_DETECTION_TOLERANCE_SEC) {
-      await resetNativeTimerForReset(nativeKey, limit.target_label || rawPkg);
-    }
-  }
-}
 
 export function usePolicyFetcher() {
   const { setPolicies, setIsLoading, setLastFetchedAt } = usePolicyContext();
@@ -87,13 +39,11 @@ export function usePolicyFetcher() {
     try {
       const httpLimits = await hydratePoliciesForUi(policiesResult);
 
-      await syncServerToNative(httpLimits);
-
       setPolicies(httpLimits);
       setLastFetchedAt(Date.now());
       setIsLoading(false);
 
-      armTimersInBackground(httpLimits);
+      startTimersInBackground(httpLimits);
     } catch (err: any) {
       console.error('[PolicyFetcher] Error reconciling policies:', err?.message || err);
     } finally {
@@ -135,52 +85,25 @@ async function syncServerToNative(limits: any[]): Promise<void> {
   }
 }
 
-function armTimersInBackground(finalLimits: any[]) {
-  reconcileNativeAfterReset(finalLimits)
-    .catch(err => console.error('[PolicyFetcher] reconcile failed:', err))
+function startTimersInBackground(finalLimits: any[]) {
+  // Stop all native timers first so that any policies that were deleted on the server
+  // are removed from native's timer list. Without this, old policies accumulate in
+  // SharedPreferences and show up as extra "tracked" entries in the notification even
+  // after the user deletes them (TimerStateManager.addTimers only merges, never removes).
+  stopAllTimers()
+    .catch(err => console.error('[PolicyFetcher] stopAllTimers failed:', err))
     .finally(() => {
-      armTimers(finalLimits).catch(err =>
-        console.error('[PolicyFetcher] armTimers failed:', err),
-      );
+      syncServerToNative(finalLimits)
+        .catch(err => console.error('[PolicyFetcher] syncServerToNative failed:', err))
+        .finally(() => {
+          armTimers(finalLimits).catch(err =>
+            console.error('[PolicyFetcher] armTimers failed:', err),
+          );
+        });
     });
 }
 
-const OVERRIDE_DETECTION_TOLERANCE_SEC = 60;
-
-async function buildNativeUsedByKey(): Promise<Map<string, number>> {
-  const map = new Map<string, number>();
-  try {
-    const states = await getNativeTimerStates();
-    for (const s of states) {
-      const k = String(s.package || '').trim().toLowerCase();
-      if (!k) continue;
-      const budget = Math.max(0, Number(s.liveTimerUsageBudgetSeconds) || 0);
-      const remaining = Math.max(0, Number(s.remainingSeconds) || 0);
-      map.set(k, Math.max(0, budget - remaining));
-    }
-  } catch (err) {
-    console.error('[PolicyFetcher] buildNativeUsedByKey failed:', err);
-  }
-  return map;
-}
-
-function resolveSeedUsedSec(
-  nativeUsedByKey: Map<string, number>,
-  rawPkg: string,
-  isWebsite: boolean,
-  serverUsedSec: number,
-): number {
-  const nativeKey = isWebsite
-    ? rawPkg.startsWith('website:') ? rawPkg : `website:${rawPkg}`
-    : rawPkg;
-  const nativeUsed = nativeUsedByKey.get(nativeKey);
-  if (nativeUsed === undefined) return serverUsedSec;
-  if (serverUsedSec - nativeUsed > OVERRIDE_DETECTION_TOLERANCE_SEC) return nativeUsed;
-  return serverUsedSec;
-}
-
 async function armTimers(finalLimits: any[]) {
-  const nativeUsedByKey = await buildNativeUsedByKey();
   const appTimerPromises: Promise<any>[] = [];
 
   for (const limit of finalLimits) {
@@ -190,11 +113,9 @@ async function armTimers(finalLimits: any[]) {
 
     const totalSeconds = Math.max(0, limit.max_time_minutes * 60);
     const serverUsedSec = Math.max(0, (limit.time_used_minutes || 0) * 60);
-    const rawPkg = String(pkg).trim().toLowerCase();
-    const usedSeconds = resolveSeedUsedSec(nativeUsedByKey, rawPkg, false, serverUsedSec);
 
     appTimerPromises.push(
-      startAppUsageTimer(pkg, limit.target_label || pkg, totalSeconds, usedSeconds).catch(err =>
+      startAppUsageTimer(pkg, limit.target_label || pkg, totalSeconds, serverUsedSec).catch(err =>
         console.error('[PolicyFetcher] startAppUsageTimer failed:', err),
       ),
     );
@@ -208,10 +129,8 @@ async function armTimers(finalLimits: any[]) {
 
     const totalSeconds = Math.max(0, limit.max_time_minutes * 60);
     const serverUsedSec = Math.max(0, (limit.time_used_minutes || 0) * 60);
-    const rawDomain = String(domain).trim().toLowerCase();
-    const usedSeconds = resolveSeedUsedSec(nativeUsedByKey, rawDomain, true, serverUsedSec);
 
-    websiteTimers.push({ domain, durationSeconds: totalSeconds, usedSeconds });
+    websiteTimers.push({ domain, durationSeconds: totalSeconds, usedSeconds: serverUsedSec });
   }
 
   if (websiteTimers.length > 0) {

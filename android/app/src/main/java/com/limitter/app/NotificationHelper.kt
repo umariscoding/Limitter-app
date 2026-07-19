@@ -62,15 +62,17 @@ object NotificationHelper {
     fun build(context: Context, foregroundPkg: String?): Notification {
         val now = System.currentTimeMillis()
 
-        val ranked = TimerStateManager.activeTimers.values
+        val activeOrBlockedTimers = TimerStateManager.activeTimers.values
+            .filter { it.status == "active" || it.status == "blocked" }
+
+        val ranked = activeOrBlockedTimers
             .sortedWith(compareByDescending<TimerStateManager.TimerEntry> { it.status == "active" }
                 .thenByDescending { it.status == "blocked" }
                 .thenByDescending { it.usedSeconds })
             .take(4)
 
         val currentApp = ranked.firstOrNull { it.status == "active" }
-        val blockedCount = TimerStateManager.activeTimers.values.count { it.status == "blocked" }
-        val totalTracked = TimerStateManager.activeTimers.size
+        val blockedCount = activeOrBlockedTimers.count { it.status == "blocked" }
 
         val liveUsed = if (currentApp != null) {
             val liveSession = if (currentApp.lastActiveTimestamp > 0)
@@ -84,24 +86,28 @@ object NotificationHelper {
         val progressCurrent: Int
 
         if (currentApp != null) {
+            // An app/site is actively being used — show live countdown
             val remaining = maxOf(0, currentApp.durationSeconds - liveUsed)
             title = currentApp.appName
-            subtitle = "${formatTime(remaining)} remaining - ${pct(liveUsed, currentApp.durationSeconds)}% used"
+            subtitle = "${formatTime(remaining)} remaining · ${pct(liveUsed, currentApp.durationSeconds)}% used"
             progressMax = currentApp.durationSeconds
             progressCurrent = liveUsed
         } else if (blockedCount > 0) {
+            // One or more limits hit but no app currently in use — just show what's blocked
             title = "${blockedCount} limit${if (blockedCount > 1) "s" else ""} reached"
-            subtitle = "$totalTracked limit${if (totalTracked != 1) "s" else ""} tracked"
+            subtitle = "Open the app to override or see details"
             progressMax = 0
             progressCurrent = 0
         } else {
-            title = "Limitter active"
-            subtitle = "$totalTracked limit${if (totalTracked != 1) "s" else ""} tracked"
+            // Nothing active or blocked — show a silent, minimal notification
+            title = "Limitter"
+            subtitle = "Running in background"
             progressMax = 0
             progressCurrent = 0
         }
 
         val inbox = NotificationCompat.InboxStyle()
+        val hasInboxContent = ranked.isNotEmpty()
 
         for (t in ranked) {
             val liveSession = if (t.status == "active" && t.lastActiveTimestamp > 0)
@@ -113,7 +119,7 @@ object NotificationHelper {
             val line = when (t.status) {
                 "active" -> styledLine(
                     t.appName,
-                    "${formatTime(remaining)} left - ${percent}%",
+                    "${formatTime(remaining)} left · ${percent}%",
                     Color.parseColor("#059669")
                 )
                 "blocked" -> styledLine(
@@ -139,8 +145,9 @@ object NotificationHelper {
             inbox.addLine(line)
         }
 
-        if (totalTracked > 4) {
-            inbox.setSummaryText("+${totalTracked - 4} more")
+        val extraCount = activeOrBlockedTimers.size - 4
+        if (extraCount > 0) {
+            inbox.setSummaryText("+$extraCount more")
         }
 
         val launchIntent = context.packageManager.getLaunchIntentForPackage(context.packageName)
@@ -151,7 +158,6 @@ object NotificationHelper {
         val builder = NotificationCompat.Builder(context, CHANNEL_ID)
             .setContentTitle(title)
             .setContentText(subtitle)
-            .setStyle(inbox)
             .setSmallIcon(R.drawable.ic_notif_shield)
             .setColor(Color.parseColor("#10B981"))
             .setColorized(false)
@@ -159,6 +165,11 @@ object NotificationHelper {
             .setSilent(true)
             .setShowWhen(false)
             .setCategory(NotificationCompat.CATEGORY_PROGRESS)
+
+        // Only attach expanded inbox style when there's real content to show
+        if (hasInboxContent) {
+            builder.setStyle(inbox)
+        }
 
         if (pendingIntent != null) {
             builder.setContentIntent(pendingIntent)
