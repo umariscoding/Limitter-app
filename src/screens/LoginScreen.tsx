@@ -10,7 +10,7 @@ import {
   Keyboard,
   StatusBar,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation } from "@react-navigation/native";
 import { useUser } from "../context/UserContext";
@@ -21,6 +21,7 @@ import { Image } from "react-native";
 const logo = require("../assets/logo.png");
 
 const LoginScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const { setAccountData } = useUser();
   const [email, setEmail] = useState("");
@@ -61,12 +62,12 @@ const LoginScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor="#059669" />
       <Toast visible={showToast} message="Logged in successfully" onHide={() => setShowToast(false)} type="success" />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <LinearGradient colors={["#059669", "#10B981"]} style={styles.headerGradient}>
+          <LinearGradient colors={["#059669", "#10B981"]} style={[styles.headerGradient, { paddingTop: insets.top + 48 }]}>
             <View style={styles.iconCircle}>
               <Image source={logo} style={styles.logoImg} resizeMode="contain" />
             </View>

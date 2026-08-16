@@ -9,7 +9,7 @@ import {
   ScrollView,
   StatusBar,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { BaseButton, TextInput, Toast } from "../../components";
 import { Shield } from "lucide-react-native";
@@ -17,6 +17,7 @@ import { useNavigation } from "@react-navigation/native";
 import { resetPassword } from "../auth/firebaseAuthService";
 
 const ForgotPasswordScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const [email, setEmail] = useState("");
   const [showToast, setShowToast] = useState(false);
@@ -40,12 +41,12 @@ const ForgotPasswordScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor="#059669" />
       <Toast visible={showToast} message={toastMessage} onHide={() => setShowToast(false)} type={toastType} />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <LinearGradient colors={["#059669", "#10B981"]} style={styles.headerGradient}>
+          <LinearGradient colors={["#059669", "#10B981"]} style={[styles.headerGradient, { paddingTop: insets.top + 48 }]}>
             <View style={styles.iconCircle}>
               <Shield size={32} color="#FFFFFF" />
             </View>

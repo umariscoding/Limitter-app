@@ -10,7 +10,7 @@ import {
   RefreshControl,
   Modal,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useNavigation, useRoute } from '@react-navigation/native';
 import {
@@ -55,6 +55,7 @@ import type { CreateLimitState } from '../hooks/useCreateLimit';
 import { showAlert } from '../components/AppAlert';
 
 export default function DashboardScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { user, setAccountData, clearUser } = useUser();
@@ -249,7 +250,7 @@ export default function DashboardScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor="#059669" />
       <Toast visible={showToast} message={toastMessage} onHide={() => setShowToast(false)} type="success" />
       <NoOverridesModal
@@ -293,7 +294,7 @@ export default function DashboardScreen() {
         contentContainerStyle={styles.scrollContent}
         refreshControl={<RefreshControl refreshing={refreshing} onRefresh={onRefresh} tintColor="#FFFFFF" />}
       >
-        <LinearGradient colors={['#10B981', '#059669', '#0F172A']} style={styles.headerGradient}>
+        <LinearGradient colors={['#10B981', '#059669', '#0F172A']} style={[styles.headerGradient, { paddingTop: insets.top + 16 }]}>
           <View style={styles.headerRow}>
             <HamburgerButton onPress={() => setDrawerOpen(true)} />
             <View style={{ flex: 1, marginLeft: 12 }}>

@@ -54,7 +54,12 @@ export function mapPolicyToUI(item: any): UIPolicy {
   const usedMinutes = maxMinutes > 0 ? Math.min(rawUsedMinutes, maxMinutes) : rawUsedMinutes;
   const isExhausted = !!state.isExhaustedToday && usedMinutes > 0;
 
-  let status: 'active' | 'inactive' | 'blocked' = 'inactive';
+  // Every fetched policy is a live, in-force limit for today unless already
+  // exhausted — there's no separate enabled/disabled flag in the model, so
+  // defaulting to 'inactive' here made ordinary running limits invisible to
+  // Dashboard's active-limits filter until a native timer tick happened to
+  // arrive for that specific target.
+  let status: 'active' | 'inactive' | 'blocked' = 'active';
   if (isExhausted) status = 'blocked';
 
   const label = p.targetLabel && p.targetLabel !== p.targetKey
@@ -277,13 +282,16 @@ export function mergeLiveTimerUsageIntoPolicies(
     const timer = byPkg.get(key);
 
     if (!timer) {
-      // If the policy is not currently tracked by native, it should not show as
-      // actively running just because it has some daily usage from earlier.
-      // Native is the source of truth for live state; server-only history is
-      // shown as accumulated usage, not current activity.
+      // Not currently foreground-tracked by native, but that only means the
+      // user isn't using this specific app/site right now — the limit itself
+      // is still a live, in-force policy for today (there's no separate
+      // enabled/disabled flag in the model). Forcing 'inactive' here made
+      // every limit the user isn't actively using at this instant disappear
+      // from Dashboard's active-limits list and read as stale "TRACKING" on
+      // the Policies screen. Preserve 'blocked' when already exhausted.
       return {
         ...item,
-        status: item.is_blocked ? item.status : 'inactive',
+        status: item.is_blocked ? item.status : 'active',
       };
     }
 
@@ -332,9 +340,11 @@ export function mergeLiveTimerUsageIntoPolicies(
     }
 
     if (nativeStatus === 'waiting') {
+      // Native has this target loaded but it isn't the current foreground app
+      // right now — same as the no-timer case above, the limit is still active.
       return {
         ...item,
-        status: item.is_blocked ? 'blocked' : 'inactive',
+        status: item.is_blocked ? 'blocked' : 'active',
         time_used_minutes: bestUsed,
         _nativeBudgetSeconds: budget > 0 ? budget : undefined,
       };

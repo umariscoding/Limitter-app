@@ -10,7 +10,7 @@ import {
   Keyboard,
   StatusBar,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { BaseButton, TextInput, Toast } from "../../components";
 import { Image } from "react-native";
@@ -20,6 +20,7 @@ import { signUp } from "../auth/firebaseAuthService";
 const logo = require("../assets/logo.png");
 
 const SignupScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const [email, setEmail] = useState("");
   const [name, setName] = useState("");
@@ -62,12 +63,12 @@ const SignupScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor="#059669" />
       <Toast visible={showToast} message="Account created! Check your email to verify." onHide={() => setShowToast(false)} type="success" />
       <KeyboardAvoidingView behavior={Platform.OS === "ios" ? "padding" : "height"} style={styles.flex}>
         <ScrollView contentContainerStyle={styles.scrollContent} showsVerticalScrollIndicator={false}>
-          <LinearGradient colors={["#059669", "#10B981"]} style={styles.headerGradient}>
+          <LinearGradient colors={["#059669", "#10B981"]} style={[styles.headerGradient, { paddingTop: insets.top + 40 }]}>
             <View style={styles.iconCircle}>
               <Image source={logo} style={styles.logoImg} resizeMode="contain" />
             </View>

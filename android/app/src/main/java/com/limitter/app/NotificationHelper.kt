@@ -6,6 +6,7 @@ import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Context
 import android.content.Intent
+import android.net.Uri
 import android.text.SpannableStringBuilder
 import android.text.style.ForegroundColorSpan
 import android.text.Spanned
@@ -177,6 +178,23 @@ object NotificationHelper {
 
         if (progressMax > 0) {
             builder.setProgress(progressMax, progressCurrent, false)
+        }
+
+        // Let the user override the currently-in-use app directly from the
+        // notification, reusing the same limitter://override deep link the
+        // app already handles end-to-end (see App.tsx parseOverrideLink).
+        if (currentApp != null) {
+            val overrideUri = Uri.parse(
+                "limitter://override?package=${Uri.encode(currentApp.packageName)}&appName=${Uri.encode(currentApp.appName)}"
+            )
+            val overrideIntent = Intent(Intent.ACTION_VIEW, overrideUri).setPackage(context.packageName)
+            val overridePendingIntent = PendingIntent.getActivity(
+                context,
+                overrideUri.hashCode(),
+                overrideIntent,
+                PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT
+            )
+            builder.addAction(0, "Override", overridePendingIntent)
         }
 
         return builder.build()

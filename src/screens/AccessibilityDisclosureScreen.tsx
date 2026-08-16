@@ -9,7 +9,7 @@ import {
   AppState,
   type AppStateStatus,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { SafeAreaView, useSafeAreaInsets } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { Globe, Check } from 'lucide-react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -63,6 +63,7 @@ interface Props {
 }
 
 const AccessibilityDisclosureScreen: React.FC<Props> = ({ onComplete, onDecline }) => {
+  const insets = useSafeAreaInsets();
   const [agreed, setAgreed] = useState(false);
   const [previouslyAccepted, setPreviouslyAccepted] = useState(false);
 
@@ -83,9 +84,9 @@ const AccessibilityDisclosureScreen: React.FC<Props> = ({ onComplete, onDecline 
 
   if (previouslyAccepted) {
     return (
-      <SafeAreaView style={s.container} edges={['top', 'left', 'right']}>
+      <SafeAreaView style={s.container} edges={['left', 'right', 'bottom']}>
         <StatusBar barStyle="light-content" backgroundColor="#059669" />
-        <LinearGradient colors={['#10B981', '#059669', '#0F172A']} style={s.headerGradient}>
+        <LinearGradient colors={['#10B981', '#059669', '#0F172A']} style={[s.headerGradient, { paddingTop: insets.top + 12 }]}>
           <View style={s.headerInner}>
             <View style={s.iconWrap}>
               <Globe size={28} color="#FFFFFF" />
@@ -132,9 +133,9 @@ const AccessibilityDisclosureScreen: React.FC<Props> = ({ onComplete, onDecline 
   }
 
   return (
-    <SafeAreaView style={s.container} edges={['top', 'left', 'right']}>
+    <SafeAreaView style={s.container} edges={['left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor="#059669" />
-      <LinearGradient colors={['#10B981', '#059669', '#0F172A']} style={s.headerGradient}>
+      <LinearGradient colors={['#10B981', '#059669', '#0F172A']} style={[s.headerGradient, { paddingTop: insets.top + 12 }]}>
         <View style={s.headerInner}>
           <View style={s.iconWrap}>
             <Globe size={28} color="#FFFFFF" />

@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import { View, Text, TouchableOpacity, StyleSheet, StatusBar } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { BaseButton, Toast } from "../../components";
@@ -9,6 +9,7 @@ import axiosService from "../services/axiosService";
 import { API } from "../config/config";
 
 const VerifyEmailScreen: React.FC = () => {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const email = route.params?.email || "";
@@ -33,11 +34,11 @@ const VerifyEmailScreen: React.FC = () => {
   };
 
   return (
-    <SafeAreaView style={s.container}>
+    <SafeAreaView style={s.container} edges={['left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor="#4338CA" />
       <Toast visible={showToast} message={toastMessage} onHide={() => setShowToast(false)} type={toastType} />
 
-      <LinearGradient colors={["#4338CA", "#6366F1"]} style={s.headerGradient}>
+      <LinearGradient colors={["#4338CA", "#6366F1"]} style={[s.headerGradient, { paddingTop: insets.top + 60 }]}>
         <View style={s.iconCircle}>
           <Mail size={32} color="#FFFFFF" />
         </View>

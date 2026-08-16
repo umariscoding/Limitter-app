@@ -8,7 +8,7 @@ import {
   ActivityIndicator,
   Platform,
 } from "react-native";
-import { SafeAreaView } from "react-native-safe-area-context";
+import { SafeAreaView, useSafeAreaInsets } from "react-native-safe-area-context";
 import { LinearGradient } from "expo-linear-gradient";
 import { useNavigation, useRoute } from "@react-navigation/native";
 import { useUser } from "../context/UserContext";
@@ -49,6 +49,7 @@ function getDeviceInfo() {
 }
 
 export default function DeviceConflictScreen() {
+  const insets = useSafeAreaInsets();
   const navigation = useNavigation<any>();
   const route = useRoute<any>();
   const { setAccountData } = useUser();
@@ -92,9 +93,9 @@ export default function DeviceConflictScreen() {
   };
 
   return (
-    <SafeAreaView style={styles.container}>
+    <SafeAreaView style={styles.container} edges={['left', 'right', 'bottom']}>
       <StatusBar barStyle="light-content" backgroundColor="#DC2626" />
-      <LinearGradient colors={["#DC2626", "#EF4444"]} style={styles.header}>
+      <LinearGradient colors={["#DC2626", "#EF4444"]} style={[styles.header, { paddingTop: insets.top + 40 }]}>
         <View style={styles.iconCircle}>
           <AlertTriangle size={32} color="#FFFFFF" />
         </View>
