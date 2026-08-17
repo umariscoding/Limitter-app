@@ -95,12 +95,17 @@ const SignupScreen: React.FC = () => {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+
+      {/* Header gradient scrolls with content — this fixed strip keeps the
+          true status-bar row colored regardless of scroll position. */}
+      <View pointerEvents="none" style={[styles.statusBarFill, { height: insets.top }]} />
     </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F1F5F9" },
+  statusBarFill: { position: "absolute", top: 0, left: 0, right: 0, backgroundColor: "#059669" },
   flex: { flex: 1 },
   scrollContent: { flexGrow: 1 },
 

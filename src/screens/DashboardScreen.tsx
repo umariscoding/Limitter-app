@@ -423,6 +423,11 @@ export default function DashboardScreen() {
         </View>
       </ScrollView>
 
+      {/* The header gradient scrolls with content, so this fixed strip keeps
+          the true status-bar row colored (not whatever's scrolled beneath
+          it) regardless of scroll position — matches the gradient's top color. */}
+      <View pointerEvents="none" style={[styles.statusBarFill, { height: insets.top }]} />
+
       <SideDrawer visible={drawerOpen} active="home" onClose={() => setDrawerOpen(false)} />
     </SafeAreaView>
   );
@@ -430,6 +435,7 @@ export default function DashboardScreen() {
 
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: '#F1F5F9' },
+  statusBarFill: { position: 'absolute', top: 0, left: 0, right: 0, backgroundColor: '#10B981' },
   inlineLoader: { flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 10, paddingVertical: 32, backgroundColor: '#FFFFFF', borderRadius: 16, borderWidth: 1, borderColor: '#E8ECF4' },
   inlineLoaderText: { color: '#64748B', fontSize: 14, fontWeight: '500' },
   scrollContent: { paddingBottom: 20 },
