@@ -180,12 +180,17 @@ object NotificationHelper {
             builder.setProgress(progressMax, progressCurrent, false)
         }
 
-        // Let the user override the currently-in-use app directly from the
-        // notification, reusing the same limitter://override deep link the
-        // app already handles end-to-end (see App.tsx parseOverrideLink).
-        if (currentApp != null) {
+        // Let the user override directly from the notification, reusing the
+        // same limitter://override deep link the app already handles
+        // end-to-end (see App.tsx parseOverrideLink). Prefer the app
+        // currently in use; if nothing is in foreground but something is
+        // blocked (e.g. user backed out after hitting the limit), fall back
+        // to the first blocked entry so "limit reached" notifications still
+        // get an actionable button instead of just "open the app" text.
+        val overrideTarget = currentApp ?: ranked.firstOrNull { it.status == "blocked" }
+        if (overrideTarget != null) {
             val overrideUri = Uri.parse(
-                "limitter://override?package=${Uri.encode(currentApp.packageName)}&appName=${Uri.encode(currentApp.appName)}"
+                "limitter://override?package=${Uri.encode(overrideTarget.packageName)}&appName=${Uri.encode(overrideTarget.appName)}"
             )
             val overrideIntent = Intent(Intent.ACTION_VIEW, overrideUri).setPackage(context.packageName)
             val overridePendingIntent = PendingIntent.getActivity(
