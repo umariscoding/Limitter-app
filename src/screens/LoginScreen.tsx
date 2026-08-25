@@ -49,6 +49,8 @@ const LoginScreen: React.FC = () => {
       } else if (message.toLowerCase().includes("email not verified") || message.toLowerCase().includes("verification")) {
         navigation.navigate("VerifyEmail", { email: email.trim() });
         return;
+      } else if (code === "auth/invalid-email") {
+        setError("Invalid email address");
       } else if (code === "auth/invalid-credential" || code === "auth/wrong-password") {
         setError("Invalid email or password");
       } else if (code === "auth/user-not-found") {

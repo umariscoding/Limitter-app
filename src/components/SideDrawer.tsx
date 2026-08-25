@@ -120,7 +120,7 @@ export default function SideDrawer({ visible, active, onClose }: SideDrawerProps
               <TouchableOpacity
                 key={tab.key}
                 style={[styles.navItem, isActive && styles.navItemActive]}
-                onPress={() => (isActive ? onClose() : handleNav(tab.screen))}
+                onPress={() => handleNav(tab.screen)}
                 activeOpacity={0.7}
               >
                 {TAB_ICONS[tab.key](isActive ? '#059669' : '#334155', 22)}

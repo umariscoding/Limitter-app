@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { createPolicyAPI } from '../services/policyService';
 import { showAlert } from '../components/AppAlert';
-import { enforceDailyLimitMinutes, invalidatePlanCache } from '../services/planGuardService';
+import { getPlanLimits, invalidatePlanCache } from '../services/planGuardService';
 import {
   startAppClockTimer,
   startAppUsageTimer,
@@ -105,7 +105,12 @@ export function useCreateLimit(
       singleTimerValue, singleTimerUnit, clockHour, clockMinute, clockPeriod,
     });
     const rawMinutes = Math.round(totalSeconds / 60) || 1;
-    const parsedMinutes = await enforceDailyLimitMinutes(rawMinutes);
+    const planLimits = await getPlanLimits();
+    const parsedMinutes = planLimits.customTimers ? rawMinutes : 60;
+    // The native timer must run for the same enforced duration as the saved
+    // policy — using the raw (unfilled, zero) input seconds here would start
+    // a fixed-timer plan's timer with no duration at all.
+    const enforcedSeconds = parsedMinutes * 60;
 
     if (targetType === 'app') {
       if (!selectedInstalledApp || !appName) {
@@ -130,7 +135,11 @@ export function useCreateLimit(
       }
     }
 
-    if (!Number.isFinite(totalSeconds) || totalSeconds < 60) {
+    // Fixed-timer plans (e.g. Free) show no duration fields at all — the sheet
+    // just uses the plan's enforced 60-minute duration above, so the raw
+    // input-derived seconds (always 0 with nothing to fill in) must only be
+    // validated when the plan actually lets the user set a custom duration.
+    if (planLimits.customTimers && (!Number.isFinite(totalSeconds) || totalSeconds < 60)) {
       showAlert('Validation', 'Minimum limit is 1 minute (60 seconds)');
       return false;
     }
@@ -179,7 +188,7 @@ export function useCreateLimit(
               : await startAppUsageTimer(
                   selectedInstalledApp.packageName,
                   selectedInstalledApp.appName,
-                  totalSeconds,
+                  enforcedSeconds,
                 );
 
           if (!timerStartResult.success) {
@@ -193,7 +202,7 @@ export function useCreateLimit(
         if (targetType === 'website') {
           const timerStartResult = await startWebsiteTimer({
             websiteUrl,
-            durationSeconds: timerType === 'clock' ? undefined : totalSeconds,
+            durationSeconds: timerType === 'clock' ? undefined : enforcedSeconds,
             blockAtTimestampMs:
               timerType === 'clock'
                 ? clockTargetTimestampMs(clockHour, clockMinute, clockPeriod)

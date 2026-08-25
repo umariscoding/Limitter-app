@@ -18,7 +18,7 @@ import { useUser } from '../context/UserContext';
 import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
 import { updatePolicyAPI, archivePolicyAPI, lockNowAPI } from '../services/policyService';
-import { invalidatePlanCache } from '../services/planGuardService';
+import { invalidatePlanCache, getPlanLimits } from '../services/planGuardService';
 import SideDrawer from '../components/SideDrawer';
 import HamburgerButton from '../components/HamburgerButton';
 import {
@@ -67,6 +67,10 @@ export default function PoliciesScreen() {
   const [lockLoading, setLockLoading] = useState(false);
 
   const [drawerOpen, setDrawerOpen] = useState(false);
+  // null while unknown; treated as "custom timers allowed" until it resolves,
+  // matching Create Limit's default so the field isn't wrongly locked on a
+  // slow fetch — handleEditSave re-checks the resolved value before saving.
+  const [customTimersAllowed, setCustomTimersAllowed] = useState<boolean | null>(null);
 
   const fetchRef = useRef(fetchPolicies);
   fetchRef.current = fetchPolicies;
@@ -77,6 +81,7 @@ export default function PoliciesScreen() {
 
     hasFetchedRef.current = true;
     fetchRef.current();
+    getPlanLimits().then(limits => setCustomTimersAllowed(limits.customTimers)).catch(() => {});
   }, []);
 
   useEffect(() => {
@@ -169,7 +174,13 @@ export default function PoliciesScreen() {
     if (!editingPolicy) return;
     setEditError(null);
 
-    const newMinutes = Number(editLimitValue);
+    // Fixed-timer plans (e.g. Free) can't change the duration at all — keep
+    // it exactly as-is regardless of what's in the (disabled) field, so this
+    // never fights with the plan's enforced duration the way Create Limit
+    // used to before it was fixed.
+    const newMinutes = customTimersAllowed === false
+      ? editingPolicy.max_time_minutes
+      : Number(editLimitValue);
     if (!Number.isFinite(newMinutes) || newMinutes < 1) {
       setEditError('Minimum limit is 1 minute');
       return;
@@ -396,7 +407,14 @@ export default function PoliciesScreen() {
             <RNTextInput style={s.fieldInput} value={editLabel} onChangeText={setEditLabel} placeholder="Limit name" placeholderTextColor="#94A3B8" />
 
             <Text style={s.fieldLabel}>Daily Limit (minutes)</Text>
-            <RNTextInput style={s.fieldInput} value={editLimitValue} onChangeText={setEditLimitValue} keyboardType="numeric" placeholder="e.g. 30" placeholderTextColor="#94A3B8" />
+            {customTimersAllowed === false ? (
+              <View style={s.warningBox}>
+                <AlertTriangle size={14} color="#D97706" />
+                <Text style={s.warningText}>Your plan uses a fixed 60-minute timer. Upgrade for custom durations.</Text>
+              </View>
+            ) : (
+              <RNTextInput style={s.fieldInput} value={editLimitValue} onChangeText={setEditLimitValue} keyboardType="numeric" placeholder="e.g. 30" placeholderTextColor="#94A3B8" />
+            )}
 
             <Text style={s.fieldLabel}>Reset Time</Text>
             <TimeOfDayPicker

@@ -261,7 +261,7 @@ const s = StyleSheet.create({
   header: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingHorizontal: 16, paddingVertical: 14, backgroundColor: '#FFFFFF', borderBottomWidth: 1, borderBottomColor: '#F1F5F9' },
   backBtn: { width: 40, height: 40, borderRadius: 14, alignItems: 'center', justifyContent: 'center', backgroundColor: '#F8FAFC' },
   headerTitle: { fontSize: 17, fontWeight: '700', color: '#0F172A' },
-  scrollContent: { padding: 20 },
+  scrollContent: { padding: 20, paddingBottom: Platform.OS === 'ios' ? 220 : 200 },
   planCard: { backgroundColor: '#FFFFFF', borderRadius: 20, padding: 18, marginBottom: 14, borderWidth: 2, borderColor: '#E8ECF4', position: 'relative', shadowColor: '#64748B', shadowOffset: { width: 0, height: 2 }, shadowOpacity: 0.04, shadowRadius: 8, elevation: 1 },
   planCardSelected: { borderColor: '#6366F1', backgroundColor: '#FAFAFF' },
   planBadge: { position: 'absolute', top: -8, right: 16, paddingHorizontal: 12, paddingVertical: 4, borderRadius: 10, zIndex: 10 },

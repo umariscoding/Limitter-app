@@ -35,7 +35,11 @@ const ForgotPasswordScreen: React.FC = () => {
       setShowToast(true);
     } catch (err: any) {
       setToastType("error");
-      setToastMessage(err?.message || "Failed to send reset email");
+      setToastMessage(
+        err?.code === "auth/invalid-email"
+          ? "Invalid email address"
+          : err?.message || "Failed to send reset email",
+      );
       setShowToast(true);
     } finally { setIsLoading(false); }
   };
