@@ -19,6 +19,7 @@ import { usePolicyContext } from '../context/PolicyContext';
 import { usePolicyFetcher } from '../hooks/usePolicyFetcher';
 import { updatePolicyAPI, archivePolicyAPI, lockNowAPI } from '../services/policyService';
 import { invalidatePlanCache, getPlanLimits } from '../services/planGuardService';
+import { startAppBlockerService } from '../services/appBlockerService';
 import SideDrawer from '../components/SideDrawer';
 import HamburgerButton from '../components/HamburgerButton';
 import {
@@ -161,6 +162,24 @@ export default function PoliciesScreen() {
             : p,
         ),
       );
+
+      // Enforce on this device immediately instead of waiting on the RTDB
+      // round-trip — see lockPolicyNow.ts for the full rationale. Website
+      // targets are keyed "website:<domain>" natively.
+      if (blockedUntil > Date.now()) {
+        const raw = (lockingPolicy.package_name || lockingPolicy.packageName || lockingPolicy.app_name || '').trim().toLowerCase();
+        const nativeKey = lockingPolicy.target_type === 'website' && raw && !raw.startsWith('website:')
+          ? `website:${raw}`
+          : raw;
+        if (nativeKey) {
+          startAppBlockerService([{
+            package_name: nativeKey,
+            app_name: lockingPolicy.target_label || raw,
+            blocked_until_timestamp: blockedUntil,
+          }]).catch(() => {});
+        }
+      }
+
       setLockModalVisible(false);
       fetchPolicies().catch(() => { });
     } catch (err: any) {

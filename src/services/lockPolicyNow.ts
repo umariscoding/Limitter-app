@@ -1,6 +1,6 @@
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { lockNowAPI, type LockNowResponse } from './policyService';
-import { getNativeTimerStates } from './appBlockerService';
+import { getNativeTimerStates, startAppBlockerService } from './appBlockerService';
 import type { UIPolicy } from '../utils/policyMapper';
 
 // Reads the most up-to-date used-seconds for a policy directly from the native
@@ -218,6 +218,7 @@ type LockablePolicy = Pick<
   | 'package_name'
   | 'packageName'
   | 'target_label'
+  | 'target_type'
   | 'max_time_minutes'
   | 'time_used_minutes'
 >;
@@ -274,6 +275,31 @@ export async function lockPolicyNow(
       }
     }
     const response = await lockNowAPI(policy.id, untilTimestampMs ?? null);
+
+    // Enforce on THIS device immediately rather than waiting on the RTDB
+    // round-trip (backend write -> RTDB -> useLockStateSync's listener ->
+    // native BLOCK_APP). That path still exists for syncing the lock to other
+    // devices on the account, but relying on it alone here left a race window
+    // where opening the target app right after tapping Lock Now would not
+    // be blocked yet if the round-trip hadn't completed.
+    if (typeof untilTimestampMs === 'number') {
+      const raw = (policy.package_name || policy.packageName || policy.app_name || '').trim().toLowerCase();
+      // Website timers are registered natively under a "website:" prefixed
+      // key (see TimerStateManager.addWebsiteTimers) — BLOCK_APP looks up
+      // TimerStateManager.activeTimers by exact key, so sending the bare
+      // domain here would silently miss the entry and no-op.
+      const nativeKey = policy.target_type === 'website' && raw && !raw.startsWith('website:')
+        ? `website:${raw}`
+        : raw;
+      if (nativeKey) {
+        startAppBlockerService([{
+          package_name: nativeKey,
+          app_name: policy.target_label || raw,
+          blocked_until_timestamp: untilTimestampMs,
+        }]).catch(err => console.error('[lockPolicyNow] immediate native block failed:', err));
+      }
+    }
+
     return { ok: true, response };
   } catch (err: any) {
     // Do NOT delete the marker on API failure — we cannot tell whether the
