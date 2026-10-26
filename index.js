@@ -1,5 +1,8 @@
 import { LogBox } from "react-native";
 import { registerRootComponent } from "expo";
+import { Settings } from "react-native-fbsdk-next";
+
+Settings.initializeSDK();
 
 LogBox.ignoreLogs([
   '`new NativeEventEmitter()` was called with a non-null argument without the required `addListener` method.',
