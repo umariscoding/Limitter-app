@@ -129,10 +129,15 @@ function promptStep(step: PermissionStep): Promise<PromptChoice> {
   const { title, message } = stepCopy(step);
   return new Promise((resolve) => {
     if (step === "usage") {
+      // Explicit style/variant here because AppAlert only styles the LAST
+      // button of a multi-button row as primary — leaving the other plain,
+      // which renders with no visible background. Also pins the icon to the
+      // same "info" look as the single-button prompts (AppAlert otherwise
+      // infers "confirm" — a different icon color — for any 2+ button alert.
       showAlert(title, message, [
-        { text: "This app's settings", onPress: () => resolve("appinfo") },
+        { text: "This app's settings", style: "cancel", onPress: () => resolve("appinfo") },
         { text: "Usage access list", onPress: () => resolve("open") },
-      ]);
+      ], "info");
       return;
     }
     showAlert(title, message, [
