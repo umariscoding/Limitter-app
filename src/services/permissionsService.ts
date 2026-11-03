@@ -23,8 +23,6 @@ export interface PermissionStatus {
 
 type PermissionStep = "notifications" | "usage" | "overlay" | "battery";
 
-type PromptChoice = "open" | "appinfo";
-
 // After this many settings round-trips for a given step without it reading
 // as granted, stop re-prompting. Some OEM battery managers (MIUI, ColorOS,
 // Vivo, etc.) never actually update the AOSP allowlist this check reads even
@@ -125,23 +123,17 @@ function stepCopy(step: PermissionStep): { title: string; message: string } {
   };
 }
 
-function promptStep(step: PermissionStep): Promise<PromptChoice> {
+function promptStep(step: PermissionStep): Promise<void> {
   const { title, message } = stepCopy(step);
   return new Promise((resolve) => {
-    if (step === "usage") {
-      // Explicit style/variant here because AppAlert only styles the LAST
-      // button of a multi-button row as primary — leaving the other plain,
-      // which renders with no visible background. Also pins the icon to the
-      // same "info" look as the single-button prompts (AppAlert otherwise
-      // infers "confirm" — a different icon color — for any 2+ button alert.
-      showAlert(title, message, [
-        { text: "This app's settings", style: "cancel", onPress: () => resolve("appinfo") },
-        { text: "Usage access list", onPress: () => resolve("open") },
-      ], "info");
-      return;
-    }
+    // Single button for every step, matching the rest of the flow — Android
+    // 11+ removed the ability for any app to deep-link past the full app
+    // list on both the usage-access and overlay settings screens (a platform
+    // anti-abuse change, not something fixable here), so offering a second
+    // "shortcut" choice no longer buys anything and only made this prompt
+    // visually inconsistent with the others.
     showAlert(title, message, [
-      { text: "Open settings", onPress: () => resolve("open") },
+      { text: "Open settings", onPress: resolve },
     ]);
   });
 }
@@ -253,26 +245,18 @@ export const requestRequiredPermissions = async (): Promise<PermissionStatus> =>
 
       // Already denied once — the system won't show the dialog again, so
       // fall back to the same settings-prompt flow as the other steps.
-      const choice = await promptStep(step);
+      await promptStep(step);
       const waiter = waitForNextForeground();
-      if (choice === "appinfo") {
-        await openApplicationDetailsSettings();
-      } else {
-        await openStepSettings(step);
-      }
+      await openStepSettings(step);
       await waiter;
       status = await checkPermissions();
       continue;
     }
 
-    const choice = await promptStep(step);
+    await promptStep(step);
 
     const waiter = waitForNextForeground();
-    if (choice === "appinfo") {
-      await openApplicationDetailsSettings();
-    } else {
-      await openStepSettings(step);
-    }
+    await openStepSettings(step);
     await waiter;
 
     status = await checkPermissions();
